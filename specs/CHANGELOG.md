@@ -1,5 +1,10 @@
 # Historique du cahier des charges
 
+## 1.4 — 10 octobre 2026, nuit (Claude Code, demande de Christophe)
+- Nouveau domaine **PILOTAGE** (PIL-01 à PIL-06) : l'application se pilote par commandes JSON collées depuis un assistant IA (onglet Commande, `window.SDC`), sans MCP ni installation. Écritures soumises à confirmation de l'opérateur ; collisions, jeux, tolérances, serrages, simulation refusés.
+- Décision : étape 1 = commandes JSON collées (hors ligne, tablette d'atelier possible) ; étape 2 = serveur MCP local (PIL-05), à décider selon l'usage au bureau d'études.
+- Application autonome 1.0.0 → **1.1.0**. La v1.3 passe en archive figée (`specs/v1.3/`, empreintes dans `INTEGRITE.json`).
+
 ## 1.3 — mise à jour du 10 octobre 2026, soir (Claude Code, demande de Christophe)
 - « Mesurer » remplacé par **Cotation** (NAV-06) : Ø / R, distances et angles entre faces, axes, face + axe, points ; cotes persistantes, masquables.
 - Coupes (COU-02) : hachurage atténué, contours des pièces coupées mis en évidence.

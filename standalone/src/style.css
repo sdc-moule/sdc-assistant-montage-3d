@@ -181,3 +181,11 @@ table.bom td.dims { white-space: nowrap; font-variant-numeric: tabular-nums; fon
 .vb-grip span { font-size: 18px; line-height: 1; }
 .vb-fold { border: 0; background: transparent; cursor: pointer; font-size: 14px; color: var(--muted); }
 .viewbar.folded > :not(.vb-grip) { display: none; }
+
+/* Onglet Commande (pilotage JSON) */
+#cmd-input { font: 12px/1.4 Consolas, "Cascadia Mono", ui-monospace, monospace; min-height: 150px; white-space: pre; tab-size: 2; }
+.cmd-line { border: 1px solid var(--line); border-left-width: 4px; border-radius: 8px; padding: 6px 8px; font-size: 13px; background: #fff; line-height: 1.35; }
+.cmd-line.ok { border-left-color: var(--ok); }
+.cmd-line.ko { border-left-color: var(--bad); background: #fdf1ef; }
+.cmd-line .warn { color: var(--warn); }
+.cmd-line pre { max-height: 180px; overflow: auto; margin: 4px 0 0; font-size: 11px; background: #f1f4f7; padding: 6px; border-radius: 6px; white-space: pre-wrap; }

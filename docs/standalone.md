@@ -1,4 +1,4 @@
-# Application autonome — SDC Montage 3D 1.0
+# Application autonome — SDC Montage 3D 1.1
 
 Deux variantes, même application :
 - `SDC_Montage_3D.html` (~4,6 Mo) : complète, **hors ligne**. Le moteur OpenCascade (3,9 Mo compressé) est embarqué.
@@ -23,6 +23,7 @@ Double-clic → Chrome ou Edge. Pas d'installation, pas de FreeCAD. Le STEP est 
 | Interface | Panneaux réductibles (‹ ›) et détachables (⧉) en fenêtres déplaçables / redimensionnables ; barre d'outils 3D déplaçable (poignée ⠿, double-clic = remise en place) et repliable ; disposition mémorisée |
 | Notes et scènes | Commentaires typés (observation, montage, contrôle, anomalie), auteur, statut ; « 📷 Scène » mémorise caméra, éclaté, coupes, masquages, transparences, faces retirées, circuits (vignette) ; PNG d'une scène = image + scène intégrée, rechargeable par « Charger projet / scène » ; « ⧉ Copier » vers le presse-papiers ; sauvegarde automatique par fichier + projet JSON ; réimport sur un STEP modifié par nom + signature avec avertissement |
 | Exports | Nomenclature CSV (Excel FR), fiche des perçages CSV, capture PNG annotée (avec scène), rapport imprimable / PDF ; boîte « Enregistrer sous » ouverte sur Téléchargements (Chrome/Edge) |
+| Pilotage IA | Onglet **Commande** : coller un bloc JSON fourni par l'assistant, **Exécuter** ; API `window.SDC` ; validation de toute la série avant exécution, écritures confirmées par l'opérateur, « ↩ Avant la commande », contexte copiable pour l'IA (mode d'emploi + nomenclature). Guide et demandes types : [`pilotage-ia.md`](pilotage-ia.md) |
 | Rendu | Éclairage studio embarqué, couleurs STEP en sRGB (fidèles à la CAO), arêtes par défaut |
 
 ## Module perçages & circuits

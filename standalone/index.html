@@ -34,6 +34,7 @@
     <button data-mode="coupe"><svg viewBox="0 0 24 24"><path d="M3 12h18M6 5h12v14H6z" /></svg>Couper</button>
     <button data-mode="percages"><svg viewBox="0 0 24 24"><path d="M3 7h12M15 7v10M15 17h6M9 7v6M9 13H3"/><circle cx="15" cy="7" r="1.6"/><circle cx="9" cy="13" r="1.6"/></svg>Perçages<br>circuits</button>
     <button data-mode="notes"><svg viewBox="0 0 24 24"><path d="M5 4h14v12H9l-4 4z"/></svg>Notes<br>vues</button>
+    <button data-mode="commande" title="Piloter l'application par commandes JSON (assistant IA)"><svg viewBox="0 0 24 24"><path d="M4 6l5 5-5 5M12 18h8"/></svg>Commande</button>
   </nav>
 
   <aside class="panel left" id="panel-left">
@@ -117,6 +118,17 @@
       <p class="hint">Une scène garde caméra, éclaté, coupes, masquages, transparences, faces retirées et circuits. Le PNG enregistré contient la scène : le recharger par « Charger projet / scène ».</p>
       <div class="grid2"><input id="v-name" placeholder="Nom de la scène"><button class="btn" id="v-save">Mémoriser</button></div>
       <div id="v-list" class="list"></div>
+    </section>
+
+    <section data-panel="commande" hidden>
+      <h2>Commande (assistant IA)</h2>
+      <p class="hint">Coller ici le bloc JSON fourni par l'assistant, puis <b>Exécuter</b> (ou Ctrl + Entrée). Rien n'est modifié dans le fichier STEP. Les écritures (commentaire, validation d'un repère ou d'un circuit) demandent votre accord.</p>
+      <textarea id="cmd-input" rows="9" spellcheck="false" placeholder='{"sdc":1,"commandes":[{"cmd":"isoler","cible":{"reperes":[3]}}]}'></textarea>
+      <div class="grid2"><button class="btn primary" id="cmd-run">▶ Exécuter</button><button class="btn" id="cmd-back" title="Restaure l'affichage d'avant la dernière série de commandes">↩ Avant la commande</button></div>
+      <div class="grid2"><button class="btn" id="cmd-copy-ctx" title="Mode d'emploi + état + nomenclature, à coller dans la conversation avec l'assistant">Copier le contexte pour l'IA</button><button class="btn" id="cmd-copy-res" title="Résultat de la dernière exécution, à coller dans la conversation">Copier le résultat</button></div>
+      <div class="grid2"><button class="btn" id="cmd-example">Exemple</button><button class="btn" id="cmd-clear">Effacer</button></div>
+      <div id="cmd-log" class="list"></div>
+      <p class="hint">Valeurs issues du maillage d'affichage, indicatives. L'assistant ne valide ni ordre de montage, ni jeu, ni collision, ni tolérance.</p>
     </section>
   </aside>
 

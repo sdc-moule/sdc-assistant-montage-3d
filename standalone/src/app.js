@@ -17,12 +17,13 @@ import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { executer, contexteIA, modeEmploiIA, COMMANDES, VERSION_COMMANDES, ErreurCommande } from './geom/commande.js';
 
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
 THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
 THREE.Mesh.prototype.raycast = acceleratedRaycast;
 
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.1.0';
 const $ = id => document.getElementById(id);
 const el = (tag, props = {}, ...kids) => { const e = document.createElement(tag); for (const [k, v] of Object.entries(props)) { if (k === 'class') e.className = v; else if (k === 'style') e.style.cssText = v; else if (k.startsWith('on')) e[k] = v; else if (v !== undefined && v !== null) e.setAttribute(k, v); } for (const k of kids.flat()) if (k !== null && k !== undefined && k !== false) e.append(k instanceof Node ? k : document.createTextNode(String(k))); return e; };
 const fmt = (x, d = 1) => (Number.isFinite(x) ? (Math.abs(x) < 0.5 * 10 ** -d ? 0 : x).toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d }) : '—');
@@ -1263,6 +1264,148 @@ function setupPanels() {
   applyLayout();
 }
 
+// ---------------------------------------------------------------- pilotage par commandes JSON (onglet « Commande », window.SDC)
+// Le jeu de commandes, la validation et l'exécution sont dans geom/commande.js (pur). Ici : le « ctx » qui agit sur l'état.
+const nrm = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+const KIND_BOX = { circuit: 'f-circuit', alignement: 'f-align', 'isolé': 'f-iso', 'alésage': 'f-bore' };
+function apiCtx() {
+  let avant = null; // état d'affichage avant la dernière série de commandes (« retour_avant_commande »)
+  const fam = id => CATEGORIES.find(c => c.id === catOf(id));
+  const reperesDe = ids => [...new Set(ids.map(id => S.rowOf.get(id).repere))].sort((a, b) => a - b);
+  const rel = (v, st) => v.map((x, i) => { const d = x - st.min[i]; return +(Math.abs(d) < 0.005 ? 0 : d).toFixed(2); });
+  const netById = id => S.drill?.networks.find(n => nrm(n.id) === nrm(id));
+  const cadrerIds = ids => { if (!ids) return fitBox(currentBounds()); const b = new THREE.Box3(); for (const id of ids) b.union(partBox(id)); fitBox(b); };
+  const kindOn = n => { if (S.filters[n.kind]) return false; S.filters[n.kind] = true; const c = $(KIND_BOX[n.kind]); if (c) c.checked = true; return true; };
+  return {
+    charge: () => S.loaded,
+    pieces: () => S.parts.map(p => { const st = S.stats.get(p.id), it = S.items[p.id], c = fam(p.id); return { id: p.id, repere: S.rowOf.get(p.id).repere, nom: p.name, sous_ensemble: p.path.join(' / '), famille: c.id, famille_label: c.label, visible: it.visible && !S.catOff.has(c.id), opacite_pct: Math.round(it.opacity * 100), selectionnee: S.sel.has(p.id), dims_mm: st.size.map(x => +x.toFixed(2)), volume_cm3: +(st.volume / 1000).toFixed(1) }; }),
+    recherche: (id, term) => matches(id, String(term).toLocaleLowerCase('fr')),
+    reperesDe,
+    nomenclature: () => S.bom.map(r => { const n = S.rowNotes[r.repere] ?? {}; return { repere: r.repere, designation: r.designation, reference: n.reference ?? '', quantite: r.quantite, famille: fam(r.ids[0]).label, sous_ensemble: r.sousEnsemble, dims_mm: r.dims.map(x => +x.toFixed(1)), statut: n.statut ?? r.statut }; }),
+    reseaux: () => (S.drill ? S.drill.networks.map(n => ({ id: n.id, type: n.kind, classement: netLabel(n), valide: netValidated(n), proposition: n.suggestion, nb_percages: n.features.length, diametres_mm: n.diameters.map(d => +d.toFixed(2)), longueur_totale_mm: +n.totalLength.toFixed(1), reperes: reperesDe(n.partIds) })) : []),
+    percages(reseauId, ids) {
+      if (!S.drill) return [];
+      const nets = reseauId ? [netById(reseauId)].filter(Boolean) : S.drill.networks;
+      if (reseauId && !nets.length) throw new ErreurCommande(`réseau « ${reseauId} » introuvable. Réseaux : ${S.drill.networks.map(n => n.id).join(', ') || 'aucun'}.`);
+      const out = [];
+      for (const n of nets) for (const fid of n.features) {
+        const f = S.drill.featureById.get(fid); if (ids && !ids.has(f.partId)) continue;
+        const st = S.stats.get(f.partId);
+        out.push({ reseau: n.id, percage: f.id, repere: S.rowOf.get(f.partId).repere, piece: S.byId.get(f.partId).name, diametres_mm: f.segments.map(s => +s.diameter.toFixed(2)), longueur_mm: +f.length.toFixed(1), axe: f.direction, A_mm: rel(f.start, st), B_mm: rel(f.end, st), A_debouchant: !!f.open.start, B_debouchant: !!f.open.end, element_loge: f.occupants.map(o => o.name).join(', ') });
+      }
+      return out;
+    },
+    scenes: () => S.views.map(v => ({ nom: v.name, date: v.date })),
+    cotes: () => S.cotes.map(c => ({ id: c.id, texte: c.text, type: c.kind, visible: c.visible, reperes: reperesDe([c.a, c.b].filter(id => S.rowOf.has(id))) })),
+    bornes: () => ({ x: [S.bounds.min.x, S.bounds.max.x], y: [S.bounds.min.y, S.bounds.max.y], z: [S.bounds.min.z, S.bounds.max.z] }),
+    etat: () => ({ fichier: S.fileName, empreinte_sha256: S.hash.slice(0, 12), occurrences: S.parts.length, reperes: S.bom.length, mode: S.mode,
+      selection: { nombre: S.sel.size, reperes: reperesDe([...S.sel]) }, masquees: S.parts.filter(p => !S.items[p.id].visible).length, familles_masquees: [...S.catOff],
+      coupes: Object.fromEntries(Object.entries({ XZ: 'y', YZ: 'x', XY: 'z' }).map(([n, k]) => [n, { actif: S.cuts[k].on, position_mm: +S.cuts[k].pos.toFixed(1), inverse: S.cuts[k].flip }])),
+      eclate: { pct: Math.round(S.ex.amount), direction: S.ex.dir, portee: S.ex.scope }, ouverture_pct: Math.round(S.open * 100), groupes_mobiles: S.moves.length,
+      circuits: { affiches: S.skelShow, seuls: S.skelOnly, reseau_focus: S.selNet, nb_reseaux: S.drill?.networks.length ?? 0 }, scenes: S.views.map(v => v.name), cotes: S.cotes.length, fantome: S.ghost, bulles: S.bubbles,
+      bornes_mm: { X: [S.bounds.min.x, S.bounds.max.x].map(x => +x.toFixed(1)), Y: [S.bounds.min.y, S.bounds.max.y].map(x => +x.toFixed(1)), Z: [S.bounds.min.z, S.bounds.max.z].map(x => +x.toFixed(1)) }, unite: 'mm', avertissement: 'Valeurs du maillage d\'affichage, indicatives.' }),
+    cylindres: id => { const c = S.cyl?.get(id); return c ? [...c.holes.map(h => ({ type: 'perçage', diametre: h.diameter, origine: h.start, direction: h.axis, longueur: h.length })), ...c.bosses.map(h => ({ type: 'arbre', diametre: h.diameter, origine: h.start, direction: h.axis, longueur: h.length }))] : []; },
+    familles: () => CATEGORIES.map(c => ({ id: c.id, label: c.label })),
+    familleId: nom => { const t = nrm(nom); return (CATEGORIES.find(c => nrm(c.id) === t) ?? CATEGORIES.find(c => nrm(c.label).startsWith(t)) ?? CATEGORIES.find(c => t.length > 2 && nrm(c.label).includes(t)))?.id ?? null; },
+    // ---- actions
+    selectionner: (ids, ajouter) => { if (!ajouter) S.sel.clear(); for (const id of ids) S.sel.add(id); refreshAll(); },
+    deselectionner: () => clearSel(),
+    masquer: ids => { pushHistory(); for (const id of ids) { S.items[id].visible = false; S.sel.delete(id); } refreshAll(); },
+    afficher: ids => { pushHistory(); for (const id of ids) S.items[id].visible = true; refreshAll(); },
+    isoler: (ids, cadrer) => { pushHistory(); const s = new Set(ids); for (const id of S.objs.keys()) S.items[id].visible = s.has(id); refreshAll(); if (cadrer) cadrerIds(ids); },
+    toutAfficher: () => showAll(),
+    opacite: (ids, pct) => { pushHistory(); for (const id of ids) S.items[id].opacity = pct / 100; refreshAll(); },
+    fantome: actif => { S.ghost = actif; syncToggles(); applyDisplay(); },
+    cadrer: ids => cadrerIds(ids),
+    vue: nom => (nom === 'tout' ? fitBox(currentBounds()) : setView({ iso: 'iso', dessus: 'top', face: 'front', droite: 'right' }[nom])),
+    famille: (id, afficher) => { pushHistory(); if (afficher) S.catOff.delete(id); else S.catOff.add(id); refreshAll(); },
+    classerFamille: (ids, famId) => { for (const id of ids) S.catOverride[id] = famId; refreshAll(); },
+    bulles: (actif, portee) => { S.bubbles = actif; if (portee) { S.bubbleScope = portee === 'tous' ? 'all' : 'selection'; $('bubble-scope').value = S.bubbleScope; } syncToggles(); },
+    couleurs: mode => { S.colorMode = mode; $('color-mode').value = mode; applyDisplay(); },
+    mode: nom => setMode(nom),
+    coupe: (k, { on, pos, flip }) => { const c = S.cuts[k]; if (pos !== undefined) c.pos = pos; if (flip !== undefined) c.flip = flip; c.on = on; refreshAll(); return { ...c }; },
+    coupesRetirer: ks => { for (const k of ks) S.cuts[k].on = false; refreshAll(); },
+    coupeOptions: ({ remplir, contour }) => { if (remplir !== undefined) S.caps = remplir; if (contour !== undefined) S.planeVis = contour; syncToggles(); applyDisplay(); },
+    eclater: ({ pct, dir, scope, ids }) => { if (dir) S.ex.dir = dir; if (scope) S.ex.scope = scope; S.ex.ids = S.ex.scope === 'selection' ? (ids ?? S.ex.ids) : null; computeExplodeVectors(); S.ex.amount = pct; syncToggles(); refreshAll(); },
+    ouverture: pct => { S.open = pct / 100; syncToggles(); refreshAll(); },
+    nbGroupes: () => S.moves.length,
+    groupeMobile: m => { S.moves.push(m); if (!S.open) S.open = 1; syncToggles(); refreshAll(); },
+    groupesSupprimer: () => { S.moves = []; refreshAll(); },
+    circuits(q) {
+      if (!S.drill) throw new ErreurCommande('perçages non analysés.');
+      const av = [];
+      if (q.afficher !== undefined) { S.skelShow = q.afficher; S.skelShowTouched = true; if (!q.afficher) S.skelOnly = false; }
+      if (q.seuls !== undefined) { S.skelOnly = q.seuls; if (q.seuls) { S.skelShow = true; S.skelShowTouched = true; } }
+      if (q.etiquettes !== undefined) S.drillLabels = q.etiquettes;
+      if (q.pleins) { const pl = q.pleins; if (pl.actif !== undefined) S.fill.on = pl.actif; if (pl.d_min !== undefined) { S.fill.min = pl.d_min; $('fill-min').value = pl.d_min; } if (pl.d_max !== undefined) { S.fill.max = pl.d_max; $('fill-max').value = pl.d_max; } }
+      if (q.types) for (const [k, id] of Object.entries(KIND_BOX)) { S.filters[k] = q.types.includes(k); $(id).checked = S.filters[k]; }
+      if (q.d_min !== undefined) { S.filters.dmin = q.d_min; $('f-dmin').value = q.d_min; }
+      if (q.d_max !== undefined) { S.filters.dmax = q.d_max || 999; $('f-dmax').value = q.d_max; }
+      if (q.reseau !== undefined) {
+        if (['aucun', 'aucune', 'tous'].includes(nrm(q.reseau))) { S.selNet = null; S.selFeature = null; }
+        else {
+          const n = netById(q.reseau); if (!n) throw new ErreurCommande(`réseau « ${q.reseau} » introuvable. Réseaux : ${S.drill.networks.map(x => x.id).join(', ') || 'aucun'}.`);
+          S.selNet = n.id; S.selFeature = null; S.skelShow = true; S.skelShowTouched = true;
+          if (kindOn(n)) av.push(`filtre « ${n.kind} » activé pour afficher ce réseau.`);
+          if (q.cadrer) fitNet(n);
+        }
+      }
+      if (q.percage) {
+        const f = S.drill.features.find(x => nrm(x.id) === nrm(q.percage)); if (!f) throw new ErreurCommande(`perçage « ${q.percage} » introuvable.`);
+        const n = S.drill.netOfFeature.get(f.id); S.selNet = n.id; S.selFeature = f.id; S.skelShow = true; S.skelShowTouched = true;
+        if (kindOn(n)) av.push(`filtre « ${n.kind} » activé pour afficher ce perçage.`);
+      }
+      syncToggles(); refreshAll();
+      return { message: 'Circuits mis à jour.', donnees: { affiches: S.skelShow, seuls: S.skelOnly, reseau_focus: S.selNet, perçage_focus: S.selFeature }, avertissements: av };
+    },
+    classerCircuit: (reseau, cls) => { const n = netById(reseau); if (!n) throw new ErreurCommande(`réseau « ${reseau} » introuvable. Réseaux : ${S.drill?.networks.map(x => x.id).join(', ') || 'aucun'}.`); if (cls === null) delete S.netClass[n.id]; else S.netClass[n.id] = cls; refreshAll(); },
+    diametreMaxi: mm => { S.maxDrill = Math.max(1, mm); $('f-maxdrill').value = S.maxDrill; S.selNet = null; S.selFeature = null; S.netClass = {}; rebuildNetworks(); refreshAll(); },
+    commentaire: ({ ids, texte, type, statut, auteur }) => { S.comments.push({ ids, reperes: reperesDe(ids), type, status: statut, author: auteur ?? ($('c-author').value.trim() || ''), text: texte, date: new Date().toISOString() }); refreshAll(); },
+    repereValider: (repere, valide) => { const n = S.rowNotes[repere] ?? {}; S.rowNotes[repere] = { ...n, statut: valide ? 'validé' : undefined }; refreshAll(); },
+    repereReference: (repere, reference) => { const n = S.rowNotes[repere] ?? {}; S.rowNotes[repere] = { ...n, reference }; refreshAll(); },
+    sceneSauver: nom => saveScene(nom).name,
+    sceneCharger: nom => { const v = S.views.find(x => nrm(x.name) === nrm(nom)); if (!v) return false; applyViewState(v.state); return true; },
+    exporter: quoi => ({ nomenclature: exportBom, percages: exportDrill, capture: exportPng, rapport: printReport })[quoi](),
+    annuler: () => { const ok = S.undo.length > 0; undo(); return ok; },
+    retablir: () => { const ok = S.redo.length > 0; redo(); return ok; },
+    sauverAvant: () => { avant = JSON.stringify(viewState()); },
+    retourAvant: () => { if (!avant) return false; applyViewState(JSON.parse(avant)); return true; },
+  };
+}
+
+function setupCommande() {
+  const ctx = apiCtx();
+  let dernier = null;
+  const confirmer = liste => confirm(`Écritures demandées par ces commandes :\n\n• ${liste.join('\n• ')}\n\nLes accepter ?`);
+  const afficher = r => {
+    const log = $('cmd-log'); log.replaceChildren();
+    const ent = r.ok ? `✓ ${r.executees}/${r.total} commande(s) exécutée(s)` : `✗ ${r.erreur ?? 'échec'}`;
+    log.append(el('div', { class: `cmd-line ${r.ok ? 'ok' : 'ko'}` }, el('b', {}, ent), ...(r.avertissements ?? []).map(a => el('div', { class: 'hint' }, '⚠ ' + a))));
+    for (const e of r.erreurs ?? []) log.append(el('div', { class: 'cmd-line ko' }, el('b', {}, `Commande ${e.index}${e.cmd ? ' « ' + e.cmd + ' »' : ''}`), el('div', {}, e.erreur)));
+    for (const x of r.resultats ?? []) {
+      const body = [el('b', {}, `${x.index}. ${x.cmd}`), el('div', {}, x.ok ? x.message : x.erreur)];
+      for (const a of x.avertissements ?? []) body.push(el('div', { class: 'warn' }, '⚠ ' + a));
+      if (x.ok && x.donnees !== undefined) body.push(el('details', {}, el('summary', {}, 'Détails'), el('pre', {}, JSON.stringify(x.donnees, null, 1).slice(0, 6000))));
+      log.append(el('div', { class: `cmd-line ${x.ok ? 'ok' : 'ko'}` }, ...body));
+    }
+  };
+  const lancer = async entree => { const r = await executer(ctx, entree, { confirmer }); dernier = r; afficher(r); toast(r.ok ? `${r.executees} commande(s) exécutée(s).` : (r.erreur ?? 'Commande en échec : voir le détail.'), 4000); return r; };
+  const copier = async (txt, ok) => { try { await navigator.clipboard.writeText(txt); toast(ok); } catch { const ta = el('textarea', { style: 'position:fixed;opacity:0' }); ta.value = txt; document.body.append(ta); ta.select(); try { document.execCommand('copy'); toast(ok); } catch { toast('Copie impossible : sélectionner le texte à la main.'); } ta.remove(); } };
+  $('cmd-run').onclick = () => { if (!$('cmd-input').value.trim()) return toast('Coller d\'abord les commandes JSON.'); lancer($('cmd-input').value); };
+  $('cmd-input').onkeydown = e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('cmd-run').click(); } };
+  $('cmd-back').onclick = () => lancer({ cmd: 'retour_avant_commande' });
+  $('cmd-clear').onclick = () => { $('cmd-input').value = ''; $('cmd-log').replaceChildren(); };
+  $('cmd-example').onclick = () => { $('cmd-input').value = '{\n "sdc": 1,\n "commandes": [\n  {"cmd": "etat"},\n  {"cmd": "nomenclature"}\n ]\n}'; };
+  $('cmd-copy-ctx').onclick = () => copier(contexteIA(ctx), 'Contexte copié : le coller dans la conversation avec l\'assistant.');
+  $('cmd-copy-res').onclick = () => { if (!dernier) return toast('Aucun résultat à copier.'); copier(JSON.stringify(dernier, null, 1), 'Résultat copié : le coller dans la conversation.'); };
+  // API publique (console, essais automatiques, futur pont MCP) : window.SDC.executer(json|objet, {confirmer}) et une méthode par commande.
+  const SDC = { version: VERSION_COMMANDES, application: APP_VERSION,
+    executer: (entree, opts = {}) => executer(ctx, entree, { confirmer: opts.confirmer === 'operateur' ? confirmer : opts.confirmer, arret: opts.arret }),
+    modeEmploi: () => modeEmploiIA(), contexte: () => contexteIA(ctx) };
+  for (const nom of Object.keys(COMMANDES)) SDC[nom] = async (params = {}, opts) => { const r = await SDC.executer({ cmd: nom, ...params }, opts); return r.resultats[0] ?? r; };
+  window.SDC = Object.freeze(SDC);
+}
+
 // ---------------------------------------------------------------- démarrage
-wire(); setupPanels(); resize(); loop();
+wire(); setupPanels(); setupCommande(); resize(); loop();
 window.__SDC__ = { S, loadBytes, setMode, select, selectNet, extractCylinders, buildNetworks, project, xf, partBox: id => { const b = partBox(id); return [...b.min.toArray(), ...b.max.toArray()]; }, fitBox, THREE }; // accès pour essais automatisés

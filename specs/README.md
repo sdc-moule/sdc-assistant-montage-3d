@@ -1,6 +1,6 @@
 # Cahiers des charges — règles de rangement
 
-**Version en vigueur : voir [`ACTUEL.json`](ACTUEL.json)** (aujourd'hui 1.3).
+**Version en vigueur : voir [`ACTUEL.json`](ACTUEL.json)** (aujourd'hui 1.4).
 
 ```
 specs/
@@ -8,7 +8,8 @@ specs/
   INTEGRITE.json     ← empreintes SHA-256 des versions archivées (vérifiées par tests/specs.test.js)
   CHANGELOG.md       ← ce qui change d'une version à l'autre, et qui l'a décidé
   v1.2/              ← ARCHIVE figée (version d'origine, conçue avec Codex)
-  v1.3/              ← version en vigueur : .json (fait foi pour les ids/statuts) + .md (lecture)
+  v1.3/              ← ARCHIVE figée (application autonome 1.0, perçages & circuits)
+  v1.4/              ← version en vigueur : .json (fait foi pour les ids/statuts) + .md (lecture)
 ```
 
 ## Règles (humains, Codex, Claude Code)
