@@ -28,6 +28,11 @@
     <div id="tree" aria-label="Liste des occurrences"></div>
     <div id="tree-resize" class="row-handle" role="separator" aria-orientation="horizontal" aria-label="Hauteur de la liste" tabindex="0" title="Glisser pour réduire ou agrandir la liste · double-clic : replier"></div>
   </div>
+  <div id="bom-wrap" class="tree-wrap">
+    <div class="tree-head"><span>Nomenclature provisoire</span><button id="bom-toggle" type="button" aria-expanded="true" title="Réduire / déployer la nomenclature">▾</button></div>
+    <div id="bom-box" class="bom-box"><table><thead><tr><th>Rep.</th><th>Désignation</th><th>Réf.</th><th>Qté</th><th>X × Y × Z (mm)</th><th>Statut</th></tr></thead><tbody id="bom"></tbody></table></div>
+    <div id="bom-resize" class="row-handle" role="separator" aria-orientation="horizontal" aria-label="Hauteur de la nomenclature" tabindex="0" title="Glisser pour réduire ou agrandir la nomenclature · double-clic : replier"></div>
+  </div>
   <details class="section" open><summary>Affichage de la sélection</summary>
   <div class="buttons"><button id="hide">Masquer</button><button id="isolate">Isoler</button><button id="show">Tout afficher</button><button id="fit">Cadrer</button></div>
   <label>Opacité <input id="opacity" type="range" min="0" max="100" value="100"></label>
@@ -72,7 +77,6 @@
   </div>
   <div id="dim-hint" class="dim-hint" role="status" hidden></div>
 </div><div id="details">Ouvrir un STEP pour consulter ses composants.</div>
-<div class="bom"><h2>Nomenclature provisoire</h2><table><thead><tr><th>Repère</th><th>Désignation</th><th>Référence</th><th>Qté</th><th>X × Y × Z (mm)</th><th>Statut</th></tr></thead><tbody id="bom"></tbody></table></div>
 </section>
 </main>
 <footer>Le STEP source reste inchangé. Dimensions d’encombrement ; éclaté provisoire ; coupe graphique sans section B-Rep exacte ; cotes indicatives sur maillage.</footer>

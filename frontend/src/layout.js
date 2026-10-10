@@ -21,7 +21,9 @@ function drag(handle, { start, move, end, ignore }) {
 
 export function initLayout() {
   const layout = $('layout'), menu = $('menu'), bar = $('menu-bar');
-  const state = { floating: false, collapsed: false, width: 320, x: 40, y: 90, w: 360, h: 560, treeHeight: 190, treeHidden: false, ...read() };
+  const state = { floating: false, collapsed: false, width: 320, x: 40, y: 90, w: 360, h: 560, treeHeight: 190, treeHidden: false, bomHeight: 200, bomHidden: false, ...read() };
+  // Listes à hauteur réglable (occurrences, nomenclature) : [préfixe d'identifiants, clé d'état, variable CSS].
+  const lists = [['tree', 'tree', '--tree-h'], ['bom', 'bom', '--bom-h']];
   const save = () => write(state);
   const limits = () => ({ minW: 220, maxW: Math.max(260, innerWidth - 24), minH: 120, maxH: innerHeight - 12 });
 
@@ -38,15 +40,17 @@ export function initLayout() {
     Object.assign(menu.style, state.floating
       ? { left: `${state.x}px`, top: `${state.y}px`, width: `${state.w}px`, height: state.collapsed ? 'auto' : `${state.h}px` }
       : { left: '', top: '', width: '', height: '' });
-    layout.style.setProperty('--tree-h', state.treeHidden ? '0px' : `${state.treeHeight}px`);
-    $('tree-wrap').classList.toggle('closed', state.treeHidden);
+    for (const [id, key, variable] of lists) {
+      layout.style.setProperty(variable, state[`${key}Hidden`] ? '0px' : `${state[`${key}Height`]}px`);
+      $(`${id}-wrap`).classList.toggle('closed', state[`${key}Hidden`]);
+      $(`${id}-toggle`).textContent = state[`${key}Hidden`] ? '▸' : '▾';
+      $(`${id}-toggle`).setAttribute('aria-expanded', String(!state[`${key}Hidden`]));
+    }
     $('menu-float').textContent = state.floating ? '⇥ Ancrer' : '⧉ Détacher';
     $('menu-float').title = state.floating ? 'Replacer le menu à gauche' : 'Détacher le menu : il devient déplaçable et redimensionnable';
     $('menu-collapse').textContent = state.collapsed ? '»' : '«';
     $('menu-collapse').title = state.collapsed ? 'Déployer le menu' : 'Réduire le menu';
     $('menu-collapse').setAttribute('aria-expanded', String(!state.collapsed));
-    $('tree-toggle').textContent = state.treeHidden ? '▸' : '▾';
-    $('tree-toggle').setAttribute('aria-expanded', String(!state.treeHidden));
     $('splitter').hidden = state.floating;
     $('splitter').setAttribute('aria-valuenow', String(Math.round(state.width)));
   }
@@ -102,18 +106,21 @@ export function initLayout() {
     });
   }
 
-  // Hauteur de la liste arborescente.
-  drag($('tree-resize'), {
-    start: () => ({ h: state.treeHeight }),
-    move: (dx, dy, c) => { state.treeHidden = false; state.treeHeight = clamp(c.h + dy, 40, innerHeight * .7); apply(); },
-    end: () => save()
-  });
-  $('tree-resize').addEventListener('dblclick', () => { state.treeHidden = !state.treeHidden; apply(); save(); });
-  $('tree-resize').addEventListener('keydown', event => {
-    const step = { ArrowUp: -24, ArrowDown: 24 }[event.key];
-    if (step) { state.treeHidden = false; state.treeHeight = clamp(state.treeHeight + step, 40, innerHeight * .7); apply(); save(); event.preventDefault(); }
-  });
-  $('tree-toggle').onclick = () => { state.treeHidden = !state.treeHidden; apply(); save(); };
+  // Hauteur des listes : poignée, double-clic pour replier, flèches haut/bas, bouton de repli.
+  for (const [id, key] of lists) {
+    const height = `${key}Height`, hidden = `${key}Hidden`;
+    drag($(`${id}-resize`), {
+      start: () => ({ h: state[height] }),
+      move: (dx, dy, c) => { state[hidden] = false; state[height] = clamp(c.h + dy, 40, innerHeight * .7); apply(); },
+      end: () => save()
+    });
+    $(`${id}-resize`).addEventListener('dblclick', () => { state[hidden] = !state[hidden]; apply(); save(); });
+    $(`${id}-resize`).addEventListener('keydown', event => {
+      const step = { ArrowUp: -24, ArrowDown: 24 }[event.key];
+      if (step) { state[hidden] = false; state[height] = clamp(state[height] + step, 40, innerHeight * .7); apply(); save(); event.preventDefault(); }
+    });
+    $(`${id}-toggle`).onclick = () => { state[hidden] = !state[hidden]; apply(); save(); };
+  }
 
   addEventListener('resize', apply);
   apply();

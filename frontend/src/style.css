@@ -50,7 +50,7 @@ main:not(.menu-floating) .edge{display:none}
 .tree-head{display:flex;justify-content:space-between;align-items:center;font-weight:600}
 .tree-head button{margin:0;padding:2px 8px}
 #tree{height:var(--tree-h,190px);overflow:auto;border:1px solid #d3dde5;border-radius:5px;padding:2px;background:#fbfdfe}
-.tree-wrap.closed #tree{display:none}
+.tree-wrap.closed #tree,.tree-wrap.closed .bom-box{display:none}
 #tree button{display:block;width:100%;text-align:left}
 .row-handle{height:10px;cursor:ns-resize;touch-action:none;position:relative}
 .row-handle::after{content:"";position:absolute;left:calc(50% - 22px);width:44px;top:3px;height:4px;border-radius:2px;background:#9fb4c4}
@@ -80,9 +80,11 @@ canvas{display:block}
 .dim-row.is-hidden .dim-text{color:#8aa0b0;text-decoration:line-through}
 .dim-row button{margin:0;padding:2px 7px}
 #details{padding:12px;background:white;margin:10px 0;border-radius:6px;white-space:pre-wrap}
-.bom{overflow:auto;background:white;padding:12px;border-radius:6px}
-table{width:100%;border-collapse:collapse;font-size:13px}
-td,th{text-align:left;padding:9px;border-bottom:1px solid #dbe3e9}
+.bom-box{height:var(--bom-h,200px);overflow:auto;border:1px solid #d3dde5;border-radius:5px;background:#fbfdfe}
+table{width:100%;border-collapse:collapse;font-size:12px}
+td,th{text-align:left;padding:5px 6px;border-bottom:1px solid #dbe3e9}
+th{position:sticky;top:0;background:#eef3f7;white-space:nowrap}
+td:nth-child(5){white-space:nowrap}
 tbody tr{cursor:pointer}
 
 @media(max-width:800px){
@@ -94,7 +96,12 @@ tbody tr{cursor:pointer}
 }
 @media print{
   header{background:white;color:black}
-  aside,footer,.splitter,.viewport-tools,.dim-hint{display:none}
+  footer,.splitter,.viewport-tools,.dim-hint,.menu-bar,.edge,.menu-body>:not(#bom-wrap){display:none}
+  aside,aside.floating{display:block;position:static;height:auto!important;width:auto!important;max-height:none;border:0;box-shadow:none;overflow:visible}
+  .menu-body{overflow:visible;padding:0}
+  .bom-box{height:auto;overflow:visible;border:0}
+  .tree-wrap.closed .bom-box{display:block}
+  .tree-head button,#bom-resize{display:none}
   main{display:block}
   .workbench{padding:0}
   #viewport{height:110mm}
