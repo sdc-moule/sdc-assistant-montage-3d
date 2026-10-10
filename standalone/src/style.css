@@ -160,3 +160,4 @@ table.bom td.dims { white-space: nowrap; font-variant-numeric: tabular-nums; fon
 #selrect { position: absolute; border: 1.5px solid #2f5d80; background: rgba(47,93,128,.12); pointer-events: none; z-index: 5; }
 #selrect.cross { border: 1.5px dashed #1f8a4c; background: rgba(31,138,76,.10); }
 #op-type { margin: 6px 0; }
+#busy-text { white-space: pre-line; text-align: center; }

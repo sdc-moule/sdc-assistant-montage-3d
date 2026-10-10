@@ -41,6 +41,9 @@ Ajouter un nouveau cas = ajouter une géométrie au générateur + un test qui v
 - `three-mesh-bvh` réordonne l'index de la géométrie : toujours lui donner une **copie** (`p.index.slice()`), l'analyse des perçages utilise les plages de faces B-Rep de l'index d'origine.
 - Sous `file://`, un Worker `blob:` ne peut pas faire `importScripts(blob:)` : le moteur OCCT est concaténé dans la source du Worker.
 - `[hidden]` doit rester `display:none !important` (sinon les classes `display:flex` l'emportent).
+- Renderer créé avec `stencil: true` : indispensable aux coupes pleines (capSet/updateCaps).
+- Les couleurs STEP sont sRGB : `setRGB(..., THREE.SRGBColorSpace)`, sinon rendu délavé.
+- Lecture STEP ~4 s/Mo (analyse OCCT mono-thread), indépendante de la finesse : le cache IndexedDB évite de relire.
 - Les dimensions et diamètres proviennent du maillage d'affichage : tolérance ~0,05 mm en qualité normale.
 
 ## Définition de « terminé »

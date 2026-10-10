@@ -10,6 +10,8 @@ import { extractCylinders } from './geom/holes.js';
 import { buildNetworks } from './geom/circuits.js';
 import { extractCadFromZip } from './geom/unzip.js';
 import { pngWithText, pngText } from './geom/png-meta.js';
+import { fixStepLatin1 } from './geom/step-text.js';
+import { cacheGet, cachePut } from './cache.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
@@ -43,7 +45,7 @@ const PALETTE = ['#7196af', '#c7a573', '#8bada1', '#ae95b5', '#8d9aab', '#b98b82
 const viewport = $('viewport'), overlay = $('overlay'), octx = overlay.getContext('2d');
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 1e6); camera.up.set(0, 0, 1);
-const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true, alpha: true });
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true, alpha: true, stencil: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.localClippingEnabled = true;
 viewport.append(renderer.domElement);
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -54,8 +56,8 @@ scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnviron
 scene.add(new THREE.HemisphereLight(0xdfe6ee, 0x56636f, 1.2));
 const sun = new THREE.DirectionalLight(0xffffff, 1.3); scene.add(sun);
 const fill = new THREE.DirectionalLight(0xffffff, 0.35); scene.add(fill);
-const modelRoot = new THREE.Group(), skelRoot = new THREE.Group(), helperRoot = new THREE.Group();
-scene.add(modelRoot, skelRoot, helperRoot);
+const modelRoot = new THREE.Group(), skelRoot = new THREE.Group(), helperRoot = new THREE.Group(), capRoot = new THREE.Group();
+scene.add(modelRoot, skelRoot, helperRoot, capRoot);
 
 // ---------------------------------------------------------------- état
 const S = {
@@ -118,7 +120,19 @@ async function loadBytes(bytes, name) {
   busy('Calcul de l\'empreinte du fichier…');
   try {
     const hash = await sha256(bytes);
-    const res = await readCad(bytes, name, $('quality').value, t => busy(t));
+    const quality = $('quality').value, key = `${hash}|${quality}`;
+    let res = await cacheGet(key);
+    if (res) busy('Maillage déjà converti sur ce poste : ouverture rapide…');
+    else {
+      // Accents ISO-8859-1 bruts → \X\HH dans une copie en mémoire (noms lisibles), source intacte.
+      const src = /\.(step|stp)$/i.test(name) ? fixStepLatin1(bytes).bytes : bytes;
+      const mo = bytes.byteLength / 1e6, t0 = performance.now();
+      let phase = 'Préparation du moteur OpenCascade…';
+      const tick = setInterval(() => { const sec = Math.round((performance.now() - t0) / 1000); busy(`${phase}\n${Math.floor(sec / 60)} min ${String(sec % 60).padStart(2, '0')} s — fichier de ${mo.toFixed(0)} Mo${mo > 15 ? ' : compter environ ' + Math.ceil(mo * 4 / 60) + ' min la première fois, puis ouverture rapide' : ''}`); }, 1000);
+      try { res = await readCad(src, name, quality, t => { phase = t; }); } finally { clearInterval(tick); }
+      busy('Mémorisation du maillage pour la prochaine ouverture…');
+      cachePut(key, res); // sans attendre
+    }
     busy('Construction de la vue 3D…');
     await new Promise(r => setTimeout(r, 20));
     install(res, name, hash);
@@ -137,7 +151,7 @@ async function loadBytes(bytes, name) {
 
 function disposeModel() {
   for (const o of S.objs.values()) { o.mesh.geometry.disposeBoundsTree?.(); o.mesh.geometry.dispose(); o.mesh.material.dispose(); o.back.material.dispose(); o.edges?.geometry.dispose(); }
-  modelRoot.clear(); clearSkeleton(); helperRoot.clear(); S.objs.clear();
+  modelRoot.clear(); clearSkeleton(); helperRoot.clear(); capRoot.traverse(c => { c.geometry?.dispose(); c.material?.dispose(); }); capRoot.clear(); S.objs.clear();
 }
 
 function install(res, name, hash) {
@@ -344,6 +358,7 @@ function applyDisplay() {
   if (!S.loaded) return;
   applyHiddenFaces();
   const planes = cutPlanes();
+  let capIndex = 0;
   for (const [id, o] of S.objs) {
     const it = S.items[id];
     const visible = it.visible && !S.catOff.has(catOf(id));
@@ -360,13 +375,14 @@ function applyDisplay() {
     const key = `${planes.length}|${op < 1}`;
     m.transparent = op < 1; m.clippingPlanes = planes;
     if (o.matKey !== key) { m.needsUpdate = true; o.back.material.needsUpdate = true; if (o.edges) o.edges.material.needsUpdate = true; o.matKey = key; }
-    o.back.visible = op >= 1 && S.caps;
+    o.back.visible = op >= 1;
     o.back.material.color.copy(m.color).multiplyScalar(0.6); if (selected) o.back.material.color.lerp(new THREE.Color(0xd85a00), 0.5);
     o.back.material.clippingPlanes = planes;
     if (S.edges) {
       if (!o.edges) { o.edges = new THREE.LineSegments(new THREE.EdgesGeometry(o.mesh.geometry, 28), new THREE.LineBasicMaterial({ color: 0x14202b, transparent: true, opacity: 0.45 })); o.edges.raycast = () => {}; o.grp.add(o.edges); }
       o.edges.visible = true; o.edges.material.clippingPlanes = planes; o.edges.material.opacity = 0.45 * Math.max(op, 0.2);
     } else if (o.edges) o.edges.visible = false;
+    updateCaps(o, capIndex++, S.objs.size, o.grp.visible, op, m.color);
   }
   for (const [pid, g] of S.skelGroups ?? []) placeObject(g, pid);
   drawHinge();
@@ -428,6 +444,49 @@ function drawHinge() {
     const line = new THREE.Line(g, new THREE.LineDashedMaterial({ color: a.color, dashSize: L / 60, gapSize: L / 90, depthTest: false }));
     line.computeLineDistances(); line.renderOrder = 12; line.userData.hinge = true; helperRoot.add(line);
   }
+}
+
+// ---------------------------------------------------------------- remplissage des coupes (stencil)
+// Pour chaque plan actif et chaque pièce : faces arrière +1, faces avant −1 dans le stencil, puis un plan coloré
+// hachuré là où le stencil ≠ 0 : la matière coupée apparaît PLEINE, quelle que soit la forme intérieure.
+const PLANE_KEYS = ['x', 'y', 'z'];
+function hatched(mat) {
+  mat.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <dithering_fragment>', '#include <dithering_fragment>\nif (mod(gl_FragCoord.x - gl_FragCoord.y, 10.0) < 1.6) gl_FragColor.rgb *= 0.55;'); };
+  mat.customProgramCacheKey = () => 'sdc-hachures';
+  return mat;
+}
+function capSet(o, k) {
+  o.capSets ??= {};
+  if (o.capSets[k]) return o.capSets[k];
+  const st = { depthWrite: false, depthTest: false, colorWrite: false, stencilWrite: true, stencilFunc: THREE.AlwaysStencilFunc };
+  const inc = THREE.IncrementWrapStencilOp, dec = THREE.DecrementWrapStencilOp;
+  const back = new THREE.Mesh(o.mesh.geometry, new THREE.MeshBasicMaterial({ ...st, side: THREE.BackSide, stencilFail: inc, stencilZFail: inc, stencilZPass: inc }));
+  const front = new THREE.Mesh(o.mesh.geometry, new THREE.MeshBasicMaterial({ ...st, side: THREE.FrontSide, stencilFail: dec, stencilZFail: dec, stencilZPass: dec }));
+  const rp = THREE.ReplaceStencilOp;
+  const cap = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), hatched(new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, stencilWrite: true, stencilRef: 0, stencilFunc: THREE.NotEqualStencilFunc, stencilFail: rp, stencilZFail: rp, stencilZPass: rp })));
+  cap.onAfterRender = r => r.clearStencil();
+  for (const m of [back, front, cap]) m.raycast = () => {};
+  o.grp.add(back, front); capRoot.add(cap);
+  return (o.capSets[k] = { back, front, cap });
+}
+function updateCaps(o, index, total, visible, op, color) {
+  const active = PLANE_KEYS.filter(k => S.cuts[k].on);
+  const planes = cutPlanes();
+  const b = S.bounds, size = b.getSize(new THREE.Vector3()).length() * 3, c = b.getCenter(new THREE.Vector3());
+  PLANE_KEYS.forEach((k, j) => {
+    const on = S.caps && S.cuts[k].on && visible && op >= 1;
+    if (!on && !o.capSets?.[k]) return;
+    const cs = capSet(o, k);
+    for (const m of [cs.back, cs.front, cs.cap]) m.visible = on;
+    if (!on) return;
+    const base = 10 + (j * total + index) * 3;
+    cs.back.renderOrder = base; cs.front.renderOrder = base + 1; cs.cap.renderOrder = base + 2;
+    cs.back.material.clippingPlanes = planes; cs.front.material.clippingPlanes = planes;
+    cs.cap.material.clippingPlanes = active.filter(x => x !== k).map(x => planes[active.indexOf(x)]);
+    cs.cap.material.color.copy(color).multiplyScalar(0.85);
+    cs.cap.scale.set(size, size, 1); cs.cap.position.copy(c); cs.cap.position[k] = S.cuts[k].pos;
+    cs.cap.rotation.set(k === 'y' ? Math.PI / 2 : 0, k === 'x' ? Math.PI / 2 : 0, 0);
+  });
 }
 
 // ---------------------------------------------------------------- caméra
@@ -1078,4 +1137,4 @@ async function gunzip(b64) { const bin = Uint8Array.from(atob(b64), c => c.charC
 
 // ---------------------------------------------------------------- démarrage
 wire(); resize(); loop();
-window.__SDC__ = { S, loadBytes, setMode, select, selectNet, extractCylinders, buildNetworks, project, xf, partBox: id => { const b = partBox(id); return [...b.min.toArray(), ...b.max.toArray()]; }, THREE }; // accès pour essais automatisés
+window.__SDC__ = { S, loadBytes, setMode, select, selectNet, extractCylinders, buildNetworks, project, xf, partBox: id => { const b = partBox(id); return [...b.min.toArray(), ...b.max.toArray()]; }, fitBox, THREE }; // accès pour essais automatisés

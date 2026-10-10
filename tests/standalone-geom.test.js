@@ -119,3 +119,15 @@ test('PNG : la scène intégrée (iTXt UTF-8) est relue à l\'identique', async 
   assert.equal(pngText(png, 'sdc-montage3d-scene'), null);
   assert.deepEqual([...out.subarray(-12, -8)], [0, 0, 0, 0]); // IEND reste le dernier chunk
 });
+
+test('STEP : accents ISO-8859-1 bruts réécrits en \\X\\HH, UTF-8 valide conservé', async () => {
+  const { fixStepLatin1 } = await import('../standalone/src/geom/step-text.js');
+  const base = fs.readFileSync(new URL('./fixtures/bcr_synthetique.step', import.meta.url), 'latin1');
+  const raw = Buffer.from(base.replaceAll('PLAQUE_FIXATION_INFERIEURE', 'Semelle Inf\xe9rieure Glissi\xe8re'), 'latin1');
+  const { bytes, fixed } = fixStepLatin1(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.length));
+  assert.ok(fixed >= 2);
+  const r = occ.ReadStepFile(new Uint8Array(bytes), { linearUnit: 'millimeter' });
+  assert.equal(r.meshes[0].name, 'Semelle Inférieure Glissière');
+  const utf = Buffer.from('é Ω ✓', 'utf8');
+  assert.equal(fixStepLatin1(utf.buffer.slice(utf.byteOffset, utf.byteOffset + utf.length)).fixed, 0);
+});
