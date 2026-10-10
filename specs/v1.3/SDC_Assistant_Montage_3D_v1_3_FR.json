@@ -208,10 +208,15 @@
     {
       "id": "NAV-06",
       "domaine": "navigation",
-      "exigence": "Mesure indicative point à point avec ΔX ΔY ΔZ",
+      "exigence": "Cotation (remplace « Mesurer ») : toucher un cylindre → Ø (ou R si arc) ; deux éléments (faces, axes, face + axe, points) → distance si parallèles, angle sinon ; cotes conservées à l'écran, masquables une à une ou toutes, mémorisées dans projet et scènes",
       "statut": "fait",
       "livrable": "autonome",
-      "reception_atelier": "à faire"
+      "reception_atelier": "à faire",
+      "preuve": [
+        "tests/standalone-geom.test.js « cotation »",
+        "tests/e2e/standalone_e2e.py « cotation Ø », « deux faces parallèles »"
+      ],
+      "note": "Valeurs du maillage, indicatives."
     },
     {
       "id": "NAV-07",
@@ -240,6 +245,17 @@
       "statut": "fait",
       "livrable": "autonome",
       "reception_atelier": "à faire"
+    },
+    {
+      "id": "IHM-01",
+      "domaine": "interface",
+      "exigence": "Panneaux Outils et Pièces réductibles par poignée (bande verticale) et détachables en fenêtres flottantes déplaçables et redimensionnables ; barre d'outils 3D déplaçable par sa poignée et repliable ; disposition mémorisée sur le poste",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "à faire",
+      "preuve": [
+        "tests/e2e/standalone_e2e.py « réduire le panneau gauche », « détacher le panneau droit »"
+      ]
     },
     {
       "id": "ECL-01",
@@ -304,10 +320,13 @@
     {
       "id": "COU-02",
       "domaine": "coupes",
-      "exigence": "Matière coupée pleine et hachurée (stencil), sans plaque translucide ; contour du plan en option",
+      "exigence": "Matière coupée pleine, hachurage léger, contour des pièces coupées en trait épais (calcul par pièce et par plan) ; contour du plan en option",
       "statut": "fait",
       "livrable": "autonome",
-      "reception_atelier": "fait : coupe du moule 10970 contrôlée en capture"
+      "reception_atelier": "fait : coupe du moule 10970 contrôlée en capture",
+      "preuve": [
+        "tests/e2e/standalone_e2e.py « contours de coupe calculés »"
+      ]
     },
     {
       "id": "COU-03",

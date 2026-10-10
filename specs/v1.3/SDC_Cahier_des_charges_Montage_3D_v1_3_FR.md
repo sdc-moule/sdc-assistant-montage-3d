@@ -33,7 +33,7 @@ sous des noms différents signalées et jamais fusionnées. Référence saisie e
 Gros boutons, utilisable sur tablette. Vues standard, tout voir, cadrer. Sélection par clic, Ctrl / « Multi » et par
 **fenêtre** (gauche → droite : pièces entièrement dedans ; droite → gauche : pièces touchées). Masquer, isoler, tout
 afficher, transparence 0–100 %, fantôme, annuler / rétablir, recherche (repère, nom, dimension, Ø). Familles BCR
-proposées et corrigeables. **Retirer une face** d'une pièce pour voir logements, formes et perçages. Mesure indicative.
+proposées et corrigeables. **Retirer une face** d'une pièce pour voir logements, formes et perçages. **Cotation** : Ø / R d'un cylindre, distance ou angle entre faces, axes, face + axe, points ; cotes conservées et masquables. Panneaux **réductibles et détachables**, barre d'outils déplaçable.
 
 ## 6. Éclaté et ouverture paramétrée
 Éclaté tout / sélection, empilage Z, X, Y ou radial, animation, retour exact. **Ouverture paramétrée** par groupes
@@ -43,7 +43,7 @@ mécanique n'est garantie.
 
 ## 7. Coupes
 Plans XZ, YZ, XY simultanés, curseur en mm sur tout le volume, inversion, combinables avec éclaté et ouverture.
-Matière coupée **pleine et hachurée** ; poches, logements et perçages apparaissent en vide. Coupe visuelle : la section
+Matière coupée **pleine, hachurage léger, contour des pièces coupées en trait épais** ; poches, logements et perçages apparaissent en vide. Coupe visuelle : la section
 B-Rep exacte reste à faire.
 
 ## 8. Module perçages & circuits
@@ -83,17 +83,18 @@ automatique des serrages. L'outil assiste des monteurs professionnels ; il ne re
 | NAV-03 | Masquer, isoler, tout afficher, par pièce, sous-ensemble, famille ; annuler / rétablir | fait | à faire |
 | NAV-04 | Transparence 0–100 % par sélection, mode fantôme autour de la sélection | fait | à faire |
 | NAV-05 | Recherche par repère, nom, référence, dimension, sous-ensemble, Ø de perçage | fait | à faire |
-| NAV-06 | Mesure indicative point à point avec ΔX ΔY ΔZ | fait | à faire |
+| NAV-06 | Cotation (remplace « Mesurer ») : toucher un cylindre → Ø (ou R si arc) ; deux éléments (faces, axes, face + axe, points) → distance si parallèles, angle sinon ; cotes conservées à l'écran, masquables une à une ou toutes, mémorisées dans projet et scènes | fait | à faire |
 | NAV-07 | Retirer une ou plusieurs faces B-Rep d'une pièce pour voir logements, formes et perçages ; remettre ; annulable | fait | à faire |
 | NAV-08 | Mode BCR : familles de pièces proposées par les noms (plaques, collecteurs, busettes, obturateurs, résistances, visserie, guidage, refroidissement), corrigeables, filtrables | fait | à faire |
 | REN-01 | Rendu lisible : éclairage studio embarqué, couleurs CAO, arêtes par défaut, intérieur de matière éclairé | fait | à faire |
+| IHM-01 | Panneaux Outils et Pièces réductibles par poignée (bande verticale) et détachables en fenêtres flottantes déplaçables et redimensionnables ; barre d'outils 3D déplaçable par sa poignée et repliable ; disposition mémorisée sur le poste | fait | à faire |
 | ECL-01 | Éclaté tout / sélection, empilage Z, X, Y ou radial (écartement ×4), animation, retour exact à 0 | fait | à faire |
 | ECL-02 | Vecteurs d'éclaté éditables pièce par pièce | à faire | à faire |
 | OUV-01 | Ouverture paramétrée par groupes mobiles en translation (axe, sens, course mm), curseur fermé → ouvert, animation, groupes enchaînés | fait | à faire |
 | OUV-02 | Rotation autour d'une charnière : axe pris sur une pièce cylindrique (axe, goupille, alésage) ou une arête droite ; angle en degrés | fait | à faire |
 | OUV-03 | Retour exact à fermé (position et orientation du STEP) | fait | à faire |
 | COU-01 | Coupes XZ, YZ, XY simultanées, curseur en mm sur toute l'étendue, inversion, combinables avec éclaté et ouverture | fait | à faire |
-| COU-02 | Matière coupée pleine et hachurée (stencil), sans plaque translucide ; contour du plan en option | fait | fait : coupe du moule 10970 contrôlée en capture |
+| COU-02 | Matière coupée pleine, hachurage léger, contour des pièces coupées en trait épais (calcul par pièce et par plan) ; contour du plan en option | fait | fait : coupe du moule 10970 contrôlée en capture |
 | COU-03 | Section B-Rep exacte et export des profils (calcul OpenCascade dédié) | à faire | à faire |
 | PER-01 | Détecter les perçages (cylindres concaves), perçages étagés, forages interrompus par une poche | fait | à faire |
 | PER-02 | Détecter les pièces logées dans un perçage (obturateurs, vis, busettes) | fait | à faire |

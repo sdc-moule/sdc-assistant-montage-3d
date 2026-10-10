@@ -109,6 +109,10 @@
       <textarea id="c-text" rows="3" placeholder="Commentaire en français"></textarea>
       <button class="btn wide primary" id="c-add">Ajouter le commentaire</button>
       <div id="c-list" class="list"></div>
+      <h3>Cotes</h3>
+      <p class="hint">« 📏 Cotation » puis toucher : un cylindre → Ø (ou R si arc) ; deux faces, deux axes, face + axe ou deux points → distance (ou angle). Valeurs du maillage, indicatives.</p>
+      <div class="grid2"><button class="btn" id="cotes-hide-all">Masquer toutes</button><button class="btn" id="cotes-del-all">Supprimer toutes</button></div>
+      <div id="cote-list" class="list"></div>
       <h3>Scènes mémorisées</h3>
       <p class="hint">Une scène garde caméra, éclaté, coupes, masquages, transparences, faces retirées et circuits. Le PNG enregistré contient la scène : le recharger par « Charger projet / scène ».</p>
       <div class="grid2"><input id="v-name" placeholder="Nom de la scène"><button class="btn" id="v-save">Mémoriser</button></div>
@@ -129,7 +133,8 @@
     </div>
     <div id="busy" hidden><div class="spinner"></div><p id="busy-text">Lecture…</p></div>
 
-    <div class="viewbar">
+    <div class="viewbar" id="viewbar">
+      <div class="vb-grip" title="Glisser pour déplacer · double-clic : remettre en place"><span>⠿</span><button class="vb-fold" id="vb-fold" title="Réduire / agrandir la barre">▾</button></div>
       <button class="btn icon" data-view="iso" title="Vue isométrique">Iso</button>
       <button class="btn icon" data-view="top" title="Vue de dessus">Dessus</button>
       <button class="btn icon" data-view="front" title="Vue de face">Face</button>
@@ -138,7 +143,8 @@
       <span class="sep"></span>
       <button class="btn icon toggle" id="multi" title="Sélection multiple (tablette)">Multi</button>
       <button class="btn icon toggle" id="boxsel" title="Sélection par fenêtre : glisser un rectangle (gauche → droite : pièces entièrement dedans ; droite → gauche : pièces touchées). Raccourci : Maj + glisser">▭ Fenêtre</button>
-      <button class="btn icon toggle" id="measure" title="Mesure indicative entre deux points">Mesurer</button>
+      <button class="btn icon toggle" id="measure" title="Cotation : toucher un cylindre (Ø / R), ou deux éléments (faces, axes, face + axe, points) pour la distance ou l'angle">📏 Cotation</button>
+      <button class="btn icon toggle on" id="cotes-vis" title="Afficher / masquer toutes les cotes">👁 Cotes</button>
       <button class="btn icon toggle" id="faces-btn" title="Retirer une face d'une pièce pour voir l'intérieur">✂ Face</button>
       <button class="btn icon" id="faces-reset" title="Remettre les faces retirées (de la sélection, ou toutes)">↺ Faces</button>
       <span class="sep"></span>

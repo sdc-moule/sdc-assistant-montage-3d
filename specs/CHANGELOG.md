@@ -1,5 +1,10 @@
 # Historique du cahier des charges
 
+## 1.3 — mise à jour du 10 octobre 2026, soir (Claude Code, demande de Christophe)
+- « Mesurer » remplacé par **Cotation** (NAV-06) : Ø / R, distances et angles entre faces, axes, face + axe, points ; cotes persistantes, masquables.
+- Coupes (COU-02) : hachurage atténué, contours des pièces coupées mis en évidence.
+- Nouvelle exigence **IHM-01** : panneaux réductibles / détachables / déplaçables, barre d'outils déplaçable et repliable.
+
 ## 1.3 — 10 octobre 2026 (Claude Code, validé au fil des essais par Christophe)
 - Ajout du livrable **application autonome** (HTML unique hors ligne + variante légère) ; l'application Windows 0.2 reste.
 - Ajout du **module perçages & circuits** (PER-01 à PER-07) : forages, perçages étagés et interrompus, pièces logées,

@@ -131,3 +131,28 @@ test('STEP : accents ISO-8859-1 bruts réécrits en \\X\\HH, UTF-8 valide conser
   const utf = Buffer.from('é Ω ✓', 'utf8');
   assert.equal(fixStepLatin1(utf.buffer.slice(utf.byteOffset, utf.byteOffset + utf.length)).fixed, 0);
 });
+
+test('cotation : faces parallèles, Ø, entraxe, axe-face, angle', async () => {
+  const { classifyFace, coteCylindre, coteEntre } = await import('../standalone/src/geom/cotation.js');
+  const ents = p => p.faces.map((_, i) => classifyFace(p, i)).filter(Boolean);
+  const plate = byName('PLAQUE_FIXATION_INFERIEURE')[0], col = byName('COLLECTEUR_BCR')[0];
+  const pl = ents(plate).filter(e => e.kind === 'plan' && Math.abs(Math.abs(e.n[2]) - 1) < 1e-6);
+  const top = pl.find(e => Math.abs(e.p[2] - 30) < 1e-3), bot = pl.find(e => Math.abs(e.p[2]) < 1e-3);
+  const d = coteEntre({ ...top, hit: top.p }, { ...bot, hit: bot.p });
+  assert.equal(d.kind, 'distance'); assert.ok(Math.abs(d.value - 30) < 1e-3);
+  const ce = ents(col), axes = ce.filter(e => e.kind === 'axe');
+  const main = axes.find(e => Math.abs(Math.abs(e.d[0]) - 1) < 1e-3);
+  const hit = [0, 0, 105];
+  const dia = coteCylindre(main, hit);
+  assert.equal(dia.kind, 'diametre'); assert.ok(Math.abs(dia.value - 10) < 0.02, `Ø ${dia.value}`);
+  const outs = axes.filter(e => Math.abs(Math.abs(e.d[2]) - 1) < 1e-3 && Math.abs(e.r - 5) < 0.05);
+  const left = outs.find(e => e.o[0] < -60), right = outs.find(e => e.o[0] > 60);
+  const ent = coteEntre({ ...left, hit: [-70, 5, 85] }, { ...right, hit: [70, 5, 85] });
+  assert.ok(Math.abs(ent.value - 140) < 0.05, `entraxe ${ent.value}`);
+  const bottom = ce.find(e => e.kind === 'plan' && Math.abs(e.p[2] - 80) < 1e-3);
+  const af = coteEntre({ ...main, hit: [0, 5, 100] }, { ...bottom, hit: bottom.p });
+  assert.ok(Math.abs(af.value - 20) < 0.05, `axe-face ${af.value}`);
+  const side = ce.find(e => e.kind === 'plan' && Math.abs(Math.abs(e.n[0]) - 1) < 1e-6);
+  const ang = coteEntre({ ...side, hit: side.p }, { ...bottom, hit: bottom.p });
+  assert.equal(ang.kind, 'angle'); assert.ok(Math.abs(ang.value - 90) < 0.01);
+});

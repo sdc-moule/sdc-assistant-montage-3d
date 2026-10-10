@@ -112,6 +112,37 @@ with sync_playwright() as p:
     n_cross = S("S.sel.size")
     check(0 < n_cross < 15, f"fenêtre droite → gauche (pièces touchées) : {n_cross} pièces")
     pg.click("#boxsel"); pg.click("#s-clear") if pg.is_visible("#s-clear") else None
+    # cotation : Ø d'un cylindre, distance entre deux faces planes parallèles
+    pg.click("[data-view=iso]"); time.sleep(0.3)
+    pg.evaluate("() => { window.__SDC__.S.cotes = []; }")
+    pg.click("#measure")
+    r = pg.locator("#overlay").bounding_box()
+    def click3d(x, y, z):
+        q = pg.evaluate(f"() => {{ const T = window.__SDC__.THREE; const q = window.__SDC__.project(new T.Vector3({x}, {y}, {z})); return [q.x, q.y]; }}")
+        pg.mouse.click(r["x"] + q[0], r["y"] + q[1]); time.sleep(0.3)
+    click3d(10.6, -10.6, 137)
+    txt = S("S.cotes.map(c => c.text)")
+    check(any(t.startswith("Ø30,0") for t in txt), f"cotation Ø sur la buse ({txt})")
+    pg.evaluate("() => { window.__SDC__.S.cotes = []; window.__SDC__.S.cote.pending = null; }")
+    click3d(-100, -80, 70); click3d(60, -20, 120)
+    txt = S("S.cotes.map(c => c.text)")
+    check(txt == ["50,00"], f"cotation entre deux faces parallèles = 50 ({txt})")
+    pg.screenshot(path=str(OUT / "7_cotes.png"))
+    pg.click("#cotes-vis"); check(S("S.cotesVisible") is False, "masquer les cotes"); pg.click("#cotes-vis")
+    pg.click("#measure")
+    # coupe : contour des pièces coupées
+    pg.evaluate("() => { const A = window.__SDC__; A.S.cuts.y = { on: true, pos: 0, flip: true }; A.setMode('coupe'); }"); time.sleep(0.5)
+    nseg = S("[...S.objs.values()].filter(o => o.capSets?.y?.contour.visible).length")
+    check(nseg >= 5, f"contours de coupe calculés ({nseg} pièces)")
+    pg.screenshot(path=str(OUT / "8_coupe_contours.png"))
+    pg.evaluate("() => { const A = window.__SDC__; A.S.cuts.y.on = false; A.setMode('explorer'); }")
+    # panneaux : réduire, détacher, remettre
+    pg.click("#panel-left .pc-fold"); time.sleep(0.2)
+    check("collapsed" in pg.get_attribute("#panel-left", "class"), "réduire le panneau gauche")
+    pg.click("#panel-left .pc-strip"); pg.click("#panel-right .pc-float"); time.sleep(0.2)
+    check("floating" in pg.get_attribute("#panel-right", "class"), "détacher le panneau droit")
+    time.sleep(1.5); pg.screenshot(path=str(OUT / "9_panneau_flottant.png"))
+    pg.click("#panel-right .pc-float")
     # commentaire + persistance locale
     pg.click("#rail button[data-mode=notes]")
     pg.evaluate("() => window.__SDC__.select(['O006'])")

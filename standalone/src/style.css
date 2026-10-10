@@ -161,3 +161,23 @@ table.bom td.dims { white-space: nowrap; font-variant-numeric: tabular-nums; fon
 #selrect.cross { border: 1.5px dashed #1f8a4c; background: rgba(31,138,76,.10); }
 #op-type { margin: 6px 0; }
 #busy-text { white-space: pre-line; text-align: center; }
+/* ---- panneaux réductibles / détachables ---- */
+@media (min-width: 981px) { #app { grid-template-columns: 84px var(--lw, 350px) 1fr var(--rw, 350px); } }
+.pchrome { display: flex; align-items: center; gap: 6px; margin: -12px -14px 8px; padding: 6px 8px 6px 14px; background: #e3e9ef; border-bottom: 1px solid var(--line); position: sticky; top: -12px; z-index: 3; user-select: none; }
+.panel.right .pchrome { margin: -12px -14px 0; }
+.pc-title { flex: 1; font-weight: 600; font-size: 13px; color: var(--steel-d); text-transform: uppercase; letter-spacing: .5px; }
+.pchrome button { border: 1px solid var(--line); background: #fff; border-radius: 6px; width: 32px; height: 28px; cursor: pointer; font-size: 15px; line-height: 1; }
+.pchrome button:hover { border-color: var(--steel); }
+.pc-strip { display: none; }
+.panel.collapsed { padding: 0; overflow: hidden; }
+.panel.collapsed > :not(.pc-strip) { display: none !important; }
+.panel.collapsed .pc-strip { display: flex; height: 100%; align-items: flex-start; justify-content: center; padding-top: 14px; cursor: pointer; background: #e3e9ef; }
+.panel.collapsed .pc-strip span { writing-mode: vertical-rl; font-weight: 600; color: var(--steel-d); letter-spacing: 1px; }
+.panel.floating { position: fixed; z-index: 40; resize: both; overflow: auto; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 32px rgba(15,30,45,.28); min-width: 260px; min-height: 200px; }
+.panel.floating .pchrome { cursor: grab; border-radius: 12px 12px 0 0; }
+.panel.right.floating { display: flex; }
+/* ---- barre d'outils 3D déplaçable ---- */
+.vb-grip { display: flex; align-items: center; justify-content: space-between; gap: 4px; cursor: grab; color: var(--muted); padding: 0 2px 2px; user-select: none; }
+.vb-grip span { font-size: 18px; line-height: 1; }
+.vb-fold { border: 0; background: transparent; cursor: pointer; font-size: 14px; color: var(--muted); }
+.viewbar.folded > :not(.vb-grip) { display: none; }

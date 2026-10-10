@@ -12,6 +12,10 @@ import { extractCadFromZip } from './geom/unzip.js';
 import { pngWithText, pngText } from './geom/png-meta.js';
 import { fixStepLatin1 } from './geom/step-text.js';
 import { cacheGet, cachePut } from './cache.js';
+import { classifyFace, coteCylindre, coteEntre } from './geom/cotation.js';
+import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
@@ -69,7 +73,7 @@ const S = {
   cuts: { x: { on: false, pos: 0, flip: false }, y: { on: false, pos: 0, flip: false }, z: { on: false, pos: 0, flip: false } }, caps: true, planeVis: false, hiddenFaces: {}, faceMode: false, drillLabels: false, fill: { on: true, min: 3, max: 20 },
   drill: null, netClass: {}, skelOnly: false, skelShow: false, selNet: null, selFeature: null, filters: { circuit: true, alignement: false, 'isolé': false, 'alésage': false, dmin: 0, dmax: 999 }, maxDrill: 32, cyl: null,
   comments: [], views: [], rowNotes: {}, bubbleOff: {},
-  bounds: new THREE.Box3(), measure: { on: false, pts: [] }, skelItems: [], skelGroups: new Map(),
+  bounds: new THREE.Box3(), measure: { on: false, pts: [] }, cote: { pending: null }, cotes: [], cotesVisible: true, skelItems: [], skelGroups: new Map(),
   undo: [], redo: [],
 };
 
@@ -159,7 +163,7 @@ function install(res, name, hash) {
   const { parts } = partsFromOcct(res);
   const kept = parts.filter(p => p.index.length >= 3);
   if (!kept.length) throw new Error('aucun solide trouvé dans le fichier.');
-  Object.assign(S, { loaded: true, fileName: name, hash, parts: kept, byId: new Map(kept.map(p => [p.id, p])), items: {}, sel: new Set(), comments: [], views: [], rowNotes: {}, bubbleOff: {}, netClass: {}, catOverride: {}, catOff: new Set(), hiddenFaces: {}, moves: [], open: 0, hinge: null, undo: [], redo: [], selNet: null, selFeature: null });
+  Object.assign(S, { loaded: true, fileName: name, hash, parts: kept, byId: new Map(kept.map(p => [p.id, p])), items: {}, sel: new Set(), comments: [], views: [], rowNotes: {}, bubbleOff: {}, netClass: {}, catOverride: {}, catOff: new Set(), hiddenFaces: {}, moves: [], open: 0, hinge: null, cotes: [], undo: [], redo: [], selNet: null, selFeature: null });
   S.ex = { amount: 0, dir: 'z', scope: 'all', ids: null };
   S.stats = new Map(kept.map(p => [p.id, meshStats(p.positions, p.index)]));
   S.bom = buildBom(kept, S.stats);
@@ -451,7 +455,7 @@ function drawHinge() {
 // hachuré là où le stencil ≠ 0 : la matière coupée apparaît PLEINE, quelle que soit la forme intérieure.
 const PLANE_KEYS = ['x', 'y', 'z'];
 function hatched(mat) {
-  mat.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <dithering_fragment>', '#include <dithering_fragment>\nif (mod(gl_FragCoord.x - gl_FragCoord.y, 10.0) < 1.6) gl_FragColor.rgb *= 0.55;'); };
+  mat.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <dithering_fragment>', '#include <dithering_fragment>\nif (mod(gl_FragCoord.x - gl_FragCoord.y, 14.0) < 1.0) gl_FragColor.rgb *= 0.86;'); };
   mat.customProgramCacheKey = () => 'sdc-hachures';
   return mat;
 }
@@ -463,11 +467,33 @@ function capSet(o, k) {
   const back = new THREE.Mesh(o.mesh.geometry, new THREE.MeshBasicMaterial({ ...st, side: THREE.BackSide, stencilFail: inc, stencilZFail: inc, stencilZPass: inc }));
   const front = new THREE.Mesh(o.mesh.geometry, new THREE.MeshBasicMaterial({ ...st, side: THREE.FrontSide, stencilFail: dec, stencilZFail: dec, stencilZPass: dec }));
   const rp = THREE.ReplaceStencilOp;
-  const cap = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), hatched(new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, stencilWrite: true, stencilRef: 0, stencilFunc: THREE.NotEqualStencilFunc, stencilFail: rp, stencilZFail: rp, stencilZPass: rp })));
+  const cap = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), hatched(new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 4, stencilWrite: true, stencilRef: 0, stencilFunc: THREE.NotEqualStencilFunc, stencilFail: rp, stencilZFail: rp, stencilZPass: rp })));
   cap.onAfterRender = r => r.clearStencil();
   for (const m of [back, front, cap]) m.raycast = () => {};
-  o.grp.add(back, front); capRoot.add(cap);
-  return (o.capSets[k] = { back, front, cap });
+  // contour de la pièce dans le plan de coupe (traits épais), recalculé quand le plan ou la pièce bouge
+  const contour = new LineSegments2(new LineSegmentsGeometry(), contourMat.clone());
+  contour.raycast = () => {}; contour.renderOrder = 3; contour.userData.key = '';
+  o.grp.add(back, front, contour); capRoot.add(cap);
+  return (o.capSets[k] = { back, front, cap, contour });
+}
+const contourMat = new LineMaterial({ color: 0x0d1720, linewidth: 2.4, worldUnits: false });
+function sectionSegments(o, k) {
+  // plan de coupe exprimé dans le repère d'origine de la pièce (la pièce peut être éclatée ou ouverte)
+  const inv = partMatrix(o.part.id).invert(), n = AX[k].clone(), pos = S.cuts[k].pos;
+  const plane = new THREE.Plane(n, -pos).applyMatrix4(inv);
+  const out = [], tmp = new THREE.Vector3(), d = [0, 0, 0], q = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+  o.mesh.geometry.boundsTree.shapecast({
+    intersectsBounds: box => plane.intersectsBox(box),
+    intersectsTriangle: tri => {
+      q[0].copy(tri.a); q[1].copy(tri.b); q[2].copy(tri.c);
+      for (let i = 0; i < 3; i++) d[i] = plane.distanceToPoint(q[i]);
+      const pts = [];
+      for (let i = 0; i < 3; i++) { const j = (i + 1) % 3; if ((d[i] > 0) !== (d[j] > 0)) { tmp.copy(q[i]).lerp(q[j], d[i] / (d[i] - d[j])); pts.push(tmp.x, tmp.y, tmp.z); } }
+      if (pts.length === 6) out.push(...pts);
+      return false;
+    },
+  });
+  return out;
 }
 function updateCaps(o, index, total, visible, op, color) {
   const active = PLANE_KEYS.filter(k => S.cuts[k].on);
@@ -477,8 +503,12 @@ function updateCaps(o, index, total, visible, op, color) {
     const on = S.caps && S.cuts[k].on && visible && op >= 1;
     if (!on && !o.capSets?.[k]) return;
     const cs = capSet(o, k);
-    for (const m of [cs.back, cs.front, cs.cap]) m.visible = on;
+    for (const m of [cs.back, cs.front, cs.cap, cs.contour]) m.visible = on;
     if (!on) return;
+    const key = `${S.cuts[k].pos}|${partMatrix(o.part.id).elements.join(',')}`;
+    if (cs.contour.userData.key !== key) { cs.contour.userData.key = key; const seg = sectionSegments(o, k); cs.contour.geometry.dispose(); cs.contour.geometry = new LineSegmentsGeometry(); if (seg.length) cs.contour.geometry.setPositions(seg); cs.contour.visible = seg.length > 0; }
+    cs.contour.material.resolution.set(renderer.domElement.width, renderer.domElement.height);
+    cs.contour.material.clippingPlanes = active.filter(x => x !== k).map(x => planes[active.indexOf(x)]);
     const base = 10 + (j * total + index) * 3;
     cs.back.renderOrder = base; cs.front.renderOrder = base + 1; cs.cap.renderOrder = base + 2;
     cs.back.material.clippingPlanes = planes; cs.front.material.clippingPlanes = planes;
@@ -563,7 +593,7 @@ renderer.domElement.addEventListener('pointerup', ev => {
     return;
   }
   if (S.faceMode) { if (h) { pushHistory(); const id = h.object.userData.id; (S.hiddenFaces[id] ??= []).push(faceOfHit(h)); refreshAll(); } return; }
-  if (S.measure.on) { if (h) { S.measure.pts.push(h.point.clone()); if (S.measure.pts.length > 2) S.measure.pts = [h.point.clone()]; drawMeasure(); } return; }
+  if (S.measure.on) { coteClick(h); return; }
   if (S.mode === 'percages' && S.skelShow) { const f = pickFeature(ev); if (f) { selectFeature(f.id, true); return; } }
   if (h) select([h.object.userData.id], ev.ctrlKey || ev.metaKey || ev.shiftKey || S.multi);
   else if (!S.multi) clearSel();
@@ -576,13 +606,53 @@ function pickFeature(ev) {
   return h ? S.skelItems.find(i => i.tube === h.object).feature : null;
 }
 
-// ---------------------------------------------------------------- mesure
-function drawMeasure() {
-  helperRoot.children.filter(c => c.userData.measure).forEach(c => { c.geometry?.dispose(); helperRoot.remove(c); });
-  const size = S.bounds.getSize(new THREE.Vector3()).length();
-  for (const p of S.measure.pts) { const s = new THREE.Mesh(new THREE.SphereGeometry(size * 0.004, 12, 8), new THREE.MeshBasicMaterial({ color: 0xd7301f, depthTest: false })); s.position.copy(p); s.renderOrder = 10; s.userData.measure = true; helperRoot.add(s); }
-  if (S.measure.pts.length === 2) { const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(S.measure.pts), new THREE.LineBasicMaterial({ color: 0xd7301f, depthTest: false })); l.renderOrder = 10; l.userData.measure = true; helperRoot.add(l); }
+// ---------------------------------------------------------------- cotation
+// Élément touché : plan, axe de cylindre (Ø / R) ou point ; calcul dans le repère STEP (valeur indépendante de l'éclaté).
+function entityAt(h) {
+  const id = h.object.userData.id, o = S.objs.get(id);
+  const hit = h.point.clone().applyMatrix4(partMatrix(id).invert()).toArray();
+  const e = classifyFace(o.part, faceOfHit(h));
+  return { ...(e ?? { kind: 'point' }), hit, partId: id };
 }
+let coteSeq = 0;
+function addCote(c, a, b) {
+  S.cotes.push({ id: `C${Date.now().toString(36)}${coteSeq++}`, ...c, a: a.partId, b: (b ?? a).partId, visible: true, date: new Date().toISOString() });
+}
+function coteClick(h) {
+  if (!h) { S.cote.pending = null; toast('Cotation : sélection remise à zéro.'); return; }
+  const e = entityAt(h), prev = S.cote.pending;
+  let made = [];
+  if (e.kind === 'axe') { const c = coteCylindre(e, e.hit); addCote(c, e); made.push(c.text); }
+  if (prev) { const c = coteEntre(prev, e); addCote(c, prev, e); made.push(c.text); S.cote.pending = null; }
+  else S.cote.pending = e;
+  const what = { plan: 'face plane', axe: 'axe de cylindre', point: 'point' }[e.kind];
+  toast(made.length ? `Cote : ${made.join(' · ')} mm${S.cote.pending ? ` — ${what} retenu : toucher un 2ᵉ élément pour une distance` : ''}` : `${what[0].toUpperCase() + what.slice(1)} retenu(e) : toucher un 2ᵉ élément (face, axe, point).`, 5000);
+  S.cotesVisible = true; syncToggles(); refreshAll();
+}
+function drawCotes() {
+  if (!S.cotesVisible) return;
+  for (const c of S.cotes) {
+    if (!c.visible || !S.objs.has(c.a) || !S.objs.has(c.b)) continue;
+    const a = project(xf(c.a, new THREE.Vector3(...c.p1))), b = project(xf(c.b, new THREE.Vector3(...c.p2)));
+    if (a.z > 1 || b.z > 1) continue;
+    const col = c.kind === 'angle' ? '#7b3fbf' : '#c2185b';
+    octx.strokeStyle = col; octx.fillStyle = col; octx.lineWidth = 1.6;
+    octx.beginPath(); octx.moveTo(a.x, a.y); octx.lineTo(b.x, b.y); octx.stroke();
+    const ang = Math.atan2(b.y - a.y, b.x - a.x);
+    const arrow = (x, y, t) => { octx.beginPath(); octx.moveTo(x, y); octx.lineTo(x - 9 * Math.cos(t - 0.32), y - 9 * Math.sin(t - 0.32)); octx.lineTo(x - 9 * Math.cos(t + 0.32), y - 9 * Math.sin(t + 0.32)); octx.closePath(); octx.fill(); };
+    if (c.kind !== 'angle') { arrow(b.x, b.y, ang); if (c.kind !== 'rayon') arrow(a.x, a.y, ang + Math.PI); }
+    label((a.x + b.x) / 2, (a.y + b.y) / 2 - 12, c.text, col);
+  }
+}
+function renderCotes() {
+  const box = $('cote-list'); if (!box) return; box.replaceChildren();
+  for (const c of S.cotes) box.append(el('div', { class: `row${c.visible ? '' : ' hidden-part'}` },
+    el('button', { class: 'eye', title: c.visible ? 'Masquer' : 'Afficher', onclick: () => { c.visible = !c.visible; refreshAll(); } }, eyeSvg(c.visible)),
+    el('span', { class: 'name' }, `${c.text} mm`.replace('° mm', '°').replace(/(°[^m]*) mm$/, '$1'), el('span', { class: 'hint' }, ` · rep. ${[...new Set([S.rowOf.get(c.a)?.repere, S.rowOf.get(c.b)?.repere])].join(' / ')}`)),
+    el('button', { class: 'eye', title: 'Supprimer', onclick: () => { S.cotes = S.cotes.filter(x => x !== c); refreshAll(); } }, '✕')));
+  if (!S.cotes.length) box.append(el('p', { class: 'hint' }, 'Aucune cote.'));
+}
+
 
 // ---------------------------------------------------------------- calque 2D : bulles, étiquettes, mesure
 let bubbleCache = [];
@@ -595,10 +665,7 @@ function drawOverlay() {
   if (!S.loaded) return;
   if (S.bubbles) drawBubbles(r);
   if (S.skelShow && S.drill) drawNetLabels();
-  if (S.measure.on && S.measure.pts.length === 2) {
-    const [a, b] = S.measure.pts, d = a.distanceTo(b), m = project(a.clone().add(b).multiplyScalar(0.5));
-    label(m.x, m.y - 14, `${fmt(d, 2)} mm  (ΔX ${fmt(Math.abs(b.x - a.x), 1)} · ΔY ${fmt(Math.abs(b.y - a.y), 1)} · ΔZ ${fmt(Math.abs(b.z - a.z), 1)})  indicatif`, '#d7301f');
-  }
+  drawCotes();
 }
 function label(x, y, text, color = '#18232e', bg = 'rgba(255,255,255,.92)') {
   octx.font = '600 13px Bahnschrift, Segoe UI, sans-serif';
@@ -656,8 +723,11 @@ function drawNetLabels() {
 }
 
 // ---------------------------------------------------------------- rendu
+let lastSize = '';
 function loop() {
   requestAnimationFrame(loop);
+  const sz = `${viewport.clientWidth}x${viewport.clientHeight}`; // panneaux réduits / détachés : suivre la taille réelle
+  if (sz !== lastSize) { lastSize = sz; resize(); }
   controls.update();
   // épaisseur constante à l'écran des axes de circuits
   if (skelRoot.visible) { const k = camera.position.distanceTo(controls.target) / 900; for (const it of S.skelItems) {
@@ -668,7 +738,7 @@ function loop() {
 }
 
 // ---------------------------------------------------------------- panneaux
-function refreshAll() { applyDisplay(); renderTree(); renderBom(); renderCard(); renderSelbar(); renderCategories(); if (S.mode === 'percages') renderNets(); if (S.mode === 'notes') { renderComments(); renderViews(); } if (S.mode === 'eclate') renderMoves(); if (S.mode === 'coupe') renderPlanes(); saveLocal(); }
+function refreshAll() { applyDisplay(); renderTree(); renderBom(); renderCard(); renderSelbar(); renderCategories(); if (S.mode === 'percages') renderNets(); if (S.mode === 'notes') { renderComments(); renderViews(); renderCotes(); } if (S.mode === 'eclate') renderMoves(); if (S.mode === 'coupe') renderPlanes(); saveLocal(); }
 
 function matches(id, term) {
   if (!term) return true;
@@ -894,11 +964,11 @@ function renderComments() {
   if (!S.comments.length) box.append(el('p', { class: 'hint' }, 'Aucun commentaire.'));
 }
 function viewState() {
-  return { camera: { position: camera.position.toArray(), target: controls.target.toArray() }, items: JSON.parse(JSON.stringify(S.items)), catOff: [...S.catOff], cuts: JSON.parse(JSON.stringify(S.cuts)), ex: { ...S.ex }, hiddenFaces: JSON.parse(JSON.stringify(S.hiddenFaces)), moves: JSON.parse(JSON.stringify(S.moves)), open: S.open, ghost: S.ghost, bubbles: S.bubbles, skelShow: S.skelShow, skelOnly: S.skelOnly, selNet: S.selNet, sel: [...S.sel] };
+  return { camera: { position: camera.position.toArray(), target: controls.target.toArray() }, items: JSON.parse(JSON.stringify(S.items)), catOff: [...S.catOff], cuts: JSON.parse(JSON.stringify(S.cuts)), ex: { ...S.ex }, hiddenFaces: JSON.parse(JSON.stringify(S.hiddenFaces)), moves: JSON.parse(JSON.stringify(S.moves)), open: S.open, cotes: JSON.parse(JSON.stringify(S.cotes)), cotesVisible: S.cotesVisible, ghost: S.ghost, bubbles: S.bubbles, skelShow: S.skelShow, skelOnly: S.skelOnly, selNet: S.selNet, sel: [...S.sel] };
 }
 function applyViewState(v) {
   pushHistory();
-  Object.assign(S.items, v.items); S.catOff = new Set(v.catOff ?? []); S.cuts = v.cuts; S.ex = v.ex; S.hiddenFaces = v.hiddenFaces ?? {}; if (v.moves) S.moves = v.moves.map(m => ({ ...m, ids: m.ids.filter(id => S.objs.has(id)) })); S.open = v.open ?? 0; S.ghost = !!v.ghost; S.bubbles = !!v.bubbles; S.skelShow = !!v.skelShow; S.skelOnly = !!v.skelOnly; S.selNet = v.selNet ?? null; S.sel = new Set((v.sel ?? []).filter(id => S.objs.has(id)));
+  Object.assign(S.items, v.items); S.catOff = new Set(v.catOff ?? []); S.cuts = v.cuts; S.ex = v.ex; S.hiddenFaces = v.hiddenFaces ?? {}; if (v.moves) S.moves = v.moves.map(m => ({ ...m, ids: m.ids.filter(id => S.objs.has(id)) })); S.open = v.open ?? 0; if (v.cotes) S.cotes = v.cotes; if (v.cotesVisible !== undefined) S.cotesVisible = v.cotesVisible; S.ghost = !!v.ghost; S.bubbles = !!v.bubbles; S.skelShow = !!v.skelShow; S.skelOnly = !!v.skelOnly; S.selNet = v.selNet ?? null; S.sel = new Set((v.sel ?? []).filter(id => S.objs.has(id)));
   computeExplodeVectors(); syncToggles();
   camera.position.fromArray(v.camera.position); controls.target.fromArray(v.camera.target); controls.update();
   refreshAll();
@@ -919,7 +989,7 @@ function syncToggles() {
   $('skel-show').classList.toggle('on', S.skelShow); $('skel-only').classList.toggle('on', S.skelOnly);
   $('ex-amount').value = S.ex.amount; $('ex-val').textContent = `${Math.round(S.ex.amount)} %`; $('ex-dir').value = S.ex.dir; $('ex-scope').value = S.ex.scope;
   $('op-amount').value = Math.round(S.open * 100); $('op-val').textContent = `${Math.round(S.open * 100)} %`;
-  $('op-pick').classList.toggle('on', S.pickAxis); $('boxsel').classList.toggle('on', S.boxMode);
+  $('op-pick').classList.toggle('on', S.pickAxis); $('cotes-vis').classList.toggle('on', S.cotesVisible); $('measure').classList.toggle('on', S.measure.on); $('boxsel').classList.toggle('on', S.boxMode);
   $('faces-btn').classList.toggle('on', S.faceMode); $('labels-toggle').classList.toggle('on', S.drillLabels); $('fill-toggle').classList.toggle('on', S.fill.on);
   $('caps-toggle').classList.toggle('on', S.caps); $('planevis-toggle').classList.toggle('on', S.planeVis);
 }
@@ -930,7 +1000,7 @@ let saveTimer;
 function projectData() {
   return { application: 'SDC Montage 3D', version: APP_VERSION, schema: 'sdc-montage3d-projet/2', fichier: S.fileName, empreinte_sha256: S.hash, date: new Date().toISOString(),
     occurrences: S.parts.map(p => ({ id: p.id, nom: p.name, signature: signature(p, S.stats.get(p.id)), repere: S.rowOf.get(p.id).repere })),
-    maxDrill: S.maxDrill, comments: S.comments, views: S.views, netClass: S.netClass, moves: S.moves, rowNotes: S.rowNotes, catOverride: S.catOverride, bubbleOff: S.bubbleOff, display: viewState() };
+    maxDrill: S.maxDrill, comments: S.comments, views: S.views, netClass: S.netClass, moves: S.moves, cotes: S.cotes, rowNotes: S.rowNotes, catOverride: S.catOverride, bubbleOff: S.bubbleOff, display: viewState() };
 }
 function saveLocal() { if (!S.loaded) return; clearTimeout(saveTimer); saveTimer = setTimeout(() => { try { localStorage.setItem(LS(), JSON.stringify(projectData())); } catch { /* stockage indisponible : le fichier projet reste possible */ } }, 400); }
 function restoreLocal() { try { const raw = localStorage.getItem(LS()); if (raw) { applyProject(JSON.parse(raw), true); toast('Annotations et vues de ce fichier restaurées.'); } } catch { /* rien */ } }
@@ -945,6 +1015,7 @@ function applyProject(pr, silent = false) {
     if (!confirm(`Ce projet a été créé sur un autre fichier (${pr.fichier}). ${m.size} occurrence(s) retrouvée(s), ${unsure} sans correspondance. Les numéros de repère et réseaux peuvent différer. Continuer ?`)) return;
   }
   if (Number.isFinite(pr.maxDrill) && pr.maxDrill !== S.maxDrill && S.cyl) { S.maxDrill = pr.maxDrill; $('f-maxdrill').value = pr.maxDrill; rebuildNetworks(); }
+  S.cotes = pr.empreinte_sha256 === S.hash ? (pr.cotes ?? []) : [];
   S.moves = (pr.moves ?? []).map(m => ({ ...m, ids: m.ids.map(map).filter(Boolean) })).filter(m => m.ids.length);
   S.comments = (pr.comments ?? []).map(c => ({ ...c, ids: c.ids.map(map).filter(Boolean) }));
   S.views = pr.empreinte_sha256 === S.hash ? (pr.views ?? []) : [];
@@ -1051,7 +1122,10 @@ function wire() {
   for (const b of document.querySelectorAll('[data-view]')) b.onclick = () => setView(b.dataset.view);
   $('fit-all').onclick = () => fitBox(currentBounds());
   $('multi').onclick = () => { S.multi = !S.multi; $('multi').classList.toggle('on', S.multi); };
-  $('measure').onclick = () => { S.faceMode = false; syncToggles(); S.measure.on = !S.measure.on; S.measure.pts = []; drawMeasure(); $('measure').classList.toggle('on', S.measure.on); if (S.measure.on) toast('Mesure : toucher deux points sur les pièces. Valeur indicative.'); };
+  $('measure').onclick = () => { S.faceMode = false; S.pickAxis = false; S.measure.on = !S.measure.on; S.cote.pending = null; syncToggles(); $('measure').classList.toggle('on', S.measure.on); if (S.measure.on) toast('Cotation : toucher un cylindre (Ø / R), ou deux éléments — faces, axes, face + axe, points — pour une distance ou un angle. Valeurs indicatives.', 7000); };
+  $('cotes-vis').onclick = () => { S.cotesVisible = !S.cotesVisible; syncToggles(); };
+  $('cotes-hide-all').onclick = () => { for (const c of S.cotes) c.visible = false; refreshAll(); };
+  $('cotes-del-all').onclick = () => { if (S.cotes.length && confirm(`Supprimer les ${S.cotes.length} cotes ?`)) { S.cotes = []; refreshAll(); } };
   $('undo').onclick = undo; $('redo').onclick = redo;
   $('s-fit').onclick = fitSelection; $('s-hide').onclick = hideSel; $('s-isolate').onclick = isolateSel; $('s-clear').onclick = clearSel;
   $('s-opacity').onpointerdown = () => pushHistory();
@@ -1135,6 +1209,60 @@ function wire() {
 }
 async function gunzip(b64) { const bin = Uint8Array.from(atob(b64), c => c.charCodeAt(0)); return new Uint8Array(await new Response(new Blob([bin]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer()); }
 
+// ---------------------------------------------------------------- panneaux réductibles, détachables, déplaçables
+// Chaque panneau : poignée « ‹ » pour le réduire à une bande, « ⧉ » pour le détacher en fenêtre flottante déplaçable
+// (glisser l'en-tête, redimensionner par le coin). La barre d'outils 3D se déplace par sa poignée ⠿ et se replie.
+const LAYOUT_KEY = 'sdc-montage3d:disposition';
+const layout = (() => { try { return JSON.parse(localStorage.getItem(LAYOUT_KEY)) ?? {}; } catch { return {}; } })();
+const saveLayout = () => { try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout)); } catch { /* rien */ } };
+function dragBy(handle, target, onEnd) {
+  handle.addEventListener('pointerdown', ev => {
+    if (ev.target.closest('button,input,select,textarea')) return;
+    ev.preventDefault();
+    const r = target.getBoundingClientRect(), dx = ev.clientX - r.left, dy = ev.clientY - r.top;
+    const fixed = getComputedStyle(target).position === 'fixed';
+    if (!fixed && getComputedStyle(target).position !== 'absolute') return; // panneau ancré : pas de déplacement
+    const base = fixed || !target.offsetParent ? { left: 0, top: 0 } : target.offsetParent.getBoundingClientRect();
+    const move = e => { const x = Math.max(0, Math.min(innerWidth - 60, e.clientX - dx)) - base.left, y = Math.max(0, Math.min(innerHeight - 40, e.clientY - dy)) - base.top; Object.assign(target.style, { left: x + 'px', top: y + 'px', right: 'auto', bottom: 'auto', transform: 'none' }); };
+    const up = () => { removeEventListener('pointermove', move); removeEventListener('pointerup', up); onEnd?.(target.getBoundingClientRect()); };
+    addEventListener('pointermove', move); addEventListener('pointerup', up);
+  });
+}
+function applyLayout() {
+  const app = $('app');
+  for (const side of ['left', 'right']) {
+    const p = $(`panel-${side}`), st = layout[side] ?? 'docked';
+    p.classList.toggle('collapsed', st === 'collapsed'); p.classList.toggle('floating', st === 'floating');
+    if (st === 'floating') { const f = layout[`${side}Pos`] ?? { x: side === 'left' ? 100 : innerWidth - 380, y: 80, w: 340, h: Math.round(innerHeight * 0.75) }; Object.assign(p.style, { left: f.x + 'px', top: f.y + 'px', width: f.w + 'px', height: f.h + 'px' }); }
+    else Object.assign(p.style, { left: '', top: '', width: '', height: '' });
+    app.style.setProperty(`--${side[0]}w`, st === 'collapsed' ? '30px' : st === 'floating' ? '0px' : side === 'left' ? '350px' : '350px');
+    p.querySelector('.pc-fold').textContent = st === 'collapsed' ? (side === 'left' ? '›' : '‹') : (side === 'left' ? '‹' : '›');
+    p.querySelector('.pc-float').textContent = st === 'floating' ? '⇲' : '⧉';
+    p.querySelector('.pc-float').title = st === 'floating' ? 'Remettre le panneau en place' : 'Détacher le panneau (fenêtre déplaçable)';
+  }
+  const vb = $('viewbar'); vb.classList.toggle('folded', !!layout.vbFolded); $('vb-fold').textContent = layout.vbFolded ? '▸' : '▾';
+  if (layout.vbPos) Object.assign(vb.style, { left: layout.vbPos.x + 'px', top: layout.vbPos.y + 'px', transform: 'none' }); else Object.assign(vb.style, { left: '', top: '', transform: '' });
+}
+function setupPanels() {
+  for (const side of ['left', 'right']) {
+    const p = $(`panel-${side}`);
+    const title = side === 'left' ? 'Outils' : 'Pièces';
+    const head = el('div', { class: 'pchrome' }, el('span', { class: 'pc-title' }, title),
+      el('button', { class: 'pc-float', onclick: () => { const st = layout[side]; layout[side] = st === 'floating' ? 'docked' : 'floating'; saveLayout(); applyLayout(); } }, '⧉'),
+      el('button', { class: 'pc-fold', title: 'Réduire / agrandir le panneau', onclick: () => { layout[side] = layout[side] === 'collapsed' ? 'docked' : 'collapsed'; saveLayout(); applyLayout(); } }, '‹'));
+    p.prepend(head);
+    // bande réduite cliquable
+    p.append(el('div', { class: 'pc-strip', title: 'Afficher le panneau', onclick: () => { layout[side] = 'docked'; saveLayout(); applyLayout(); } }, el('span', {}, title)));
+    dragBy(head, p, r => { if (layout[side] === 'floating') { layout[`${side}Pos`] = { x: r.left, y: r.top, w: r.width, h: r.height }; saveLayout(); } });
+    new ResizeObserver(() => { if (layout[side] === 'floating') { const r = p.getBoundingClientRect(); layout[`${side}Pos`] = { x: r.left, y: r.top, w: r.width, h: r.height }; saveLayout(); } }).observe(p);
+  }
+  const vb = $('viewbar'), grip = vb.querySelector('.vb-grip');
+  dragBy(grip, vb, r => { const s = vb.parentElement.getBoundingClientRect(); layout.vbPos = { x: r.left - s.left, y: r.top - s.top }; Object.assign(vb.style, { left: layout.vbPos.x + 'px', top: layout.vbPos.y + 'px' }); saveLayout(); });
+  grip.addEventListener('dblclick', () => { delete layout.vbPos; saveLayout(); applyLayout(); });
+  $('vb-fold').onclick = () => { layout.vbFolded = !layout.vbFolded; saveLayout(); applyLayout(); };
+  applyLayout();
+}
+
 // ---------------------------------------------------------------- démarrage
-wire(); resize(); loop();
+wire(); setupPanels(); resize(); loop();
 window.__SDC__ = { S, loadBytes, setMode, select, selectNet, extractCylinders, buildNetworks, project, xf, partBox: id => { const b = partBox(id); return [...b.min.toArray(), ...b.max.toArray()]; }, fitBox, THREE }; // accès pour essais automatisés
