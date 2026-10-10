@@ -8,6 +8,7 @@ import { partsFromOcct } from './geom/from-occt.js';
 import { meshStats, buildBom, toCsv, signature } from './geom/bom.js';
 import { extractCylinders } from './geom/holes.js';
 import { buildNetworks } from './geom/circuits.js';
+import { extractCadFromZip } from './geom/unzip.js';
 
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
 THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
@@ -84,7 +85,15 @@ new ResizeObserver(resize).observe(viewport);
 // ---------------------------------------------------------------- chargement
 async function openFile(file) {
   if (!file) return;
-  if (!/\.(step|stp|iges|igs|brep)$/i.test(file.name)) { toast('Choisir un fichier STEP / STP (ou IGES).'); return; }
+  if (/\.zip$/i.test(file.name)) {
+    busy('Décompression de l\'archive…');
+    try {
+      const z = await extractCadFromZip(await file.arrayBuffer());
+      if (z.others) toast(`${z.others + 1} fichiers CAO dans l'archive : ouverture du plus gros (${z.name}).`, 6000);
+      return loadBytes(z.bytes, z.name);
+    } catch (err) { busy(''); toast('Archive : ' + err.message, 8000); return; }
+  }
+  if (!/\.(step|stp|iges|igs|brep)$/i.test(file.name)) { toast('Choisir un fichier STEP / STP (ou IGES), éventuellement zippé.'); return; }
   const bytes = await file.arrayBuffer();
   await loadBytes(bytes, file.name);
 }
@@ -207,17 +216,6 @@ function buildSkeleton() {
       const f = S.drill.featureById.get(l.a);
       const s = new THREE.Mesh(new THREE.SphereGeometry(Math.max(0.8, f.diameter * 0.45), 16, 12), new THREE.MeshBasicMaterial({ depthTest: false, transparent: true }));
       s.position.set(...l.point); s.renderOrder = 7; groupFor(f.partId).add(s); S.skelItems.push({ net: n, feature: null, joint: s });
-    }
-    for (const p of n.ports) {
-      const f = S.drill.featureById.get(p.featureId);
-      const dir = new THREE.Vector3(...f.axis).multiplyScalar(p.side === 'start' ? -1 : 1);
-      // Marqueurs de taille constante à l'écran (mis à l'échelle à chaque image), indépendants du Ø.
-      let m;
-      if (p.state === 'libre') m = new THREE.Mesh(new THREE.ConeGeometry(0.4, 1, 16), new THREE.MeshBasicMaterial({ color: 0x1f8a4c, depthTest: false, transparent: true }));
-      else m = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.25, 20), new THREE.MeshBasicMaterial({ color: 0xe8730c, depthTest: false, transparent: true }));
-      m.quaternion.setFromUnitVectors(Y, dir);
-      m.userData.marker = { point: new THREE.Vector3(...p.point), dir, cone: p.state === 'libre', min: Math.min(p.diameter, 4) };
-      m.renderOrder = 8; groupFor(f.partId).add(m); S.skelItems.push({ net: n, feature: f, port: m });
     }
   }
 }
@@ -489,8 +487,6 @@ function loop() {
   // épaisseur constante à l'écran des axes de circuits
   if (skelRoot.visible) { const k = camera.position.distanceTo(controls.target) / 900; for (const it of S.skelItems) {
     if (it.core) { const rr = Math.max(it.core.userData.radius, k); it.core.scale.set(rr, 1, rr); }
-    const mk = it.port?.userData.marker;
-    if (mk) { const sz = Math.max(mk.min, k * 14); it.port.scale.setScalar(sz); it.port.position.copy(mk.point).addScaledVector(mk.dir, mk.cone ? sz / 2 : 0); }
   } }
   renderer.render(scene, camera);
   drawOverlay();
@@ -636,7 +632,7 @@ function renderNets() {
     const kindTxt = { circuit: 'circuit', alignement: 'passage aligné', 'isolé': 'perçage isolé', 'alésage': 'alésage / logement' }[n.kind];
     box.append(el('div', { class: `row net${S.selNet === n.id ? ' sel' : ''}`, style: `--c:${netColor(n)}`, onclick: () => selectNet(n.id) },
       el('div', { class: 'name' }, el('b', {}, `${n.id} · ${netLabel(n)}`), netValidated(n) ? ' ✔' : el('span', { class: 'tag warn' }, 'proposé'),
-        el('div', { class: 'meta' }, `${kindTxt} · ${n.features.length} perçage(s) · Ø ${n.diameters.map(d => fmt(d, 1)).join(' / ')} · ${fmt(n.totalLength, 0)} mm · ${n.ports.filter(p => p.state === 'libre').length} ouverture(s), ${n.ports.filter(p => p.state === 'logé').length} obturée(s)/logée(s)`))));
+        el('div', { class: 'meta' }, `${kindTxt} · ${n.features.length} perçage(s) · Ø ${n.diameters.map(d => fmt(d, 1)).join(' / ')} · ${fmt(n.totalLength, 0)} mm`))));
   }
   if (!shown.length) box.append(el('p', { class: 'hint' }, 'Aucun réseau avec ces filtres.'));
   const n = S.selNet && S.drill.networks.find(x => x.id === S.selNet);
@@ -649,7 +645,6 @@ function renderNets() {
       el('td', {}, f.id), el('td', {}, row.repere), el('td', {}, f.segments.map(s => fmt(s.diameter, 1)).join(' / ')), el('td', {}, fmt(f.length, 1)), el('td', {}, f.direction),
       el('td', {}, f.open.start && f.open.end ? '2 côtés' : f.open.start || f.open.end ? '1 côté' : 'borgne'), el('td', { class: 'occ', title: f.occupants.map(o => o.name).join(', ') }, f.occupants.map(o => o.name).join(', ') || '—')));
   }
-  const ports = n.ports.map(p => el('li', {}, `${p.state === 'libre' ? '🟢 ouverture libre' : '🟠 ' + (p.occupant ?? 'logé')} · ${p.featureId} Ø${fmt(p.diameter, 1)} en (${p.point.map(v => fmt(v, 1)).join(' ; ')})`));
   let fdet = null;
   if (S.selFeature && n.features.includes(S.selFeature)) {
     const f = S.drill.featureById.get(S.selFeature), st = S.stats.get(f.partId);
@@ -664,7 +659,7 @@ function renderNets() {
   det.append(el('div', { class: 'net-detail' },
     el('div', { class: 'grid2' }, el('b', {}, `${n.id} · ${n.features.length} perçage(s)`), sel),
     el('div', { class: 'grid2' }, el('button', { class: 'btn', onclick: () => select([...new Set(n.partIds)]) }, 'Sélectionner les pièces'), el('button', { class: 'btn', onclick: () => fitNet(n) }, 'Cadrer le réseau')),
-    t, el('ul', {}, ports), el('p', { class: 'hint' }, 'Liaisons : sécantes (forages qui se croisent) et coaxiales entre pièces. Vérifier sur plan avant usinage.')));
+    t, el('p', { class: 'hint' }, 'Liaisons : sécantes (forages qui se croisent) et coaxiales entre pièces. Vérifier sur plan avant usinage.')));
   if (fdet) det.append(fdet);
 }
 
@@ -771,8 +766,8 @@ function printReport() {
   rep.append(t);
   if (S.drill) {
     rep.append(el('h2', {}, 'Circuits et réseaux de perçages'));
-    const t2 = el('table', {}, el('tr', {}, ['Réseau', 'Classement', 'Perçages', 'Ø (mm)', 'Longueur cumulée', 'Ouvertures / obturés'].map(h => el('th', {}, h))));
-    for (const n of S.drill.networks.filter(n => n.kind !== 'isolé')) t2.append(el('tr', {}, el('td', {}, n.id), el('td', {}, `${netLabel(n)} (${netValidated(n) ? 'validé' : 'proposé'})`), el('td', {}, n.features.join(', ')), el('td', {}, n.diameters.map(d => fmt(d, 1)).join(' / ')), el('td', {}, fmt(n.totalLength, 0) + ' mm'), el('td', {}, `${n.ports.filter(p => p.state === 'libre').length} / ${n.ports.filter(p => p.state === 'logé').length}`)));
+    const t2 = el('table', {}, el('tr', {}, ['Réseau', 'Classement', 'Perçages', 'Ø (mm)', 'Longueur cumulée'].map(h => el('th', {}, h))));
+    for (const n of S.drill.networks.filter(n => n.kind !== 'isolé')) t2.append(el('tr', {}, el('td', {}, n.id), el('td', {}, `${netLabel(n)} (${netValidated(n) ? 'validé' : 'proposé'})`), el('td', {}, n.features.join(', ')), el('td', {}, n.diameters.map(d => fmt(d, 1)).join(' / ')), el('td', {}, fmt(n.totalLength, 0) + ' mm')));
     rep.append(t2);
   }
   if (S.comments.length) { rep.append(el('h2', {}, 'Commentaires')); const t3 = el('table', {}, el('tr', {}, ['Repères', 'Type', 'Commentaire', 'Auteur', 'Date', 'Statut'].map(h => el('th', {}, h)))); for (const c of S.comments) t3.append(el('tr', {}, el('td', {}, c.reperes.join(', ')), el('td', {}, c.type), el('td', {}, c.text), el('td', {}, c.author), el('td', {}, new Date(c.date).toLocaleString('fr-FR')), el('td', {}, c.status))); rep.append(t3); }

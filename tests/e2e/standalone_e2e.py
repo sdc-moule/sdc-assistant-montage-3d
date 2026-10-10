@@ -66,6 +66,13 @@ with sync_playwright() as p:
     pg.reload(); pg.click("#demo2")
     pg.wait_for_function("window.__SDC__ && window.__SDC__.S.drill && document.getElementById('busy').hidden", timeout=120000)
     check(S("S.comments.length") == 1, "commentaire restauré à la réouverture du même fichier")
+    # ouverture d'un STEP zippé
+    import zipfile, tempfile
+    zp = pathlib.Path(tempfile.mkdtemp()) / "bcr.zip"
+    with zipfile.ZipFile(zp, "w", zipfile.ZIP_DEFLATED) as z: z.write(ROOT / "tests" / "fixtures" / "bcr_synthetique.step", "bcr_synthetique.step")
+    pg.set_input_files("#file", str(zp))
+    pg.wait_for_function("window.__SDC__.S.fileName === 'bcr_synthetique.step' && document.getElementById('busy').hidden", timeout=120000)
+    check(S("S.parts.length") == 15, "ouverture d'un STEP zippé")
     check(not errors, "aucune erreur JavaScript" + (f" : {errors[:3]}" if errors else ""))
     b.close()
 sys.exit(1 if failures else 0)

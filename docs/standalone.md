@@ -9,7 +9,7 @@ Double-clic → Chrome ou Edge. Pas d'installation, pas de FreeCAD. Le STEP est 
 ## Fonctions (état réel)
 | Domaine | Disponible |
 | --- | --- |
-| Ouverture | STEP/STP AP203/214/242, IGES ; glisser-déposer ; 3 finesses d'affichage ; empreinte SHA-256 |
+| Ouverture | STEP/STP AP203/214/242, IGES, aussi en archive ZIP (le plus gros fichier CAO de l'archive est ouvert) ; glisser-déposer ; 3 finesses d'affichage ; empreinte SHA-256 |
 | Arborescence / nomenclature | Sous-ensembles du STEP, repères uniques, regroupement nom + signature géométrique **à valider**, jumeaux de noms différents signalés non fusionnés, référence et validation saisies par repère |
 | Sélection | Clic 3D, arborescence, nomenclature, bulles ; Ctrl ou bouton « Multi » ; recherche (repère, nom, dimension, Ø de perçage) ; Entrée = sélectionner tous les résultats |
 | Visibilité | Masquer, isoler, tout afficher, transparence 0–100 %, fantôme autour de la sélection, familles BCR (plaques, collecteurs, busettes, obturateurs, résistances, visserie, guidage, refroidissement) proposées par les noms et corrigeables, annuler/rétablir |
@@ -27,11 +27,10 @@ Double-clic → Chrome ou Edge. Pas d'installation, pas de FreeCAD. Le STEP est 
 2. Les faces coaxiales d'un même cylindre sont fusionnées ; les segments coaxiaux contigus d'une pièce forment un **perçage étagé** (lamage, chambrage).
 3. Liaisons : forages **sécants** (axes à moins de la somme des rayons) et continuité **coaxiale** entre pièces (collecteur → busette → buse).
 4. Réseaux : *circuit* (au moins un croisement), *passage aligné* (empilage coaxial), *perçage isolé*.
-5. Extrémités : débouchante libre (flèche verte = entrée/sortie possible) ou occupée par une pièce coaxiale de même Ø (disque orange : obturateur, vis…).
+5. Éléments logés : pièce coaxiale de même Ø dans le perçage (obturateur, vis…), colonne « Logé » et fiche CSV. Les extrémités ne sont pas dessinées.
 6. Classement **proposé** d'après les noms (distribution matière, refroidissement, fixation) ; l'opérateur valide ou corrige.
 7. Alésages / logements : au-delà du « Ø maxi d'un forage » (32 mm par défaut, réglable) ou si court et large (L < 0,6 D, D > 12), le cylindre est un logement (insert, busette, empreinte) : listé à part, jamais relié aux circuits.
 8. Un forage de même Ø interrompu par une poche ou un autre perçage reste **un seul forage** (longueur d'usinage totale, marqué « interrompu »).
-9. Marqueurs d'extrémités de taille constante à l'écran, indépendante du Ø.
 10. Squelette : axe + volume de fluide translucide par segment, nœuds de croisement ; mode « Circuits seuls » ; filtres type et Ø ; fiche avec Ø, longueur, axe, extrémités en mm depuis le coin mini de la pièce.
 
 Limites : taraudages non détectables (le STEP ne porte pas le filetage) ; perçages coniques, obliques complexes et

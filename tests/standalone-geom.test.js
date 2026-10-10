@@ -91,3 +91,16 @@ test('CSV : nombres négatifs conservés, formules neutralisées', async () => {
   assert.match(out, /"'=SOMME\(A1\)"/);
   assert.match(out, /"'-x"/);
 });
+
+test('ZIP : extraction du STEP (deflate), identique à l\'original', async () => {
+  const { extractCadFromZip } = await import('../standalone/src/geom/unzip.js');
+  const { execFileSync } = await import('node:child_process');
+  const os = await import('node:os'); const path = await import('node:path');
+  const src = new URL('./fixtures/bcr_synthetique.step', import.meta.url).pathname;
+  const zipPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'sdc-')), 'essai.zip');
+  execFileSync('python3', ['-c', 'import sys,zipfile; z=zipfile.ZipFile(sys.argv[1],"w",zipfile.ZIP_DEFLATED); z.write(sys.argv[2],"dossier/BCR essai.step"); z.writestr("lisezmoi.txt","x"); z.close()', zipPath, src]);
+  const buf = fs.readFileSync(zipPath);
+  const z = await extractCadFromZip(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.length));
+  assert.equal(z.name, 'BCR essai.step');
+  assert.ok(Buffer.from(z.bytes).equals(fs.readFileSync(src)));
+});
