@@ -9,3 +9,6 @@
 *.jpg -text
 # Conserver exactement les documents de spécification fournis.
 docs/specifications/* -text whitespace=-blank-at-eol
+
+# Archives du cahier des charges : octets figés (empreintes vérifiées par tests/specs.test.js)
+specs/v*/** -text

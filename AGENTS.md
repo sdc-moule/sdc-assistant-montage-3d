@@ -17,6 +17,21 @@ Deux livrables coexistent :
 Le code géométrique pur est dans `standalone/src/geom/` (sans Three.js, testable sous Node) :
 `from-occt.js` (pièces), `bom.js` (nomenclature, CSV), `holes.js` (cylindres/perçages), `circuits.js` (réseaux).
 
+## Cahier des charges (à lire avant de coder)
+- Version en vigueur : `specs/ACTUEL.json` → aujourd'hui `specs/v1.3/` (`.json` fait foi pour les ids et statuts, `.md` pour la lecture).
+- `specs/v1.2/` et toute version listée dans `specs/INTEGRITE.json` sont des **archives figées** : ne jamais les modifier,
+  les déplacer ni les supprimer (`tests/specs.test.js` échoue sinon). Évolution = nouveau dossier `specs/v1.x/`, voir `specs/README.md`.
+- Chaque PR cite les ids d'exigence touchés (`PER-03`, `OUV-02`…) et met à jour leur statut dans le `.json` **et** le tableau du `.md`.
+
+## Travail à plusieurs agents (Codex et Claude Code) — ne rien effacer par erreur
+- Une branche par agent et par sujet : `codex/<sujet>` ou `claude/<sujet>`. Jamais de push direct sur `main`, jamais de `push --force` sur une branche partagée.
+- Avant de commencer : `git fetch` puis partir de `main` à jour ; relire `specs/CHANGELOG.md` et les PR ouvertes.
+- **Ne supprimer aucun fichier ni aucune fonction existante** sans décision écrite de Christophe dans `specs/CHANGELOG.md`.
+  Une fonction retirée de l'interface reste documentée (statut « abandonné »), elle n'est pas effacée du cahier des charges.
+- Périmètres : `standalone/` (application autonome) et `frontend/` `backend/` `packaging/` (application Windows 0.2) sont
+  indépendants ; modifier l'un ne doit pas casser ni réécrire l'autre. Code géométrique partagé uniquement dans `standalone/src/geom/`.
+- Fichiers générés (`dist/`, `dist-standalone/`) : jamais committés, toujours reconstruits.
+
 ## Commandes
 ```bash
 npm ci

@@ -1,0 +1,426 @@
+{
+  "projet": "SDC Assistant Montage 3D",
+  "version": "1.2",
+  "langue_interface": "fr-FR",
+  "statut": "cahier_des_charges_consolide_pour_developpement",
+  "objectif": "Explorer un assemblage de moule ou de bloc froid BCR depuis un STEP, générer une nomenclature repérée, afficher éclatés, ouvertures et coupes dynamiques pour les professionnels de l'atelier.",
+  "public": [
+    "monteurs",
+    "ajusteurs",
+    "bureau_etudes"
+  ],
+  "entrees": {
+    "formats": [
+      "STEP AP203",
+      "STEP AP214",
+      "STEP AP242",
+      "STP"
+    ],
+    "nomenclature_optionnelle": [
+      "CSV",
+      "XLSX",
+      "JSON"
+    ],
+    "unites_internes": "mm",
+    "controle_import": [
+      "integrite_topologique",
+      "nombre_solides",
+      "arbre_assemblage",
+      "transformation_des_occurrences",
+      "noms_et_couleurs_si_presents"
+    ],
+    "regle": "Conserver les occurrences et leurs transformations ; ne jamais modifier le fichier source."
+  },
+  "identification": {
+    "hierarchie": "Reprendre l'arbre STEP si disponible ; sinon créer une hiérarchie provisoire par solides et groupes géométriques.",
+    "rapprochement_nomenclature": {
+      "ordre": [
+        "identifiant_stable",
+        "reference_piece",
+        "nom_normalise",
+        "signature_geometrique_et_dimensions"
+      ],
+      "si_ambigu": "marquer_a_verifier",
+      "si_absent": "creer_ligne_provisoire",
+      "validation_humaine": true
+    },
+    "extraction_dimensions": {
+      "obligatoires": [
+        "encombrement_X_mm",
+        "encombrement_Y_mm",
+        "encombrement_Z_mm",
+        "volume_mm3",
+        "nombre_occurrences"
+      ],
+      "optionnelles": [
+        "diametres_cylindriques",
+        "perçages_detectables",
+        "masse_si_matiere_et_densite_connues"
+      ],
+      "precision": "Dimensions d'encombrement calculées dans le repère pièce et/ou assemblage, avec repère explicite ; dimensions fonctionnelles non garanties."
+    }
+  },
+  "nomenclature": {
+    "colonnes": [
+      "repere",
+      "designation",
+      "reference",
+      "quantite",
+      "sous_ensemble",
+      "X_mm",
+      "Y_mm",
+      "Z_mm",
+      "commentaire",
+      "origine_information",
+      "statut_validation"
+    ],
+    "numerotation": "entiers_positifs_uniques_par_reference_de_composant",
+    "occurrences_identiques": "meme_repere_et_quantite_cumulee",
+    "bulles": {
+      "forme": "cercle",
+      "contenu": "numero_repere",
+      "fleche": "trait_de_rappel_avec_pointe_vers_composant",
+      "ancrage": "point_visible_sur_composant",
+      "eviter_chevauchements": true,
+      "affichage": [
+        "tous",
+        "selection",
+        "sous_ensemble",
+        "masquer"
+      ],
+      "interaction": "clic_bulle_selectionne_piece_et_ligne_nomenclature",
+      "options": [
+        "deplacer_bulle",
+        "masquer_bulle",
+        "afficher_bulles_selection",
+        "trait_de_rappel_avec_pointe",
+        "export_avec_bulles"
+      ]
+    },
+    "export": [
+      "CSV",
+      "XLSX",
+      "PDF"
+    ],
+    "regroupement": {
+      "identiques": "par_reference_confirmee_ou_signature_geometrique_validee",
+      "occurrences": "quantite_et_emplacements_distincts",
+      "ambiguite": "pas_de_fusion_automatique"
+    }
+  },
+  "visualisation": {
+    "moteur_web": "Three.js",
+    "conversion_geometrie": "OpenCascade_vers_maillages_et_metadonnees",
+    "arbre_interactif": true,
+    "selection_synchronisee": [
+      "vue_3D",
+      "arbre",
+      "nomenclature"
+    ],
+    "actions": [
+      "orbite",
+      "zoom",
+      "panoramique",
+      "centrage",
+      "cadrer_selection",
+      "isoler",
+      "masquer",
+      "masquer_autres",
+      "tout_afficher",
+      "transparence",
+      "vue_fantome",
+      "mesure_distance",
+      "annuler",
+      "retablir",
+      "reinitialiser_vue"
+    ],
+    "eclate": {
+      "modes": [
+        "ensemble_complet",
+        "plaque_selectionnee",
+        "sous_ensemble_arbre",
+        "selection_manuelle"
+      ],
+      "intensite": {
+        "minimum": 0,
+        "maximum": 100,
+        "valeur_initiale": 0,
+        "unite": "pourcent"
+      },
+      "vecteurs": "calcul_auto_provisoire_avec_edition_manuelle",
+      "contraintes": [
+        "preserver_correspondance_repere",
+        "restaurer_position_initiale",
+        "vecteurs_editables_par_utilisateur"
+      ],
+      "animations": [
+        "aller_position_initiale",
+        "aller_position_eclatee",
+        "lecture",
+        "pause"
+      ]
+    },
+    "positions": {
+      "fermee": "positions_initiales_du_STEP",
+      "ouverte": "transformations_parametrees_par_l_utilisateur_ou_lues_depuis_donnees_associees",
+      "parametres": [
+        "axe_ouverture",
+        "course_mm",
+        "groupes_mobiles",
+        "position_intermediaire"
+      ],
+      "controle": "curseur_continu_ferme_vers_ouvert",
+      "avertissement": "Ne pas supposer qu'une position ouverte est contenue dans le STEP ni qu'un mouvement est mecaniquement admissible."
+    },
+    "coupes": {
+      "plans": {
+        "XZ": {
+          "normale": "Y",
+          "position": "curseur_sur_encombrement_Y"
+        },
+        "YZ": {
+          "normale": "X",
+          "position": "curseur_sur_encombrement_X"
+        },
+        "XY": {
+          "normale": "Z",
+          "position": "curseur_sur_encombrement_Z"
+        }
+      },
+      "balayage": "continu_sur_tout_le_volume",
+      "options": [
+        "inverser_demi_espace",
+        "activer_desactiver",
+        "transparence",
+        "afficher_contours",
+        "afficher_repere_plan",
+        "coupe_et_eclate_simultanes",
+        "inverser_cote_visible",
+        "sauver_position_de_coupe"
+      ],
+      "rendu": "coupe_visuelle_interactive_par_clipping",
+      "coupe_exacte": "option_backend_OpenCascade_pour_intersections_BRep_et_export_des_profils",
+      "limite": "Le clipping graphique ne calcule pas automatiquement une section B-Rep exacte."
+    },
+    "visibilite": {
+      "masquer_par_occurrence": true,
+      "masquer_par_reference": true,
+      "masquer_par_plaque": true,
+      "masquer_par_sous_ensemble": true,
+      "isoler_selection_multiple": true,
+      "masquer_autres": true,
+      "tout_afficher": true,
+      "opacite_par_occurrence_0_100": true,
+      "opacite_par_groupe_0_100": true,
+      "mode_fantome": true,
+      "arbre_et_vue_synchronises": true,
+      "historique_annuler_retablir": true,
+      "masquage_ne_modifie_pas_fichier_source": true,
+      "coupes_respectent_masquage": true
+    },
+    "vues_memorisees": {
+      "sauvegarder": [
+        "camera",
+        "zoom",
+        "visibilite",
+        "opacites",
+        "coupes",
+        "eclate",
+        "position_ouverture",
+        "bulles"
+      ],
+      "nom_personnalisable": true,
+      "restaurer": true,
+      "export_image_avec_annotations": true
+    },
+    "recherche": {
+      "champs": [
+        "repere",
+        "reference",
+        "designation",
+        "dimensions",
+        "sous_ensemble"
+      ],
+      "selection_synchronisee": true
+    },
+    "mode_BCR": {
+      "filtres_utilisateur": [
+        "plaques",
+        "busettes",
+        "obturateurs",
+        "collecteurs",
+        "resistances",
+        "circuits_refroidissement"
+      ],
+      "reconnaissance": "uniquement_si_donnees_ou_noms_suffisants_sinon_classement_manuel"
+    }
+  },
+  "commentaires": {
+    "langue": "français",
+    "par_objet_et_sous_ensemble": true,
+    "champs": [
+      "auteur",
+      "date",
+      "repere",
+      "commentaire",
+      "statut"
+    ],
+    "types": [
+      "observation",
+      "montage",
+      "controle",
+      "anomalie"
+    ],
+    "sauvegarde": "locale_avec_export_JSON"
+  },
+  "architecture": {
+    "backend": [
+      "Python",
+      "OpenCascade_ou_FreeCAD"
+    ],
+    "frontend": [
+      "HTML",
+      "CSS",
+      "JavaScript",
+      "Three.js"
+    ],
+    "echanges": "JSON_et_maillages_GLTF_GL B",
+    "stockage": "projet_local_avec_identifiants_stables",
+    "mode_hors_ligne": "possible_apres_import_et_conversion",
+    "fichier_source": "lecture_seule"
+  },
+  "criteres_acceptation": [
+    "Importer un assemblage STEP et conserver les transformations de toutes les occurrences.",
+    "Afficher une nomenclature complète ou signaler explicitement les éléments non identifiés.",
+    "Attribuer des numéros de repère et afficher des bulles à flèche liées aux composants.",
+    "Permettre un éclaté global, par plaque et par sous-ensemble, avec retour exact à la position d'origine.",
+    "Afficher fermé, ouvert et positions intermédiaires avec course configurée.",
+    "Balayer tout le volume avec des coupes interactives XZ et YZ.",
+    "Enregistrer commentaires en français et exporter la nomenclature.",
+    "Signaler les déductions incertaines et ne jamais présenter une dimension ou cinématique supposée comme validée.",
+    "Masquer, isoler, rendre transparent un composant ou un groupe sans modifier le STEP.",
+    "Rechercher un composant et synchroniser repère, arbre, nomenclature et 3D.",
+    "Mémoriser puis restaurer caméra, coupe, éclaté, masquages et transparences.",
+    "Combiner coupes et éclatés et inverser le côté visible.",
+    "Afficher le mode BCR sans supposer la fonction de composants non identifiés.",
+    "Exporter une capture annotée et un rapport PDF.",
+    "Ne pas effectuer de calcul de collisions, de jeux ou de tolérances."
+  ],
+  "hors_perimetre_v1": [
+    "ordre_de_montage_impose",
+    "verification_automatique_de_tous_les_serrages",
+    "calcul_de_resistance",
+    "reconnaissance_fiable_de_toute_visserie_sans_nomenclature",
+    "detection_collisions",
+    "calcul_jeux",
+    "verification_tolerances",
+    "simulation_mecanique"
+  ],
+  "validation_attendue": [
+    "tester_sur_un_assemblage_STEP_moule_et_un_BCR",
+    "confirmer_regroupement_des_references_ambigues",
+    "valider_les_positions_ouvertes_parametrees"
+  ],
+  "principes": {
+    "utilisateurs": "professionnels_autonomes",
+    "langue": "francais_pour_interface_annotations_et_rapports",
+    "fichier_STEP_source": "lecture_seule",
+    "ne_pas_faire": [
+      "detection_collisions",
+      "calcul_jeux",
+      "verification_tolerances",
+      "simulation_mecanique",
+      "verification_automatique_des_serrages"
+    ],
+    "donnees_inconnues": "afficher_non_renseigne_ou_a_verifier_jamais_inventer"
+  },
+  "mesures": {
+    "distance_entre_points": "indicative",
+    "dimensions_encombrement": "calculees_depuis_BRep",
+    "pas_de_controle_de_tolerance": true,
+    "unite": "mm"
+  },
+  "documentation": {
+    "captures_3D_annotees": [
+      "PNG"
+    ],
+    "export_rapport": [
+      "PDF"
+    ],
+    "nomenclature": [
+      "CSV",
+      "XLSX",
+      "PDF"
+    ],
+    "commentaires_francais": true,
+    "impression_vues_memorisees": true
+  },
+  "persistance": {
+    "projet": [
+      "assemblage_id",
+      "empreinte_fichier_source",
+      "nomenclature",
+      "identifiants_occurrences",
+      "visibilite",
+      "opacite",
+      "positions_ouvertes",
+      "vecteurs_eclates",
+      "coupes",
+      "vues_memorisees",
+      "commentaires"
+    ],
+    "formats": [
+      "JSON",
+      "GLB"
+    ],
+    "stockage": "dossier_local_ou_serveur_local",
+    "sauvegarde_restauration": true,
+    "reimport": "conserver_annotations_si_identifiants_stables_sinon_signaler_correspondances_incertaines"
+  },
+  "installation": {
+    "pc_preparation": [
+      "Python_3_11_ou_3_12",
+      "FreeCAD_existant_ou_OpenCascade_OCCT",
+      "convertisseur_STEP_vers_GL B_et_JSON",
+      "serveur_local_optionnel"
+    ],
+    "navigateur_atelier": [
+      "Chrome_ou_Edge_recent",
+      "WebGL2",
+      "application_HTML_Three_js"
+    ],
+    "optionnels": [
+      "SQLite_pour_multi_projets",
+      "Git_pour_versionnement",
+      "Node_js_pour_developpement"
+    ],
+    "ne_pas_installer_avant_diagnostic": [
+      "pythonocc_core",
+      "OCP",
+      "FreeCAD_supplementaire"
+    ],
+    "precaution": "verifier_versions_et_chemins_existants_avant_toute_installation"
+  },
+  "plan_de_realisation": [
+    {
+      "phase": 1,
+      "livrable": "lecteur_assemblage_STEP_avec_arbre_occurrences_nomenclature_dimensions",
+      "validation": "un_STEP_moule_et_un_STEP_BCR"
+    },
+    {
+      "phase": 2,
+      "livrable": "visualiseur_HTML_avec_selection_masquage_transparence_bulles_et_recherche",
+      "validation": "liens_arbre_3D_nomenclature"
+    },
+    {
+      "phase": 3,
+      "livrable": "eclates_par_groupes_ouverture_et_coupes_XZ_YZ_XY",
+      "validation": "retour_exact_aux_positions_initiales_et_balayage"
+    },
+    {
+      "phase": 4,
+      "livrable": "vues_memorisees_annotations_exports_et_persistance",
+      "validation": "reouverture_du_projet_et_export_PDF"
+    }
+  ]
+}
