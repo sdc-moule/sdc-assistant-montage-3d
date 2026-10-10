@@ -10,8 +10,19 @@ async function gunzipBase64(b64) {
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
+// Version « légère » : moteur non embarqué, téléchargé une fois depuis le CDN (Internet requis à l'ouverture d'un STEP).
+async function fetchEngine(file, kind) {
+  const base = window.__SDC_OCCT_CDN__;
+  if (!base) throw new Error('Moteur OpenCascade absent de ce fichier.');
+  try { const r = await fetch(base + file); if (!r.ok) throw new Error(r.status); return kind === 'text' ? r.text() : new Uint8Array(await r.arrayBuffer()); }
+  catch { throw new Error('Version légère : connexion Internet nécessaire pour charger le moteur STEP (' + base + ').'); }
+}
 function wasmBytes() {
-  wasmBytesPromise ??= gunzipBase64(window.__SDC_OCCT_WASM_GZ_B64__);
+  wasmBytesPromise ??= (async () => {
+    if (!window.__SDC_OCCT_JS__) window.__SDC_OCCT_JS__ = await fetchEngine('occt-import-js.js', 'text');
+    return window.__SDC_OCCT_WASM_GZ_B64__ ? gunzipBase64(window.__SDC_OCCT_WASM_GZ_B64__) : fetchEngine('occt-import-js.wasm', 'bin');
+  })();
+  wasmBytesPromise.catch(() => { wasmBytesPromise = null; });
   return wasmBytesPromise;
 }
 

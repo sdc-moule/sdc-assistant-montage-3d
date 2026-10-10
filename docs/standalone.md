@@ -1,7 +1,10 @@
 # Application autonome — SDC Montage 3D 1.0
 
-Un seul fichier `SDC_Montage_3D.html` (~5 Mo). Double-clic → Chrome ou Edge. Pas d'installation, pas de FreeCAD, pas
-d'Internet. Le STEP est lu sur le poste par OpenCascade compilé en WebAssembly (même noyau que FreeCAD).
+Deux variantes, même application :
+- `SDC_Montage_3D.html` (~4,6 Mo) : complète, **hors ligne**. Le moteur OpenCascade (3,9 Mo compressé) est embarqué.
+- `SDC_Montage_3D_leger.html` (~0,35 Mo) : moteur téléchargé depuis jsDelivr à la première ouverture d'un STEP ; **Internet requis**.
+
+Double-clic → Chrome ou Edge. Pas d'installation, pas de FreeCAD. Le STEP est lu sur le poste par OpenCascade compilé en WebAssembly (même noyau que FreeCAD).
 
 ## Fonctions (état réel)
 | Domaine | Disponible |
@@ -26,7 +29,10 @@ d'Internet. Le STEP est lu sur le poste par OpenCascade compilé en WebAssembly 
 4. Réseaux : *circuit* (au moins un croisement), *passage aligné* (empilage coaxial), *perçage isolé*.
 5. Extrémités : débouchante libre (flèche verte = entrée/sortie possible) ou occupée par une pièce coaxiale de même Ø (disque orange : obturateur, vis…).
 6. Classement **proposé** d'après les noms (distribution matière, refroidissement, fixation) ; l'opérateur valide ou corrige.
-7. Squelette : axe + volume de fluide translucide par segment, nœuds de croisement ; mode « Circuits seuls » ; filtres type et Ø ; fiche avec Ø, longueur, axe, extrémités en mm depuis le coin mini de la pièce.
+7. Alésages / logements : au-delà du « Ø maxi d'un forage » (32 mm par défaut, réglable) ou si court et large (L < 0,6 D, D > 12), le cylindre est un logement (insert, busette, empreinte) : listé à part, jamais relié aux circuits.
+8. Un forage de même Ø interrompu par une poche ou un autre perçage reste **un seul forage** (longueur d'usinage totale, marqué « interrompu »).
+9. Marqueurs d'extrémités de taille constante à l'écran, indépendante du Ø.
+10. Squelette : axe + volume de fluide translucide par segment, nœuds de croisement ; mode « Circuits seuls » ; filtres type et Ø ; fiche avec Ø, longueur, axe, extrémités en mm depuis le coin mini de la pièce.
 
 Limites : taraudages non détectables (le STEP ne porte pas le filetage) ; perçages coniques, obliques complexes et
 pointes de forêt non caractérisés ; débouchage estimé par l'étendue de la pièce selon l'axe ; valeurs issues du maillage.

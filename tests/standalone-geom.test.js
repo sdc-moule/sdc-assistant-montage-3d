@@ -33,9 +33,11 @@ test('lecture STEP : 15 occurrences nommées dans un sous-ensemble', () => {
 test('perçages de la plaque porte-empreinte', () => {
   const pe = byName('PLAQUE_PORTE_EMPREINTE')[0];
   const holes = cyl.get(pe.id).holes;
-  const d8 = holes.filter(h => Math.abs(h.diameter - 8) < 0.05);
-  assert.equal(d8.length, 5);
-  assert.ok(d8.some(h => Math.abs(h.length - 280) < 0.5));
+  const feats = net.features.filter(f => f.partId === pe.id);
+  const d8 = feats.filter(f => Math.abs(f.diameter - 8) < 0.05);
+  assert.equal(d8.length, 5); // le canal coupé par le logement Ø60 reste un seul forage
+  assert.ok(d8.filter(f => Math.abs(f.length - 280) < 0.5).length === 2);
+  assert.ok(d8.some(f => f.interrupted));
   assert.equal(holes.filter(h => Math.abs(h.diameter - 24) < 0.05).length, 1);
 });
 
@@ -54,6 +56,13 @@ test('distribution matière : buse + collecteur + busettes reliés, proposé « 
   const names = new Set(r.partIds.map(id => parts.find(p => p.id === id).name));
   for (const n of ['COLLECTEUR_BCR', 'BUSETTE_D20', 'BUSE_INJECTION']) assert.ok(names.has(n));
   assert.equal(r.ports.filter(p => p.state === 'libre').length, 3); // 1 entrée + 2 sorties
+});
+
+test('logement Ø60 classé alésage, hors des circuits', () => {
+  const bores = net.networks.filter(n => n.kind === 'alésage');
+  assert.equal(bores.length, 1);
+  assert.ok(Math.abs(net.features.find(f => f.id === bores[0].features[0]).diameter - 60) < 0.1);
+  assert.ok(net.networks.filter(n => n.kind === 'circuit').every(n => n.diameters.every(d => d < 32)));
 });
 
 test('lamages et passages de vis : jamais classés en circuit', () => {

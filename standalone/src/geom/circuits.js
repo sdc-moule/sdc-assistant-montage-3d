@@ -42,6 +42,9 @@ const KEYWORDS = {
  */
 export function buildNetworks(parts, cylinders, options = {}) {
   const gapTol = options.gapTol ?? 0.6; // mm entre extrémités coaxiales
+  // Au-delà de ce Ø, ou pour un cylindre court et large, c'est un alésage / logement (busette, insert, empreinte), pas un forage.
+  const maxDrill = options.maxDrillDiameter ?? 32;
+  const isBore = f => f.diameter > maxDrill || (f.length < 0.6 * f.diameter && f.diameter > 12);
   const byId = new Map(parts.map(p => [p.id, p]));
 
   // 1. Perçages étagés : segments coaxiaux contigus d'une même pièce → une seule « opération ».
@@ -60,13 +63,24 @@ export function buildNetworks(parts, cylinders, options = {}) {
           const b = segs[j];
           if (!group.some(a => parallel(a.axis, b.axis) && lineDist(a, b) < Math.max(0.05, 0.02 * Math.min(a.radius, b.radius)) && (() => {
             const [a0, a1] = span(a, a.axis), [b0, b1] = span(b, a.axis);
-            return b0 <= a1 + gapTol && b1 >= a0 - gapTol;
+            // contigus (étagé) ou même Ø : même forage interrompu par une poche ou un autre perçage
+            return (b0 <= a1 + gapTol && b1 >= a0 - gapTol) || Math.abs(a.diameter - b.diameter) <= Math.max(0.05, 0.01 * a.diameter);
           })())) continue;
           group.push(b); used.add(j); grew = true;
         }
       }
       const axis = group[0].axis;
       group.sort((a, b) => span(a, axis)[0] - span(b, axis)[0]);
+      // Segments consécutifs de même Ø → un seul segment (forage traversant une poche).
+      let interrupted = false;
+      for (let k = group.length - 1; k > 0; k--) {
+        const a = group[k - 1], b = group[k];
+        if (Math.abs(a.diameter - b.diameter) <= Math.max(0.05, 0.01 * a.diameter)) {
+          if (span(b, axis)[0] > span(a, axis)[1] + gapTol) interrupted = true;
+          const o = dot(a.start, axis), lo = Math.min(span(a, axis)[0], span(b, axis)[0]), hi = Math.max(span(a, axis)[1], span(b, axis)[1]);
+          group.splice(k - 1, 2, { ...a, start: add(a.start, mul(axis, lo - o)), end: add(a.start, mul(axis, hi - o)), length: hi - lo });
+        }
+      }
       const t0 = Math.min(...group.map(g => span(g, axis)[0])), t1 = Math.max(...group.map(g => span(g, axis)[1]));
       const base = group[0].start, o = dot(base, axis);
       const start = add(base, mul(axis, t0 - o)), end = add(base, mul(axis, t1 - o));
@@ -76,10 +90,12 @@ export function buildNetworks(parts, cylinders, options = {}) {
         id: `P${features.length + 1}`, partId, axis, start, end, length: t1 - t0,
         segments: group.map(g => ({ diameter: g.diameter, length: g.length, start: g.start, end: g.end })),
         diameter: Math.min(...group.map(g => g.diameter)), maxDiameter: Math.max(...group.map(g => g.diameter)),
-        kind: group.length > 1 ? 'étagé' : 'simple', direction: axisLabel(axis), open: ends, occupants: [],
+        kind: group.length > 1 ? 'étagé' : 'simple', interrupted, direction: axisLabel(axis), open: ends, occupants: [],
       });
     }
   }
+
+  for (const f of features) f.bore = isBore(f);
 
   // 2. Éléments logés : cylindre convexe d'une autre pièce, coaxial et de même diamètre (vis, obturateur, busette…).
   for (const f of features) {
@@ -102,6 +118,7 @@ export function buildNetworks(parts, cylinders, options = {}) {
   const links = [];
   for (let i = 0; i < features.length; i++) for (let j = i + 1; j < features.length; j++) {
     const a = features[i], b = features[j];
+    if (a.bore || b.bore) continue;
     if (parallel(a.axis, b.axis)) {
       if (a.partId === b.partId) continue; // déjà fusionnés en perçage étagé
       if (lineDist(a, b) > Math.max(0.2, 0.05 * Math.min(a.diameter, b.diameter))) continue;
@@ -133,7 +150,7 @@ export function buildNetworks(parts, cylinders, options = {}) {
     const ids = new Set(members.map(m => m.id));
     const nl = links.filter(l => ids.has(l.a));
     const hasJunction = nl.some(l => l.type === 'sécant');
-    const kind = members.length === 1 ? 'isolé' : hasJunction ? 'circuit' : 'alignement';
+    const kind = members.length === 1 && members[0].bore ? 'alésage' : members.length === 1 ? 'isolé' : hasJunction ? 'circuit' : 'alignement';
     const partIds = [...new Set(members.map(m => m.partId))];
     const names = partIds.map(id => byId.get(id)?.name ?? '').join(' ');
     // Extrémités débouchantes et leur état (libre / logé).
@@ -158,6 +175,7 @@ export function buildNetworks(parts, cylinders, options = {}) {
     } else {
       const occ = members[0].occupants.map(o => o.name).join(' ');
       if (KEYWORDS.fixation.test(occ)) suggestion = 'fixation';
+      else if (kind === 'alésage') suggestion = 'alésage / logement';
       else if (members[0].kind === 'étagé') suggestion = 'lamage / perçage étagé';
       else suggestion = 'perçage';
     }
@@ -167,7 +185,7 @@ export function buildNetworks(parts, cylinders, options = {}) {
       diameters: [...new Set(members.flatMap(m => m.segments.map(s => +s.diameter.toFixed(2))))].sort((a, b) => a - b),
     });
   }
-  const order = { circuit: 0, alignement: 1, 'isolé': 2 };
+  const order = { circuit: 0, alignement: 1, 'isolé': 2, 'alésage': 3 };
   networks.sort((a, b) => order[a.kind] - order[b.kind] || b.features.length - a.features.length || b.totalLength - a.totalLength);
   networks.forEach((n, i) => { n.id = `R${i + 1}`; });
   return { features, links, networks };

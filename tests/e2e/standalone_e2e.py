@@ -8,7 +8,7 @@ import pathlib, sys, time
 from playwright.sync_api import sync_playwright
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-HTML = ROOT / "dist-standalone" / "SDC_Montage_3D.html"
+HTML = ROOT / "dist-standalone" / (sys.argv[2] if len(sys.argv) > 2 else "SDC_Montage_3D.html")
 OUT = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else ROOT / "dist-standalone" / "captures")
 OUT.mkdir(parents=True, exist_ok=True)
 failures = []
@@ -21,6 +21,9 @@ with sync_playwright() as p:
     pg = b.new_page(viewport={"width": 1600, "height": 950})
     errors = []
     pg.on("pageerror", lambda e: errors.append(str(e)))
+    # Version légère : le CDN est servi depuis node_modules (essai sans Internet, mêmes fichiers).
+    dist = ROOT / "node_modules" / "occt-import-js" / "dist"
+    pg.route("https://cdn.jsdelivr.net/npm/occt-import-js@*/dist/*", lambda r: r.fulfill(path=str(dist / r.request.url.rsplit("/", 1)[1]), headers={"Access-Control-Allow-Origin": "*"}))
     pg.goto(HTML.as_uri())
     pg.click("#demo2")
     pg.wait_for_function("window.__SDC__ && window.__SDC__.S.drill && document.getElementById('busy').hidden", timeout=120000)

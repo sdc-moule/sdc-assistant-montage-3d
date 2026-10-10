@@ -54,6 +54,7 @@ for sx in (-1, 1):
     for sy in (-1, 1):
         pe = cut(pe, cyl((sx*125, sy*100, 29), Z, 5, 42))
 pe = cut(pe, cyl((0, 0, 29), Z, 12, 42))       # passage busette centrale
+pe = cut(pe, cyl((-60, 60, 45), Z, 30, 26))    # logement d'insert Ø60 traversé par le canal y=+60 (alésage, pas un forage)
 parts.append(("PLAQUE_PORTE_EMPREINTE", pe, (0.62, 0.70, 0.62), [(0, 0, 0)]))
 
 # Obturateurs de canaux (bouchons) aux entrées percées.

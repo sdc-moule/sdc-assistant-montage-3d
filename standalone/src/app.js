@@ -59,7 +59,7 @@ const S = {
   catOf: {}, catOverride: {}, catOff: new Set(),
   ex: { amount: 0, dir: 'z', scope: 'all', ids: null }, exVec: new Map(), moves: [], open: 0,
   cuts: { x: { on: false, pos: 0, flip: false }, y: { on: false, pos: 0, flip: false }, z: { on: false, pos: 0, flip: false } }, caps: true, planeVis: true,
-  drill: null, netClass: {}, skelOnly: false, skelShow: false, selNet: null, selFeature: null, filters: { circuit: true, alignement: false, 'isolé': false, dmin: 0, dmax: 999 },
+  drill: null, netClass: {}, skelOnly: false, skelShow: false, selNet: null, selFeature: null, filters: { circuit: true, alignement: false, 'isolé': false, 'alésage': false, dmin: 0, dmax: 999 }, maxDrill: 32, cyl: null,
   comments: [], views: [], rowNotes: {}, bubbleOff: {},
   bounds: new THREE.Box3(), measure: { on: false, pts: [] }, skelItems: [], skelGroups: new Map(),
   undo: [], redo: [],
@@ -160,7 +160,11 @@ function install(res, name, hash) {
 function analyseDrilling() {
   const cyl = new Map();
   for (const p of S.parts) { try { cyl.set(p.id, extractCylinders(p)); } catch (e) { console.warn('analyse', p.name, e); cyl.set(p.id, { holes: [], bosses: [] }); } }
-  S.drill = buildNetworks(S.parts, cyl);
+  S.cyl = cyl;
+  rebuildNetworks();
+}
+function rebuildNetworks() {
+  S.drill = buildNetworks(S.parts, S.cyl, { maxDrillDiameter: S.maxDrill });
   S.drill.featureById = new Map(S.drill.features.map(f => [f.id, f]));
   S.drill.netOfFeature = new Map(); for (const n of S.drill.networks) for (const f of n.features) S.drill.netOfFeature.set(f, n);
   buildSkeleton();
@@ -207,10 +211,12 @@ function buildSkeleton() {
     for (const p of n.ports) {
       const f = S.drill.featureById.get(p.featureId);
       const dir = new THREE.Vector3(...f.axis).multiplyScalar(p.side === 'start' ? -1 : 1);
-      const size = Math.max(3, p.diameter * 1.2);
+      // Marqueurs de taille constante à l'écran (mis à l'échelle à chaque image), indépendants du Ø.
       let m;
-      if (p.state === 'libre') { m = new THREE.Mesh(new THREE.ConeGeometry(size * 0.45, size, 18), new THREE.MeshBasicMaterial({ color: 0x1f8a4c, depthTest: false, transparent: true })); m.quaternion.setFromUnitVectors(Y, dir); m.position.set(...p.point).addScaledVector(dir, size / 2); }
-      else { m = new THREE.Mesh(new THREE.CylinderGeometry(p.diameter * 0.75, p.diameter * 0.75, Math.max(1, p.diameter * 0.3), 20), new THREE.MeshBasicMaterial({ color: 0xe8730c, depthTest: false, transparent: true })); m.quaternion.setFromUnitVectors(Y, dir); m.position.set(...p.point); }
+      if (p.state === 'libre') m = new THREE.Mesh(new THREE.ConeGeometry(0.4, 1, 16), new THREE.MeshBasicMaterial({ color: 0x1f8a4c, depthTest: false, transparent: true }));
+      else m = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.25, 20), new THREE.MeshBasicMaterial({ color: 0xe8730c, depthTest: false, transparent: true }));
+      m.quaternion.setFromUnitVectors(Y, dir);
+      m.userData.marker = { point: new THREE.Vector3(...p.point), dir, cone: p.state === 'libre', min: Math.min(p.diameter, 4) };
       m.renderOrder = 8; groupFor(f.partId).add(m); S.skelItems.push({ net: n, feature: f, port: m });
     }
   }
@@ -481,7 +487,11 @@ function loop() {
   requestAnimationFrame(loop);
   controls.update();
   // épaisseur constante à l'écran des axes de circuits
-  if (skelRoot.visible) { const k = camera.position.distanceTo(controls.target) / 900; for (const it of S.skelItems) if (it.core) { const rr = Math.max(it.core.userData.radius, k); it.core.scale.set(rr, 1, rr); } }
+  if (skelRoot.visible) { const k = camera.position.distanceTo(controls.target) / 900; for (const it of S.skelItems) {
+    if (it.core) { const rr = Math.max(it.core.userData.radius, k); it.core.scale.set(rr, 1, rr); }
+    const mk = it.port?.userData.marker;
+    if (mk) { const sz = Math.max(mk.min, k * 14); it.port.scale.setScalar(sz); it.port.position.copy(mk.point).addScaledVector(mk.dir, mk.cone ? sz / 2 : 0); }
+  } }
   renderer.render(scene, camera);
   drawOverlay();
 }
@@ -567,7 +577,7 @@ function renderCard() {
     el('div', { class: 'grid2' },
       el('button', { class: 'btn', onclick: () => { S.rowNotes[row.repere] = { ...note, reference: refInput.value.trim() || undefined }; refreshAll(); toast('Référence enregistrée.'); } }, 'Enregistrer la réf.'),
       el('button', { class: 'btn', onclick: () => { S.rowNotes[row.repere] = { ...note, statut: note.statut === 'validé' ? undefined : 'validé' }; refreshAll(); } }, note.statut === 'validé' ? 'Annuler validation' : 'Valider le repère')),
-    holes.length ? el('button', { class: 'btn wide', onclick: () => { setMode('percages'); const n = S.drill.netOfFeature.get(holes[0].id); S.filters[n.kind] = true; $('f-' + ({ circuit: 'circuit', alignement: 'align', 'isolé': 'iso' }[n.kind])).checked = true; selectNet(n.id); } }, 'Voir les perçages de la pièce') : null,
+    holes.length ? el('button', { class: 'btn wide', onclick: () => { setMode('percages'); const n = S.drill.netOfFeature.get(holes[0].id); S.filters[n.kind] = true; $('f-' + ({ circuit: 'circuit', alignement: 'align', 'isolé': 'iso', 'alésage': 'bore' }[n.kind])).checked = true; selectNet(n.id); } }, 'Voir les perçages de la pièce') : null,
   ].filter(Boolean));
 }
 function renderCategories() {
@@ -620,10 +630,10 @@ function renderNets() {
   const box = $('net-list'), det = $('net-detail'); box.replaceChildren(); det.replaceChildren();
   if (!S.drill) return;
   const shown = S.drill.networks.filter(netVisible);
-  const counts = { circuit: 0, alignement: 0, 'isolé': 0 }; for (const n of S.drill.networks) counts[n.kind]++;
-  box.append(el('p', { class: 'hint' }, `${S.drill.features.length} perçages détectés · ${counts.circuit} circuit(s) · ${counts.alignement} passage(s) aligné(s) · ${counts['isolé']} isolé(s)`));
+  const counts = { circuit: 0, alignement: 0, 'isolé': 0, 'alésage': 0 }; for (const n of S.drill.networks) counts[n.kind]++;
+  box.append(el('p', { class: 'hint' }, `${S.drill.features.length - counts['alésage']} perçages · ${counts.circuit} circuit(s) · ${counts.alignement} passage(s) aligné(s) · ${counts['isolé']} isolé(s) · ${counts['alésage']} alésage(s)/logement(s) au-delà de Ø${S.maxDrill}`));
   for (const n of shown) {
-    const kindTxt = { circuit: 'circuit', alignement: 'passage aligné', 'isolé': 'perçage isolé' }[n.kind];
+    const kindTxt = { circuit: 'circuit', alignement: 'passage aligné', 'isolé': 'perçage isolé', 'alésage': 'alésage / logement' }[n.kind];
     box.append(el('div', { class: `row net${S.selNet === n.id ? ' sel' : ''}`, style: `--c:${netColor(n)}`, onclick: () => selectNet(n.id) },
       el('div', { class: 'name' }, el('b', {}, `${n.id} · ${netLabel(n)}`), netValidated(n) ? ' ✔' : el('span', { class: 'tag warn' }, 'proposé'),
         el('div', { class: 'meta' }, `${kindTxt} · ${n.features.length} perçage(s) · Ø ${n.diameters.map(d => fmt(d, 1)).join(' / ')} · ${fmt(n.totalLength, 0)} mm · ${n.ports.filter(p => p.state === 'libre').length} ouverture(s), ${n.ports.filter(p => p.state === 'logé').length} obturée(s)/logée(s)`))));
@@ -699,7 +709,7 @@ let saveTimer;
 function projectData() {
   return { application: 'SDC Montage 3D', version: APP_VERSION, schema: 'sdc-montage3d-projet/2', fichier: S.fileName, empreinte_sha256: S.hash, date: new Date().toISOString(),
     occurrences: S.parts.map(p => ({ id: p.id, nom: p.name, signature: signature(p, S.stats.get(p.id)), repere: S.rowOf.get(p.id).repere })),
-    comments: S.comments, views: S.views, netClass: S.netClass, moves: S.moves, rowNotes: S.rowNotes, catOverride: S.catOverride, bubbleOff: S.bubbleOff, display: viewState() };
+    maxDrill: S.maxDrill, comments: S.comments, views: S.views, netClass: S.netClass, moves: S.moves, rowNotes: S.rowNotes, catOverride: S.catOverride, bubbleOff: S.bubbleOff, display: viewState() };
 }
 function saveLocal() { if (!S.loaded) return; clearTimeout(saveTimer); saveTimer = setTimeout(() => { try { localStorage.setItem(LS(), JSON.stringify(projectData())); } catch { /* stockage indisponible : le fichier projet reste possible */ } }, 400); }
 function restoreLocal() { try { const raw = localStorage.getItem(LS()); if (raw) { applyProject(JSON.parse(raw), true); toast('Annotations et vues de ce fichier restaurées.'); } } catch { /* rien */ } }
@@ -713,6 +723,7 @@ function applyProject(pr, silent = false) {
     map = id => m.get(id);
     if (!confirm(`Ce projet a été créé sur un autre fichier (${pr.fichier}). ${m.size} occurrence(s) retrouvée(s), ${unsure} sans correspondance. Les numéros de repère et réseaux peuvent différer. Continuer ?`)) return;
   }
+  if (Number.isFinite(pr.maxDrill) && pr.maxDrill !== S.maxDrill && S.cyl) { S.maxDrill = pr.maxDrill; $('f-maxdrill').value = pr.maxDrill; rebuildNetworks(); }
   S.comments = (pr.comments ?? []).map(c => ({ ...c, ids: c.ids.map(map).filter(Boolean) }));
   S.views = pr.empreinte_sha256 === S.hash ? (pr.views ?? []) : [];
   S.netClass = pr.empreinte_sha256 === S.hash ? (pr.netClass ?? {}) : {};
@@ -824,7 +835,8 @@ function wire() {
   // perçages
   $('skel-show').onclick = () => { S.skelShow = !S.skelShow; S.skelShowTouched = true; if (!S.skelShow) S.skelOnly = false; syncToggles(); applyDisplay(); };
   $('skel-only').onclick = () => { S.skelOnly = !S.skelOnly; if (S.skelOnly) S.skelShow = true; syncToggles(); applyDisplay(); };
-  for (const [id, k] of [['f-circuit', 'circuit'], ['f-align', 'alignement'], ['f-iso', 'isolé']]) $(id).onchange = () => { S.filters[k] = $(id).checked; refreshAll(); };
+  $('f-maxdrill').onchange = () => { S.maxDrill = Math.max(1, +$('f-maxdrill').value || 32); S.selNet = null; S.selFeature = null; S.netClass = {}; rebuildNetworks(); refreshAll(); toast('Réseaux recalculés : les classements validés ont été remis à « proposé ».'); };
+  for (const [id, k] of [['f-circuit', 'circuit'], ['f-align', 'alignement'], ['f-iso', 'isolé'], ['f-bore', 'alésage']]) $(id).onchange = () => { S.filters[k] = $(id).checked; refreshAll(); };
   $('f-dmin').oninput = () => { S.filters.dmin = +$('f-dmin').value || 0; refreshAll(); };
   $('f-dmax').oninput = () => { S.filters.dmax = +$('f-dmax').value || 999; refreshAll(); };
   // notes et vues

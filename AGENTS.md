@@ -21,8 +21,8 @@ Le code géométrique pur est dans `standalone/src/geom/` (sans Three.js, testab
 ```bash
 npm ci
 npm test                       # tests Node (dont géométrie sur tests/fixtures/bcr_synthetique.step)
-npm run build:standalone       # → dist-standalone/SDC_Montage_3D.html (~5 Mo, hors ligne)
-python tests/e2e/standalone_e2e.py   # essai navigateur (Playwright + Chromium), doit afficher uniquement des OK
+npm run build:standalone       # → SDC_Montage_3D.html (4,6 Mo, hors ligne) + SDC_Montage_3D_leger.html (0,35 Mo, CDN)
+python tests/e2e/standalone_e2e.py [captures] [SDC_Montage_3D_leger.html]   # essai navigateur (Playwright + Chromium), doit afficher uniquement des OK
 npm run build                  # application Vite 0.2
 ```
 Données d'essai : `python tools/make_test_step.py tests/fixtures/bcr_synthetique.step` (OCP : `pip install cadquery-ocp-novtk`).
@@ -34,7 +34,7 @@ Ajouter un nouveau cas = ajouter une géométrie au générateur + un test qui v
 3. Toute valeur déduite est marquée (« proposé », « à vérifier », « indicatif »). Jamais de fusion automatique de références ambiguës.
 4. Hors périmètre : collisions, jeux, tolérances, serrages, simulation. Ne pas en ajouter sans décision écrite.
 5. Le retour à zéro de l'éclaté et de l'ouverture doit restituer **exactement** la position du STEP (décalage = 0).
-6. Pas de dépendance réseau à l'exécution (pas de CDN) : tout est embarqué par `standalone/build.mjs`.
+6. Pas de dépendance réseau à l'exécution pour la version complète. Seule la variante `_leger` charge le moteur OCCT depuis jsDelivr, et doit l'annoncer clairement en cas d'échec.
 7. Ne jamais committer de STEP client (`*.step` ignoré, sauf `tests/fixtures/` synthétiques).
 
 ## Pièges connus
