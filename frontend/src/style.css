@@ -74,6 +74,7 @@ canvas{display:block}
 .viewport-tools button.off{opacity:.7;text-decoration:line-through}
 .dim-hint{position:absolute;left:8px;right:8px;bottom:8px;padding:6px 10px;border-radius:6px;background:rgba(22,49,73,.9);color:white;font-size:12px;pointer-events:none}
 #viewport.measuring canvas{cursor:crosshair}
+#viewport.measuring .dim-label{pointer-events:none}
 #dim-list{margin:8px 0}
 .dim-row{display:flex;align-items:center;gap:4px;padding:3px 0;border-bottom:1px solid #eef2f6}
 .dim-row .dim-text{flex:1;min-width:0;overflow-wrap:anywhere}

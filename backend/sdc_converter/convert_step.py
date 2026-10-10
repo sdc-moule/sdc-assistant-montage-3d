@@ -60,7 +60,14 @@ def convert(source, destination, deflection=0.2):
                     # Une géométrie lisible reste consultable en REVIEW, sans autorisation de booléenne.
                     strict, strict_error = 'REVIEW', str(error)
                     alerts.append(f'{obj.Label} : contrôle BOP strict à revoir.')
-                points, triangles = solid.tessellate(deflection)
+                # Une triangulation par face BRep, sommets non partagés entre faces : le visualisateur
+                # retrouve ainsi chaque face exacte (plan, cylindre, congé) pour la cotation.
+                points, triangles = [], []
+                for face in solid.Faces:
+                    face_points, face_triangles = face.tessellate(deflection)
+                    base = len(points)
+                    points.extend(face_points)
+                    triangles.extend((a + base, b + base, c + base) for a, b, c in face_triangles)
                 identity = 'occ-' + hashlib.sha256(f'{path}/{index}'.encode()).hexdigest()[:20]
                 box = solid.BoundBox
                 name = obj.Label if len(parts) == 1 else f'{obj.Label} / solide {index}'
