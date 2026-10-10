@@ -17,3 +17,5 @@ data/source/*
 .env
 .env.*
 !.env.example
+!tests/fixtures/*.step
+dist-standalone/

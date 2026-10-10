@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SDC Montage 3D</title>
+<style>/*__CSS__*/</style>
+</head>
+<body>
+<div id="app">
+  <header class="top">
+    <div class="brand"><span class="logo">SDC</span><div><b>Montage 3D</b><small id="file-label">Aucun assemblage ouvert</small></div></div>
+    <div class="top-actions">
+      <label class="btn primary big" title="Ouvrir un fichier STEP, STP, IGES"><svg viewBox="0 0 24 24"><path d="M4 20h16M12 4v12m0-12-5 5m5-5 5 5"/></svg><span>Ouvrir un STEP</span><input id="file" type="file" accept=".step,.stp,.iges,.igs,.brep" hidden></label>
+      <button class="btn" id="demo" title="Assemblage d'essai synthétique (BCR + plaque refroidie)">Démo</button>
+      <select id="quality" title="Finesse du maillage d'affichage (n'affecte pas le fichier)"><option value="rapide">Affichage rapide</option><option value="normale" selected>Affichage normal</option><option value="fine">Affichage fin</option></select>
+      <span class="sep"></span>
+      <button class="btn" id="save-project" title="Enregistrer commentaires, vues, classements (fichier projet JSON)">Enregistrer projet</button>
+      <label class="btn" title="Recharger un projet JSON">Charger projet<input id="load-project" type="file" accept=".json" hidden></label>
+      <div class="menu"><button class="btn" id="export-btn">Exporter ▾</button>
+        <div class="menu-list" id="export-menu" hidden>
+          <button data-export="bom">Nomenclature (CSV Excel)</button>
+          <button data-export="drill">Fiche des perçages (CSV Excel)</button>
+          <button data-export="png">Capture annotée (PNG)</button>
+          <button data-export="print">Rapport à imprimer / PDF</button>
+        </div></div>
+      <button class="btn icon" id="help-btn" title="Aide">?</button>
+    </div>
+  </header>
+
+  <nav class="rail" id="rail">
+    <button data-mode="explorer" class="on"><svg viewBox="0 0 24 24"><path d="M12 3 3 8l9 5 9-5-9-5zM3 8v8l9 5 9-5V8"/></svg>Explorer</button>
+    <button data-mode="eclate"><svg viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 14h6v6h-6zM10 10l4 4M14 4h6v6M4 14v6h6"/></svg>Démonter</button>
+    <button data-mode="coupe"><svg viewBox="0 0 24 24"><path d="M3 12h18M6 5h12v14H6z" /></svg>Couper</button>
+    <button data-mode="percages"><svg viewBox="0 0 24 24"><path d="M3 7h12M15 7v10M15 17h6M9 7v6M9 13H3"/><circle cx="15" cy="7" r="1.6"/><circle cx="9" cy="13" r="1.6"/></svg>Perçages<br>circuits</button>
+    <button data-mode="notes"><svg viewBox="0 0 24 24"><path d="M5 4h14v12H9l-4 4z"/></svg>Notes<br>vues</button>
+  </nav>
+
+  <aside class="panel left" id="panel-left">
+    <section data-panel="explorer">
+      <h2>Explorer l'assemblage</h2>
+      <p class="hint">Touchez une pièce pour la sélectionner. <b>Ctrl</b> ou le bouton <b>Multi</b> pour en prendre plusieurs.</p>
+      <div class="grid2">
+        <button class="btn" id="show-all">Tout afficher</button>
+        <button class="btn toggle" id="ghost-toggle" title="Rendre les pièces non sélectionnées presque transparentes">Fantôme autour</button>
+        <button class="btn toggle" id="edges-toggle">Arêtes</button>
+        <button class="btn toggle" id="bubbles-toggle">Repères (bulles)</button>
+      </div>
+      <label class="field">Couleurs<select id="color-mode"><option value="step">Couleurs du fichier</option><option value="repere">Une couleur par repère</option><option value="categorie">Par famille de pièce</option></select></label>
+      <label class="field">Bulles<select id="bubble-scope"><option value="all">Tous les repères visibles</option><option value="selection">Sélection seulement</option></select></label>
+      <h3>Familles de pièces <small>(mode BCR)</small></h3>
+      <p class="hint">Classement proposé d'après les noms du fichier. Corriger avec « Classer la sélection ».</p>
+      <div id="categories" class="chips"></div>
+      <label class="field">Classer la sélection comme<select id="classify"><option value="">—</option></select></label>
+    </section>
+
+    <section data-panel="eclate" hidden>
+      <h2>Démonter / éclater</h2>
+      <label class="field">Pièces concernées<select id="ex-scope"><option value="all">Tout l'assemblage</option><option value="selection">Sélection seulement</option></select></label>
+      <label class="field">Direction<select id="ex-dir"><option value="z">Empilage selon Z (plaques)</option><option value="radial">Écartement depuis le centre</option><option value="x">Selon X</option><option value="y">Selon Y</option></select></label>
+      <label class="slider">Écartement <output id="ex-val">0 %</output><input id="ex-amount" type="range" min="0" max="100" value="0"></label>
+      <div class="grid3"><button class="btn" id="ex-close">⏮ Fermé</button><button class="btn" id="ex-play">▶ Animer</button><button class="btn" id="ex-open">⏭ Éclaté</button></div>
+      <h3>Ouverture paramétrée</h3>
+      <p class="hint">Sélectionner les pièces mobiles, choisir l'axe et la course. Aucun contrôle mécanique n'est fait.</p>
+      <div class="grid3"><select id="op-axis"><option value="z">Z</option><option value="x">X</option><option value="y">Y</option></select><input id="op-course" type="number" value="100" step="5" title="Course (mm)"><select id="op-sign"><option value="1">+</option><option value="-1">−</option></select></div>
+      <button class="btn wide" id="op-add">Créer un groupe mobile avec la sélection</button>
+      <div id="op-list" class="list"></div>
+      <label class="slider">Fermé → ouvert <output id="op-val">0 %</output><input id="op-amount" type="range" min="0" max="100" value="0"></label>
+    </section>
+
+    <section data-panel="coupe" hidden>
+      <h2>Coupes</h2>
+      <p class="hint">Faire glisser pour balayer tout le volume. La coupe est visuelle (pas une section B-Rep exacte).</p>
+      <div id="planes"></div>
+      <div class="grid2"><button class="btn toggle on" id="caps-toggle">Remplir la matière</button><button class="btn toggle on" id="planevis-toggle">Montrer le plan</button></div>
+      <button class="btn wide" id="cut-reset">Retirer toutes les coupes</button>
+    </section>
+
+    <section data-panel="percages" hidden>
+      <h2>Perçages &amp; circuits</h2>
+      <p class="hint">Détection des forages cylindriques et de leurs croisements. Classements <b>proposés</b> : à confirmer.</p>
+      <div class="grid2"><button class="btn toggle" id="skel-only">Circuits seuls</button><button class="btn toggle on" id="skel-show">Afficher les circuits</button></div>
+      <div class="filters">
+        <label><input type="checkbox" id="f-circuit" checked> Circuits</label>
+        <label><input type="checkbox" id="f-align"> Passages alignés</label>
+        <label><input type="checkbox" id="f-iso"> Perçages isolés</label>
+      </div>
+      <div class="grid2"><label class="field">Ø mini<input id="f-dmin" type="number" value="0" step="0.5"></label><label class="field">Ø maxi<input id="f-dmax" type="number" value="999" step="0.5"></label></div>
+      <div id="net-list" class="list"></div>
+      <div id="net-detail"></div>
+    </section>
+
+    <section data-panel="notes" hidden>
+      <h2>Notes &amp; vues</h2>
+      <h3>Commentaire sur la sélection</h3>
+      <div class="grid2"><select id="c-type"><option>observation</option><option>montage</option><option>contrôle</option><option>anomalie</option></select><select id="c-status"><option>ouvert</option><option>traité</option></select></div>
+      <input id="c-author" placeholder="Auteur">
+      <textarea id="c-text" rows="3" placeholder="Commentaire en français"></textarea>
+      <button class="btn wide primary" id="c-add">Ajouter le commentaire</button>
+      <div id="c-list" class="list"></div>
+      <h3>Vues mémorisées</h3>
+      <div class="grid2"><input id="v-name" placeholder="Nom de la vue"><button class="btn" id="v-save">Mémoriser</button></div>
+      <div id="v-list" class="list"></div>
+    </section>
+  </aside>
+
+  <main class="stage">
+    <div id="viewport"></div>
+    <canvas id="overlay"></canvas>
+    <div id="drop" hidden><div>Déposer le fichier STEP ici</div></div>
+    <div id="welcome" class="welcome">
+      <h1>Ouvrir un assemblage</h1>
+      <p>STEP / STP (AP203, AP214, AP242) ou IGES. Le fichier n'est jamais modifié ; tout est calculé sur ce poste.</p>
+      <div class="grid2"><label class="btn primary big">Choisir un fichier<input id="file2" type="file" accept=".step,.stp,.iges,.igs,.brep" hidden></label><button class="btn big" id="demo2">Voir la démonstration</button></div>
+      <p class="hint">Astuce : glisser-déposer le fichier dans cette fenêtre.</p>
+    </div>
+    <div id="busy" hidden><div class="spinner"></div><p id="busy-text">Lecture…</p></div>
+
+    <div class="viewbar">
+      <button class="btn icon" data-view="iso" title="Vue isométrique">Iso</button>
+      <button class="btn icon" data-view="top" title="Vue de dessus">Dessus</button>
+      <button class="btn icon" data-view="front" title="Vue de face">Face</button>
+      <button class="btn icon" data-view="right" title="Vue de droite">Droite</button>
+      <button class="btn icon" id="fit-all" title="Tout voir (F)">Tout voir</button>
+      <span class="sep"></span>
+      <button class="btn icon toggle" id="multi" title="Sélection multiple (tablette)">Multi</button>
+      <button class="btn icon toggle" id="measure" title="Mesure indicative entre deux points">Mesurer</button>
+      <button class="btn icon" id="undo" title="Annuler (Ctrl+Z)">↶</button>
+      <button class="btn icon" id="redo" title="Rétablir (Ctrl+Y)">↷</button>
+    </div>
+
+    <div class="selbar" id="selbar" hidden>
+      <span id="sel-count"></span>
+      <button class="btn" id="s-fit">Cadrer</button>
+      <button class="btn" id="s-hide">Masquer</button>
+      <button class="btn" id="s-isolate">Isoler</button>
+      <label class="op">Transparence<input id="s-opacity" type="range" min="0" max="100" value="100"></label>
+      <button class="btn" id="s-clear">✕</button>
+    </div>
+    <div id="toast" hidden></div>
+  </main>
+
+  <aside class="panel right" id="panel-right">
+    <div class="tabs"><button data-tab="tree" class="on">Arborescence</button><button data-tab="bom">Nomenclature</button></div>
+    <input id="search" type="search" placeholder="Chercher : repère, nom, Ø, dimension…">
+    <div id="tab-tree" class="list tree"></div>
+    <div id="tab-bom" class="list" hidden><table class="bom"><thead><tr><th>Rep.</th><th>Désignation</th><th>Qté</th><th>X×Y×Z mm</th><th>Statut</th></tr></thead><tbody id="bom-body"></tbody></table></div>
+    <div id="part-card" class="card" hidden></div>
+  </aside>
+</div>
+
+<div id="help" class="modal" hidden><div class="modal-box">
+  <h2>Utilisation</h2>
+  <ul>
+    <li><b>Tourner</b> : glisser avec un doigt / clic gauche. <b>Déplacer</b> : deux doigts / clic droit. <b>Zoom</b> : pincer / molette.</li>
+    <li><b>Sélectionner</b> : toucher une pièce, une ligne de l'arborescence, de la nomenclature ou une bulle. Toucher le vide pour désélectionner.</li>
+    <li><b>Plusieurs pièces</b> : Ctrl + clic, ou activer « Multi ».</li>
+    <li>Raccourcis : <b>H</b> masquer, <b>I</b> isoler, <b>A</b> tout afficher, <b>F</b> cadrer, <b>Échap</b> désélectionner, <b>Ctrl+Z/Y</b>.</li>
+    <li><b>Perçages &amp; circuits</b> : les forages sont détectés sur le maillage d'affichage. Les diamètres et longueurs sont <b>indicatifs</b> ; les taraudages ne sont pas détectables.</li>
+    <li>Aucun calcul de collision, de jeu, de tolérance ou de serrage n'est réalisé. Le fichier STEP n'est jamais modifié.</li>
+  </ul>
+  <p class="hint" id="version-info"></p>
+  <button class="btn primary" id="help-close">Fermer</button>
+</div></div>
+
+<div id="print-report"></div>
+<!--__DATA__-->
+<script>/*__JS__*/</script>
+</body>
+</html>

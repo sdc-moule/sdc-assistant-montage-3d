@@ -6,3 +6,10 @@
 4. **Phase 4 — documentation :** vues nommées multiples, annotations auteur/date/type, export XLSX, capture PNG annotée, rapport PDF dédié, réimport avec correspondances proposées à confirmer.
 
 Chaque phase exige une réception sur un moule et un BCR, avec et sans nomenclature. Aucune fonction annoncée dans la cible n’est considérée terminée par la seule présence d’un bouton ou d’un dossier.
+
+## Application autonome 1.0 (`standalone/`)
+Couvre en HTML unique les phases 1 à 4 côté consultation (voir [standalone.md](standalone.md)) et ajoute le module
+perçages & circuits. Restent à faire : import d'une nomenclature externe CSV/XLSX, export XLSX natif, vecteurs d'éclaté
+édités pièce par pièce, sections B-Rep exactes (backend OpenCascade/FreeCAD), réception sur moule et BCR réels.
+Pistes : diagramme 2D schématique des circuits (entrées/sorties numérotées pour le branchement des raccords),
+volume d'eau par circuit, export DXF des axes de perçage par face pour la FAO, lecture des couleurs de faces STEP.

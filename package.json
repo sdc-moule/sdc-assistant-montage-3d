@@ -8,12 +8,16 @@
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "build:standalone": "node standalone/build.mjs"
   },
   "dependencies": {
-    "three": "0.180.0"
+    "three": "0.180.0",
+    "three-mesh-bvh": "^0.9.16"
   },
   "devDependencies": {
+    "esbuild": "^0.28.2",
+    "occt-import-js": "^0.0.23",
     "vite": "7.3.7"
   },
   "engines": {
