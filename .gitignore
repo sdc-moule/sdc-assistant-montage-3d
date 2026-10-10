@@ -17,3 +17,4 @@ data/source/*
 .env
 .env.*
 !.env.example
+standalone/
