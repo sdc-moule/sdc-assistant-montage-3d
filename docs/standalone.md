@@ -14,13 +14,14 @@ Double-clic → Chrome ou Edge. Pas d'installation, pas de FreeCAD. Le STEP est 
 | Sélection | Clic 3D, arborescence, nomenclature, bulles ; Ctrl ou bouton « Multi » ; recherche (repère, nom, dimension, Ø de perçage) ; Entrée = sélectionner tous les résultats |
 | Visibilité | Masquer, isoler, tout afficher, transparence 0–100 %, fantôme autour de la sélection, familles BCR (plaques, collecteurs, busettes, obturateurs, résistances, visserie, guidage, refroidissement) proposées par les noms et corrigeables, annuler/rétablir |
 | Repérage | Bulles numérotées à flèche, anti-chevauchement, déplaçables à la souris, tous / sélection |
-| Éclaté | Tout / sélection, empilage Z, X, Y ou radial, animation, retour exact à 0 |
-| Ouverture | Groupes mobiles = sélection, axe, sens, course mm, curseur fermé → ouvert |
-| Coupes | XZ, YZ, XY simultanées, curseur en mm sur toute l'étendue, inversion, remplissage de la matière coupée, plan visible, compatibles éclaté |
+| Éclaté | Tout / sélection, empilage Z, X, Y ou radial (écartement ×4), animation, retour exact à 0 |
+| Faces | « ✂ Face » : retirer une face B-Rep d'une pièce pour voir logements, formes et perçages ; « ↺ Faces » : remettre (sélection ou tout) ; annulable |
+| Coupes | XZ, YZ, XY simultanées, curseur en mm sur toute l'étendue, inversion, remplissage de la matière coupée, contour du plan en option (pas de plaque translucide), compatibles éclaté |
 | Perçages & circuits | Voir ci-dessous |
 | Mesure | Distance point à point + ΔX/ΔY/ΔZ, indicative |
-| Notes et vues | Commentaires typés (observation, montage, contrôle, anomalie), auteur, statut ; vues mémorisées (caméra, visibilité, coupes, éclaté, ouverture, circuits) ; sauvegarde automatique par fichier + projet JSON ; réimport sur un STEP modifié par nom + signature avec avertissement |
-| Exports | Nomenclature CSV (Excel FR), fiche des perçages CSV, capture PNG annotée, rapport imprimable / PDF |
+| Notes et scènes | Commentaires typés (observation, montage, contrôle, anomalie), auteur, statut ; « 📷 Scène » mémorise caméra, éclaté, coupes, masquages, transparences, faces retirées, circuits (vignette) ; PNG d'une scène = image + scène intégrée, rechargeable par « Charger projet / scène » ; « ⧉ Copier » vers le presse-papiers ; sauvegarde automatique par fichier + projet JSON ; réimport sur un STEP modifié par nom + signature avec avertissement |
+| Exports | Nomenclature CSV (Excel FR), fiche des perçages CSV, capture PNG annotée (avec scène), rapport imprimable / PDF ; boîte « Enregistrer sous » ouverte sur Téléchargements (Chrome/Edge) |
+| Rendu | Éclairage studio embarqué, couleurs STEP en sRGB (fidèles à la CAO), arêtes par défaut |
 
 ## Module perçages & circuits
 1. Chaque face B-Rep maillée est testée : normales coplanaires → cylindre ; ajustement de cercle (rayon, axe, étendue) ; concave = perçage, convexe = arbre (vis, obturateur, busette…).
@@ -31,7 +32,8 @@ Double-clic → Chrome ou Edge. Pas d'installation, pas de FreeCAD. Le STEP est 
 6. Classement **proposé** d'après les noms (distribution matière, refroidissement, fixation) ; l'opérateur valide ou corrige.
 7. Alésages / logements : au-delà du « Ø maxi d'un forage » (32 mm par défaut, réglable) ou si court et large (L < 0,6 D, D > 12), le cylindre est un logement (insert, busette, empreinte) : listé à part, jamais relié aux circuits.
 8. Un forage de même Ø interrompu par une poche ou un autre perçage reste **un seul forage** (longueur d'usinage totale, marqué « interrompu »).
-10. Squelette : axe + volume de fluide translucide par segment, nœuds de croisement ; mode « Circuits seuls » ; filtres type et Ø ; fiche avec Ø, longueur, axe, extrémités en mm depuis le coin mini de la pièce.
+10. Forages pleins : Ø 3 à 20 mm (réglable) dessinés opaques ; étiquettes « P… Ø » en option (sinon seule celle du perçage sélectionné).
+11. Squelette : axe + volume de fluide translucide par segment, nœuds de croisement ; mode « Circuits seuls » ; filtres type et Ø ; fiche avec Ø, longueur, axe, extrémités en mm depuis le coin mini de la pièce.
 
 Limites : taraudages non détectables (le STEP ne porte pas le filetage) ; perçages coniques, obliques complexes et
 pointes de forêt non caractérisés ; débouchage estimé par l'étendue de la pièce selon l'axe ; valeurs issues du maillage.

@@ -9,6 +9,8 @@ import { meshStats, buildBom, toCsv, signature } from './geom/bom.js';
 import { extractCylinders } from './geom/holes.js';
 import { buildNetworks } from './geom/circuits.js';
 import { extractCadFromZip } from './geom/unzip.js';
+import { pngWithText, pngText } from './geom/png-meta.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
 THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
@@ -46,9 +48,12 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.localClippingEna
 viewport.append(renderer.domElement);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true; controls.dampingFactor = 0.15; controls.screenSpacePanning = true;
-scene.add(new THREE.HemisphereLight(0xffffff, 0x6d7d8c, 2.2));
-const sun = new THREE.DirectionalLight(0xffffff, 2.0); scene.add(sun);
-const fill = new THREE.DirectionalLight(0xffffff, 0.7); scene.add(fill);
+// Rendu : éclairage d'atelier (environnement studio embarqué) + tonalité filmique, pour des volumes lisibles.
+renderer.toneMapping = THREE.NoToneMapping; renderer.outputColorSpace = THREE.SRGBColorSpace;
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+scene.add(new THREE.HemisphereLight(0xdfe6ee, 0x56636f, 1.2));
+const sun = new THREE.DirectionalLight(0xffffff, 1.3); scene.add(sun);
+const fill = new THREE.DirectionalLight(0xffffff, 0.35); scene.add(fill);
 const modelRoot = new THREE.Group(), skelRoot = new THREE.Group(), helperRoot = new THREE.Group();
 scene.add(modelRoot, skelRoot, helperRoot);
 
@@ -56,10 +61,10 @@ scene.add(modelRoot, skelRoot, helperRoot);
 const S = {
   loaded: false, fileName: '', hash: '', parts: [], byId: new Map(), stats: new Map(), bom: [], rowOf: new Map(),
   objs: new Map(), items: {}, sel: new Set(), mode: 'explorer', multi: false,
-  ghost: false, edges: false, bubbles: false, bubbleScope: 'all', colorMode: 'step',
+  ghost: false, edges: true, bubbles: false, bubbleScope: 'all', colorMode: 'step',
   catOf: {}, catOverride: {}, catOff: new Set(),
-  ex: { amount: 0, dir: 'z', scope: 'all', ids: null }, exVec: new Map(), moves: [], open: 0,
-  cuts: { x: { on: false, pos: 0, flip: false }, y: { on: false, pos: 0, flip: false }, z: { on: false, pos: 0, flip: false } }, caps: true, planeVis: true,
+  ex: { amount: 0, dir: 'z', scope: 'all', ids: null }, exVec: new Map(),
+  cuts: { x: { on: false, pos: 0, flip: false }, y: { on: false, pos: 0, flip: false }, z: { on: false, pos: 0, flip: false } }, caps: true, planeVis: false, hiddenFaces: {}, faceMode: false, drillLabels: false, fill: { on: true, min: 3, max: 20 },
   drill: null, netClass: {}, skelOnly: false, skelShow: false, selNet: null, selFeature: null, filters: { circuit: true, alignement: false, 'isolé': false, 'alésage': false, dmin: 0, dmax: 999 }, maxDrill: 32, cyl: null,
   comments: [], views: [], rowNotes: {}, bubbleOff: {},
   bounds: new THREE.Box3(), measure: { on: false, pts: [] }, skelItems: [], skelGroups: new Map(),
@@ -70,7 +75,18 @@ const S = {
 let toastTimer;
 function toast(msg, ms = 3500) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, ms); }
 function busy(text) { $('busy').hidden = !text; if (text) $('busy-text').textContent = text; }
-function download(name, data, type) { const url = URL.createObjectURL(data instanceof Blob ? data : new Blob([data], { type })); const a = el('a', { href: url, download: name }); document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000); }
+// Enregistrement : boîte « Enregistrer sous » ouverte sur Téléchargements (Chrome/Edge), sinon téléchargement direct.
+async function download(name, data, type) {
+  const blob = data instanceof Blob ? data : new Blob([data], { type });
+  if (window.showSaveFilePicker) {
+    const ext = name.slice(name.lastIndexOf('.'));
+    try {
+      const h = await window.showSaveFilePicker({ suggestedName: name, startIn: 'downloads', types: [{ description: ext.slice(1).toUpperCase(), accept: { [blob.type || 'application/octet-stream']: [ext] } }] });
+      const w = await h.createWritable(); await w.write(blob); await w.close(); toast(`Enregistré : ${h.name}`); return;
+    } catch (err) { if (err.name === 'AbortError') return; /* sinon repli sur le téléchargement */ }
+  }
+  const url = URL.createObjectURL(blob); const a = el('a', { href: url, download: name }); document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
 const baseName = () => (S.fileName || 'assemblage').replace(/\.[^.]+$/, '');
 
 function resize() {
@@ -129,7 +145,7 @@ function install(res, name, hash) {
   const { parts } = partsFromOcct(res);
   const kept = parts.filter(p => p.index.length >= 3);
   if (!kept.length) throw new Error('aucun solide trouvé dans le fichier.');
-  Object.assign(S, { loaded: true, fileName: name, hash, parts: kept, byId: new Map(kept.map(p => [p.id, p])), items: {}, sel: new Set(), moves: [], open: 0, comments: [], views: [], rowNotes: {}, bubbleOff: {}, netClass: {}, catOverride: {}, catOff: new Set(), undo: [], redo: [], selNet: null, selFeature: null });
+  Object.assign(S, { loaded: true, fileName: name, hash, parts: kept, byId: new Map(kept.map(p => [p.id, p])), items: {}, sel: new Set(), comments: [], views: [], rowNotes: {}, bubbleOff: {}, netClass: {}, catOverride: {}, catOff: new Set(), hiddenFaces: {}, undo: [], redo: [], selNet: null, selFeature: null });
   S.ex = { amount: 0, dir: 'z', scope: 'all', ids: null };
   S.stats = new Map(kept.map(p => [p.id, meshStats(p.positions, p.index)]));
   S.bom = buildBom(kept, S.stats);
@@ -143,27 +159,52 @@ function install(res, name, hash) {
     if (p.normals && p.normals.length === p.positions.length) g.setAttribute('normal', new THREE.BufferAttribute(p.normals, 3)); else g.computeVertexNormals();
     g.setIndex(new THREE.BufferAttribute(p.index.slice(), 1)); // copie : la BVH réordonne les triangles
     g.computeBoundingBox(); g.computeBoundingSphere(); g.computeBoundsTree();
-    const mat = new THREE.MeshStandardMaterial({ color: 0x999999, metalness: 0.15, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+    // face B-Rep de chaque sommet (les sommets d'occt-import-js ne sont pas partagés entre faces)
+    const vertFace = new Int32Array(p.positions.length / 3).fill(-1);
+    p.faces.forEach((f, fi) => { for (let t = f.first; t <= f.last; t++) for (let k = 0; k < 3; k++) vertFace[p.index[3 * t + k]] = fi; });
+    g.setAttribute('faceVis', new THREE.BufferAttribute(new Float32Array(p.positions.length / 3).fill(1), 1));
+    const mat = withFaceMask(new THREE.MeshStandardMaterial({ color: 0x999999, metalness: 0.1, roughness: 0.62, envMapIntensity: 0.18, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }));
     const mesh = new THREE.Mesh(g, mat); mesh.userData.id = p.id;
-    const back = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0x555555, side: THREE.BackSide }));
+    // Intérieur de matière (coupes, face retirée) : face arrière éclairée, plus sombre.
+    const back = new THREE.Mesh(g, withFaceMask(new THREE.MeshStandardMaterial({ color: 0x555555, side: THREE.BackSide, metalness: 0, roughness: 0.9, envMapIntensity: 0.5 })));
     back.raycast = () => {};
     const grp = new THREE.Group(); grp.add(mesh, back); modelRoot.add(grp);
     // point d'ancrage des bulles : sommet le plus proche du centre de la boîte
     const c = [(st.min[0] + st.max[0]) / 2, (st.min[1] + st.max[1]) / 2, (st.min[2] + st.max[2]) / 2];
     let best = 0, bd = Infinity; const P = p.positions;
     for (let i = 0; i < P.length; i += 3) { const d = (P[i] - c[0]) ** 2 + (P[i + 1] - c[1]) ** 2 + (P[i + 2] - c[2]) ** 2; if (d < bd) { bd = d; best = i; } }
-    S.objs.set(p.id, { grp, mesh, back, edges: null, part: p, anchor: new THREE.Vector3(P[best], P[best + 1], P[best + 2]), center: new THREE.Vector3(...c), stepColor: p.color ? new THREE.Color(...p.color) : null });
+    S.objs.set(p.id, { grp, mesh, back, edges: null, part: p, vertFace, anchor: new THREE.Vector3(P[best], P[best + 1], P[best + 2]), center: new THREE.Vector3(...c), stepColor: p.color ? new THREE.Color().setRGB(...p.color, THREE.SRGBColorSpace) : null /* couleurs STEP = sRGB, comme en CAO */ });
     S.items[p.id] = { visible: true, opacity: 1 };
     S.catOf[p.id] = (CATEGORIES.find(k => k.re && k.re.test(p.name)) ?? CATEGORIES.at(-1)).id;
   }
   for (const k of ['x', 'y', 'z']) S.cuts[k] = { on: false, pos: (S.bounds.min[k] + S.bounds.max[k]) / 2, flip: false };
   const size = S.bounds.getSize(new THREE.Vector3()).length();
-  sun.position.copy(S.bounds.getCenter(new THREE.Vector3())).add(new THREE.Vector3(0.6, -0.8, 1).multiplyScalar(size));
+  sun.position.copy(S.bounds.getCenter(new THREE.Vector3())).add(new THREE.Vector3(0.9, -1.1, 0.8).multiplyScalar(size));
   fill.position.copy(S.bounds.getCenter(new THREE.Vector3())).add(new THREE.Vector3(-1, 0.6, -0.3).multiplyScalar(size));
   $('file-label').textContent = `${name} · ${S.parts.length} occurrences · empreinte ${hash.slice(0, 10)}…`;
   $('welcome').hidden = true;
   computeExplodeVectors();
 }
+
+// Masquage de faces B-Rep : attribut faceVis (0/1) par sommet, fragments rejetés dans le shader.
+function withFaceMask(mat) {
+  mat.onBeforeCompile = sh => {
+    sh.vertexShader = 'attribute float faceVis;\nvarying float vFaceVis;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvFaceVis = faceVis;');
+    sh.fragmentShader = 'varying float vFaceVis;\n' + sh.fragmentShader.replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nif (vFaceVis < 0.5) discard;');
+  };
+  mat.customProgramCacheKey = () => 'sdc-facemask';
+  return mat;
+}
+function applyHiddenFaces() {
+  for (const [id, o] of S.objs) {
+    const hidden = new Set(S.hiddenFaces[id] ?? []), a = o.mesh.geometry.getAttribute('faceVis');
+    let changed = false;
+    for (let i = 0; i < a.count; i++) { const v = hidden.has(o.vertFace[i]) ? 0 : 1; if (a.array[i] !== v) { a.array[i] = v; changed = true; } }
+    if (changed) a.needsUpdate = true;
+  }
+}
+const faceOfHit = h => S.objs.get(h.object.userData.id).vertFace[h.face.a];
+const faceVisible = h => !(S.hiddenFaces[h.object.userData.id] ?? []).includes(faceOfHit(h));
 
 // ---------------------------------------------------------------- perçages & circuits
 function analyseDrilling() {
@@ -202,14 +243,14 @@ function buildSkeleton() {
       for (const seg of f.segments) {
         const a = new THREE.Vector3(...seg.start), b = new THREE.Vector3(...seg.end), L = a.distanceTo(b);
         const q = new THREE.Quaternion().setFromUnitVectors(Y, b.clone().sub(a).normalize());
-        const tube = new THREE.Mesh(new THREE.CylinderGeometry(seg.diameter / 2, seg.diameter / 2, L, 24, 1, true), new THREE.MeshStandardMaterial({ transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide, roughness: 0.4 }));
+        const tube = new THREE.Mesh(new THREE.CylinderGeometry(seg.diameter / 2, seg.diameter / 2, L, 24, 1, false), new THREE.MeshStandardMaterial({ transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide, roughness: 0.35, metalness: 0.1 }));
         tube.position.copy(a).add(b).multiplyScalar(0.5); tube.quaternion.copy(q); tube.renderOrder = 5;
         const core = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, L, 8), new THREE.MeshBasicMaterial({ depthTest: false, transparent: true }));
         core.position.copy(tube.position); core.quaternion.copy(q); core.renderOrder = 6;
         core.userData.radius = Math.max(0.3, seg.diameter * 0.07);
         core.scale.set(core.userData.radius, 1, core.userData.radius);
         g.add(tube, core);
-        S.skelItems.push({ net: n, feature: f, tube, core });
+        S.skelItems.push({ net: n, feature: f, tube, core, seg });
       }
     }
     for (const l of n.links) if (l.type === 'sécant') {
@@ -231,7 +272,14 @@ function styleSkeleton() {
     const featFocus = S.selFeature && it.feature?.id === S.selFeature;
     for (const o of objs) {
       o.visible = vis;
-      if (o === it.tube) { o.material.color.copy(featFocus ? new THREE.Color('#ffd400') : col); o.material.opacity = focus ? (featFocus ? 0.8 : 0.5) : 0.1; }
+      if (o === it.tube) {
+        // Forages pleins (Ø de S.fill.min à S.fill.max) : tube opaque, bien plus lisible que le volume translucide.
+        const solid = S.fill.on && it.seg.diameter >= S.fill.min - 1e-6 && it.seg.diameter <= S.fill.max + 1e-6 && focus;
+        o.material.color.copy(featFocus ? new THREE.Color('#ffd400') : col);
+        o.material.opacity = solid ? 1 : focus ? (featFocus ? 0.8 : 0.5) : 0.1;
+        if (o.material.transparent === solid) { o.material.transparent = !solid; o.material.depthWrite = solid; o.material.side = solid ? THREE.FrontSide : THREE.DoubleSide; o.material.needsUpdate = true; }
+        o.renderOrder = solid ? 0 : 5;
+      }
       else if (o === it.core) { o.material.color.copy(featFocus ? new THREE.Color('#ffd400') : col).multiplyScalar(0.75); o.material.opacity = focus ? 1 : 0.15; }
       else if (o === it.joint) { o.material.color.copy(col).multiplyScalar(0.6); o.material.opacity = focus ? 1 : 0.15; }
       else o.material.opacity = focus ? 1 : 0.15;
@@ -249,15 +297,14 @@ function computeExplodeVectors() {
   for (const id of ids) {
     const d = S.objs.get(id).center.clone().sub(C);
     let v;
-    if (S.ex.dir === 'radial') v = d.multiplyScalar(1.3);
-    else { const k = S.ex.dir; v = new THREE.Vector3(); v[k] = d[k] * 1.8; if (Math.abs(d[k]) < 1e-6 && S.ex.scope === 'selection') v[k] = span[k] * 0.6; }
+    if (S.ex.dir === 'radial') v = d.multiplyScalar(3);
+    else { const k = S.ex.dir; v = new THREE.Vector3(); v[k] = d[k] * 4; if (Math.abs(d[k]) < 1e-6 && S.ex.scope === 'selection') v[k] = span[k] * 1.5; }
     S.exVec.set(id, v);
   }
 }
 function partOffset(id) {
   const v = new THREE.Vector3();
   const e = S.exVec.get(id); if (e) v.addScaledVector(e, S.ex.amount / 100);
-  for (const m of S.moves) if (m.ids.includes(id)) v.addScaledVector(AX[m.axis], m.sign * m.course * S.open);
   return v;
 }
 function cutPlanes() {
@@ -281,6 +328,7 @@ function baseColor(id) {
 const catOf = id => S.catOverride[id] ?? S.catOf[id];
 function applyDisplay() {
   if (!S.loaded) return;
+  applyHiddenFaces();
   const planes = cutPlanes();
   for (const [id, o] of S.objs) {
     const it = S.items[id];
@@ -299,11 +347,11 @@ function applyDisplay() {
     m.transparent = op < 1; m.clippingPlanes = planes;
     if (o.matKey !== key) { m.needsUpdate = true; o.back.material.needsUpdate = true; if (o.edges) o.edges.material.needsUpdate = true; o.matKey = key; }
     o.back.visible = op >= 1 && S.caps;
-    o.back.material.color.copy(m.color).multiplyScalar(0.55); if (selected) o.back.material.color.lerp(new THREE.Color(0xd85a00), 0.5);
+    o.back.material.color.copy(m.color).multiplyScalar(0.6); if (selected) o.back.material.color.lerp(new THREE.Color(0xd85a00), 0.5);
     o.back.material.clippingPlanes = planes;
     if (S.edges) {
-      if (!o.edges) { o.edges = new THREE.LineSegments(new THREE.EdgesGeometry(o.mesh.geometry, 28), new THREE.LineBasicMaterial({ color: 0x1b2a38, transparent: true, opacity: 0.55 })); o.edges.raycast = () => {}; o.grp.add(o.edges); }
-      o.edges.visible = true; o.edges.material.clippingPlanes = planes; o.edges.material.opacity = 0.55 * Math.max(op, 0.2);
+      if (!o.edges) { o.edges = new THREE.LineSegments(new THREE.EdgesGeometry(o.mesh.geometry, 28), new THREE.LineBasicMaterial({ color: 0x14202b, transparent: true, opacity: 0.45 })); o.edges.raycast = () => {}; o.grp.add(o.edges); }
+      o.edges.visible = true; o.edges.material.clippingPlanes = planes; o.edges.material.opacity = 0.45 * Math.max(op, 0.2);
     } else if (o.edges) o.edges.visible = false;
   }
   for (const [pid, g] of S.skelGroups ?? []) g.position.copy(partOffset(pid));
@@ -318,7 +366,7 @@ function drawPlaneHelpers() {
     if (!S.cuts[k].on) continue;
     const dims = { x: [size.y, size.z], y: [size.x, size.z], z: [size.x, size.y] }[k];
     const g = new THREE.PlaneGeometry(dims[0], dims[1]);
-    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0xe8730c, transparent: true, opacity: 0.08, side: THREE.DoubleSide, depthWrite: false }));
+    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ visible: false }));
     if (k === 'x') m.rotation.set(0, Math.PI / 2, 0); if (k === 'y') m.rotation.set(Math.PI / 2, 0, 0);
     m.position.copy(c); m.position[k] = S.cuts[k].pos; m.userData.plane = true; m.raycast = () => {};
     const edge = new THREE.LineSegments(new THREE.EdgesGeometry(g), new THREE.LineBasicMaterial({ color: 0xe8730c }));
@@ -346,9 +394,9 @@ function fitSelection() {
 }
 
 // ---------------------------------------------------------------- historique (masquages / transparences)
-function snapshot() { return JSON.stringify({ items: S.items, catOff: [...S.catOff] }); }
+function snapshot() { return JSON.stringify({ items: S.items, catOff: [...S.catOff], hiddenFaces: S.hiddenFaces }); }
 function pushHistory() { S.undo.push(snapshot()); if (S.undo.length > 80) S.undo.shift(); S.redo = []; }
-function restoreSnap(s) { const o = JSON.parse(s); S.items = o.items; S.catOff = new Set(o.catOff); refreshAll(); }
+function restoreSnap(s) { const o = JSON.parse(s); S.items = o.items; S.catOff = new Set(o.catOff); S.hiddenFaces = o.hiddenFaces ?? {}; refreshAll(); }
 function undo() { if (!S.undo.length) return; S.redo.push(snapshot()); restoreSnap(S.undo.pop()); }
 function redo() { if (!S.redo.length) return; S.undo.push(snapshot()); restoreSnap(S.redo.pop()); }
 
@@ -371,7 +419,7 @@ function pick(ev) {
   ray.setFromCamera(ndc(ev), camera);
   const meshes = [...S.objs.values()].filter(o => o.grp.visible && o.mesh.material.opacity > 0.15).map(o => o.mesh);
   const planes = cutPlanes();
-  for (const h of ray.intersectObjects(meshes, false)) if (planes.every(p => p.distanceToPoint(h.point) >= -1e-6)) return h;
+  for (const h of ray.intersectObjects(meshes, false)) if (planes.every(p => p.distanceToPoint(h.point) >= -1e-6) && faceVisible(h)) return h;
   return null;
 }
 renderer.domElement.addEventListener('pointerdown', ev => {
@@ -389,6 +437,7 @@ renderer.domElement.addEventListener('pointerup', ev => {
   if (dragBubble) { const d = dragBubble; dragBubble = null; if (!d.moved) select(S.bom.find(r => r.repere === d.b.repere).ids, ev.ctrlKey || ev.shiftKey || S.multi); else saveLocal(); return; }
   if (!down || Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > 6 || !S.loaded) return;
   const h = pick(ev);
+  if (S.faceMode) { if (h) { pushHistory(); const id = h.object.userData.id; (S.hiddenFaces[id] ??= []).push(faceOfHit(h)); refreshAll(); } return; }
   if (S.measure.on) { if (h) { S.measure.pts.push(h.point.clone()); if (S.measure.pts.length > 2) S.measure.pts = [h.point.clone()]; drawMeasure(); } return; }
   if (S.mode === 'percages' && S.skelShow) { const f = pickFeature(ev); if (f) { selectFeature(f.id, true); return; } }
   if (h) select([h.object.userData.id], ev.ctrlKey || ev.metaKey || ev.shiftKey || S.multi);
@@ -469,10 +518,11 @@ function drawNetLabels() {
     if (S.selNet) {
       for (const f of fs) {
         if (S.items[f.partId]?.visible === false) continue;
+        if (!S.drillLabels && f.id !== S.selFeature) continue;
         const m = new THREE.Vector3(...f.start).add(new THREE.Vector3(...f.end)).multiplyScalar(0.5).add(partOffset(f.partId)), p = project(m);
         if (p.z < 1) label(p.x, p.y, `${f.id} Ø${fmt(f.diameter, 1)}`, f.id === S.selFeature ? '#b38600' : netColor(n));
       }
-    } else {
+    } else if (S.drillLabels) {
       const longest = fs.reduce((a, b) => (b.length > a.length ? b : a));
       const m = new THREE.Vector3(...longest.start).add(new THREE.Vector3(...longest.end)).multiplyScalar(0.5).add(partOffset(longest.partId)), p = project(m);
       if (p.z < 1) label(p.x, p.y, `${n.id} · ${netLabel(n)}`, netColor(n));
@@ -493,7 +543,7 @@ function loop() {
 }
 
 // ---------------------------------------------------------------- panneaux
-function refreshAll() { applyDisplay(); renderTree(); renderBom(); renderCard(); renderSelbar(); renderCategories(); if (S.mode === 'percages') renderNets(); if (S.mode === 'notes') { renderComments(); renderViews(); } if (S.mode === 'eclate') renderMoves(); if (S.mode === 'coupe') renderPlanes(); saveLocal(); }
+function refreshAll() { applyDisplay(); renderTree(); renderBom(); renderCard(); renderSelbar(); renderCategories(); if (S.mode === 'percages') renderNets(); if (S.mode === 'notes') { renderComments(); renderViews(); } if (S.mode === 'coupe') renderPlanes(); saveLocal(); }
 
 function matches(id, term) {
   if (!term) return true;
@@ -585,14 +635,6 @@ function renderCategories() {
   }
 }
 
-// ---------------------------------------------------------------- panneau éclaté / ouverture
-function renderMoves() {
-  const box = $('op-list'); box.replaceChildren();
-  for (const m of S.moves) box.append(el('div', { class: 'row' }, el('span', { class: 'name' }, `${m.name} · ${m.ids.length} pièce(s) · ${m.sign > 0 ? '+' : '−'}${m.axis.toUpperCase()} ${m.course} mm`),
-    el('button', { class: 'eye', title: 'Sélectionner', onclick: () => select(m.ids) }, '◎'),
-    el('button', { class: 'eye', title: 'Supprimer', onclick: () => { S.moves = S.moves.filter(x => x !== m); refreshAll(); } }, '✕')));
-  if (!S.moves.length) box.append(el('p', { class: 'hint' }, 'Aucun groupe mobile défini.'));
-}
 
 // ---------------------------------------------------------------- panneau coupes
 function renderPlanes() {
@@ -675,26 +717,31 @@ function renderComments() {
   if (!S.comments.length) box.append(el('p', { class: 'hint' }, 'Aucun commentaire.'));
 }
 function viewState() {
-  return { camera: { position: camera.position.toArray(), target: controls.target.toArray() }, items: JSON.parse(JSON.stringify(S.items)), catOff: [...S.catOff], cuts: JSON.parse(JSON.stringify(S.cuts)), ex: { ...S.ex }, open: S.open, ghost: S.ghost, bubbles: S.bubbles, skelShow: S.skelShow, skelOnly: S.skelOnly, selNet: S.selNet, sel: [...S.sel] };
+  return { camera: { position: camera.position.toArray(), target: controls.target.toArray() }, items: JSON.parse(JSON.stringify(S.items)), catOff: [...S.catOff], cuts: JSON.parse(JSON.stringify(S.cuts)), ex: { ...S.ex }, hiddenFaces: JSON.parse(JSON.stringify(S.hiddenFaces)), ghost: S.ghost, bubbles: S.bubbles, skelShow: S.skelShow, skelOnly: S.skelOnly, selNet: S.selNet, sel: [...S.sel] };
 }
 function applyViewState(v) {
   pushHistory();
-  Object.assign(S.items, v.items); S.catOff = new Set(v.catOff ?? []); S.cuts = v.cuts; S.ex = v.ex; S.open = v.open ?? 0; S.ghost = !!v.ghost; S.bubbles = !!v.bubbles; S.skelShow = !!v.skelShow; S.skelOnly = !!v.skelOnly; S.selNet = v.selNet ?? null; S.sel = new Set((v.sel ?? []).filter(id => S.objs.has(id)));
+  Object.assign(S.items, v.items); S.catOff = new Set(v.catOff ?? []); S.cuts = v.cuts; S.ex = v.ex; S.hiddenFaces = v.hiddenFaces ?? {}; S.ghost = !!v.ghost; S.bubbles = !!v.bubbles; S.skelShow = !!v.skelShow; S.skelOnly = !!v.skelOnly; S.selNet = v.selNet ?? null; S.sel = new Set((v.sel ?? []).filter(id => S.objs.has(id)));
   computeExplodeVectors(); syncToggles();
   camera.position.fromArray(v.camera.position); controls.target.fromArray(v.camera.target); controls.update();
   refreshAll();
 }
 function renderViews() {
   const box = $('v-list'); box.replaceChildren();
-  for (const v of S.views) box.append(el('div', { class: 'row', onclick: () => applyViewState(v.state) }, el('span', { class: 'name' }, `👁 ${v.name}`), el('span', { class: 'hint' }, new Date(v.date).toLocaleDateString('fr-FR')),
-    el('button', { class: 'eye', title: 'Supprimer', onclick: e => { e.stopPropagation(); S.views = S.views.filter(x => x !== v); refreshAll(); } }, '✕')));
-  if (!S.views.length) box.append(el('p', { class: 'hint' }, 'Aucune vue mémorisée.'));
+  for (const v of S.views) box.append(el('div', { class: 'scene', onclick: () => applyViewState(v.state) },
+    v.thumb ? el('img', { src: v.thumb, alt: '' }) : el('div', { class: 'noimg' }, '👁'),
+    el('div', { class: 'scene-body' }, el('b', {}, v.name), el('span', { class: 'hint' }, new Date(v.date).toLocaleString('fr-FR')),
+      el('div', { class: 'scene-actions' },
+        el('button', { class: 'btn', title: 'Enregistrer en image PNG (contient la scène)', onclick: async e => { e.stopPropagation(); applyViewState(v.state); await new Promise(r => setTimeout(r, 60)); download(`${baseName()}_${v.name.replace(/[^\w\-]+/g, '_')}.png`, await scenePngBlob(v)); } }, 'PNG'),
+        el('button', { class: 'btn', title: 'Copier l\'image dans le presse-papiers', onclick: e => { e.stopPropagation(); copyScene(v); } }, 'Copier'),
+        el('button', { class: 'btn', title: 'Supprimer', onclick: e => { e.stopPropagation(); S.views = S.views.filter(x => x !== v); refreshAll(); } }, '✕')))));
+  if (!S.views.length) box.append(el('p', { class: 'hint' }, 'Aucune scène. Bouton « 📷 Scène » en bas de la vue 3D.'));
 }
 function syncToggles() {
   $('ghost-toggle').classList.toggle('on', S.ghost); $('bubbles-toggle').classList.toggle('on', S.bubbles); $('edges-toggle').classList.toggle('on', S.edges);
   $('skel-show').classList.toggle('on', S.skelShow); $('skel-only').classList.toggle('on', S.skelOnly);
   $('ex-amount').value = S.ex.amount; $('ex-val').textContent = `${Math.round(S.ex.amount)} %`; $('ex-dir').value = S.ex.dir; $('ex-scope').value = S.ex.scope;
-  $('op-amount').value = Math.round(S.open * 100); $('op-val').textContent = `${Math.round(S.open * 100)} %`;
+  $('faces-btn').classList.toggle('on', S.faceMode); $('labels-toggle').classList.toggle('on', S.drillLabels); $('fill-toggle').classList.toggle('on', S.fill.on);
   $('caps-toggle').classList.toggle('on', S.caps); $('planevis-toggle').classList.toggle('on', S.planeVis);
 }
 
@@ -704,7 +751,7 @@ let saveTimer;
 function projectData() {
   return { application: 'SDC Montage 3D', version: APP_VERSION, schema: 'sdc-montage3d-projet/2', fichier: S.fileName, empreinte_sha256: S.hash, date: new Date().toISOString(),
     occurrences: S.parts.map(p => ({ id: p.id, nom: p.name, signature: signature(p, S.stats.get(p.id)), repere: S.rowOf.get(p.id).repere })),
-    maxDrill: S.maxDrill, comments: S.comments, views: S.views, netClass: S.netClass, moves: S.moves, rowNotes: S.rowNotes, catOverride: S.catOverride, bubbleOff: S.bubbleOff, display: viewState() };
+    maxDrill: S.maxDrill, comments: S.comments, views: S.views, netClass: S.netClass, rowNotes: S.rowNotes, catOverride: S.catOverride, bubbleOff: S.bubbleOff, display: viewState() };
 }
 function saveLocal() { if (!S.loaded) return; clearTimeout(saveTimer); saveTimer = setTimeout(() => { try { localStorage.setItem(LS(), JSON.stringify(projectData())); } catch { /* stockage indisponible : le fichier projet reste possible */ } }, 400); }
 function restoreLocal() { try { const raw = localStorage.getItem(LS()); if (raw) { applyProject(JSON.parse(raw), true); toast('Annotations et vues de ce fichier restaurées.'); } } catch { /* rien */ } }
@@ -722,7 +769,6 @@ function applyProject(pr, silent = false) {
   S.comments = (pr.comments ?? []).map(c => ({ ...c, ids: c.ids.map(map).filter(Boolean) }));
   S.views = pr.empreinte_sha256 === S.hash ? (pr.views ?? []) : [];
   S.netClass = pr.empreinte_sha256 === S.hash ? (pr.netClass ?? {}) : {};
-  S.moves = (pr.moves ?? []).map(m => ({ ...m, ids: m.ids.map(map).filter(Boolean) }));
   S.rowNotes = pr.empreinte_sha256 === S.hash ? (pr.rowNotes ?? {}) : {};
   S.catOverride = Object.fromEntries(Object.entries(pr.catOverride ?? {}).map(([k, v]) => [map(k), v]).filter(([k]) => k));
   S.bubbleOff = pr.empreinte_sha256 === S.hash ? (pr.bubbleOff ?? {}) : {};
@@ -746,8 +792,9 @@ function exportDrill() {
   }
   download(`${baseName()}_percages.csv`, toCsv(header, rows), 'text/csv;charset=utf-8');
 }
-function snapshotPng() {
+function snapshotPng(maxW = 0) {
   renderer.render(scene, camera); drawOverlay();
+  if (maxW) { const w = renderer.domElement.width, h = renderer.domElement.height, k = Math.min(1, maxW / w), c = el('canvas'); c.width = w * k; c.height = h * k; const g = c.getContext('2d'); g.fillStyle = '#eef2f5'; g.fillRect(0, 0, c.width, c.height); g.drawImage(renderer.domElement, 0, 0, c.width, c.height); g.drawImage(overlay, 0, 0, c.width, c.height); return c.toDataURL('image/jpeg', 0.8); }
   const w = renderer.domElement.width, h = renderer.domElement.height, c = el('canvas'); c.width = w; c.height = h + 60;
   const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
   g.drawImage(renderer.domElement, 0, 0); g.drawImage(overlay, 0, 0, w, h);
@@ -755,7 +802,31 @@ function snapshotPng() {
   g.fillText(`SDC Montage 3D · ${S.fileName} · ${new Date().toLocaleString('fr-FR')} · vue de consultation, non contractuelle`, 16, h + 30);
   return c.toDataURL('image/png');
 }
-function exportPng() { fetch(snapshotPng()).then(r => r.blob()).then(b => download(`${baseName()}_capture.png`, b)); }
+const SCENE_KEY = 'sdc-montage3d-scene';
+async function scenePngBlob(sceneObj) {
+  const bytes = new Uint8Array(await (await fetch(snapshotPng())).arrayBuffer());
+  return new Blob([pngWithText(bytes, SCENE_KEY, JSON.stringify({ fichier: S.fileName, empreinte_sha256: S.hash, ...sceneObj }))], { type: 'image/png' });
+}
+// Toute capture PNG contient la scène : « Charger projet / scène » sur ce PNG restaure la vue (même STEP).
+async function exportPng() { await download(`${baseName()}_capture.png`, await scenePngBlob({ name: 'Capture', state: viewState() })); }
+function saveScene(name) {
+  const sc = { name: name || `Scène ${S.views.length + 1}`, date: new Date().toISOString(), state: viewState(), thumb: snapshotPng(320) };
+  S.views.push(sc); refreshAll(); toast(`« ${sc.name} » mémorisée (Notes & vues).`); return sc;
+}
+async function copyScene(sc) {
+  if (sc) applyViewState(sc.state);
+  await new Promise(r => setTimeout(r, 60));
+  const blob = await scenePngBlob(sc ?? { name: 'Copie', state: viewState() });
+  try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); toast('Image copiée : coller dans un mail, Word, Teams…'); }
+  catch { toast('Copie impossible dans ce navigateur : utiliser « PNG ».'); }
+}
+async function loadScenePng(file) {
+  const txt = pngText(await file.arrayBuffer(), SCENE_KEY);
+  if (!txt) throw new Error('ce PNG ne contient pas de scène SDC.');
+  const sc = JSON.parse(txt);
+  if (sc.empreinte_sha256 !== S.hash && !confirm(`Scène créée sur « ${sc.fichier} », différent du fichier ouvert. Les pièces peuvent ne pas correspondre. Appliquer quand même ?`)) return;
+  applyViewState(sc.state); S.views.push({ name: sc.name + ' (importée)', date: new Date().toISOString(), state: sc.state, thumb: snapshotPng(320) }); refreshAll(); toast(`Scène « ${sc.name} » restaurée.`);
+}
 function printReport() {
   const img = snapshotPng(), rep = $('print-report'); rep.replaceChildren();
   rep.append(el('h1', {}, `Rapport de consultation — ${S.fileName}`), el('div', {}, `Édité le ${new Date().toLocaleString('fr-FR')} · empreinte SHA-256 ${S.hash} · SDC Montage 3D ${APP_VERSION}`),
@@ -800,7 +871,7 @@ function wire() {
   for (const b of document.querySelectorAll('[data-view]')) b.onclick = () => setView(b.dataset.view);
   $('fit-all').onclick = () => fitBox(currentBounds());
   $('multi').onclick = () => { S.multi = !S.multi; $('multi').classList.toggle('on', S.multi); };
-  $('measure').onclick = () => { S.measure.on = !S.measure.on; S.measure.pts = []; drawMeasure(); $('measure').classList.toggle('on', S.measure.on); if (S.measure.on) toast('Mesure : toucher deux points sur les pièces. Valeur indicative.'); };
+  $('measure').onclick = () => { S.faceMode = false; syncToggles(); S.measure.on = !S.measure.on; S.measure.pts = []; drawMeasure(); $('measure').classList.toggle('on', S.measure.on); if (S.measure.on) toast('Mesure : toucher deux points sur les pièces. Valeur indicative.'); };
   $('undo').onclick = undo; $('redo').onclick = redo;
   $('s-fit').onclick = fitSelection; $('s-hide').onclick = hideSel; $('s-isolate').onclick = isolateSel; $('s-clear').onclick = clearSel;
   $('s-opacity').onpointerdown = () => pushHistory();
@@ -821,8 +892,6 @@ function wire() {
   let anim = null;
   const animateTo = target => { cancelAnimationFrame(anim); const from = S.ex.amount, t0 = performance.now(); const step = t => { const k = Math.min(1, (t - t0) / 1200), e = k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2; S.ex.amount = from + (target - from) * e; syncToggles(); applyDisplay(); if (k < 1) anim = requestAnimationFrame(step); }; anim = requestAnimationFrame(step); };
   $('ex-close').onclick = () => animateTo(0); $('ex-open').onclick = () => animateTo(100); $('ex-play').onclick = () => animateTo(S.ex.amount > 50 ? 0 : 100);
-  $('op-add').onclick = () => { if (!S.sel.size) return toast('Sélectionner d\'abord les pièces mobiles.'); S.moves.push({ name: `Groupe ${S.moves.length + 1}`, ids: [...S.sel], axis: $('op-axis').value, sign: +$('op-sign').value, course: Math.abs(+$('op-course').value || 0) }); refreshAll(); toast('Groupe mobile créé. Utiliser le curseur fermé → ouvert.'); };
-  $('op-amount').oninput = () => { S.open = +$('op-amount').value / 100; $('op-val').textContent = `${$('op-amount').value} %`; applyDisplay(); };
   // coupes
   $('caps-toggle').onclick = () => { S.caps = !S.caps; syncToggles(); applyDisplay(); };
   $('planevis-toggle').onclick = () => { S.planeVis = !S.planeVis; syncToggles(); applyDisplay(); };
@@ -842,10 +911,18 @@ function wire() {
     try { localStorage.setItem('sdc-montage3d:auteur', $('c-author').value.trim()); } catch { /* rien */ }
     $('c-text').value = ''; refreshAll(); toast('Commentaire ajouté.');
   };
-  $('v-save').onclick = () => { if (!S.loaded) return; S.views.push({ name: $('v-name').value.trim() || `Vue ${S.views.length + 1}`, date: new Date().toISOString(), state: viewState() }); $('v-name').value = ''; refreshAll(); toast('Vue mémorisée.'); };
+  $('v-save').onclick = () => { if (!S.loaded) return; saveScene($('v-name').value.trim()); $('v-name').value = ''; };
+  $('scene-btn').onclick = () => { if (!S.loaded) return; saveScene(); };
+  $('copy-btn').onclick = () => { if (S.loaded) copyScene(null); };
+  $('faces-btn').onclick = () => { S.faceMode = !S.faceMode; if (S.faceMode) { S.measure.on = false; $('measure').classList.remove('on'); toast('Toucher une face pour la retirer (logements, formes et perçages deviennent visibles). « Remettre les faces » pour annuler.', 6000); } syncToggles(); };
+  $('faces-reset').onclick = () => { pushHistory(); if (S.sel.size) for (const id of S.sel) delete S.hiddenFaces[id]; else S.hiddenFaces = {}; refreshAll(); };
+  $('labels-toggle').onclick = () => { S.drillLabels = !S.drillLabels; syncToggles(); };
+  $('fill-toggle').onclick = () => { S.fill.on = !S.fill.on; syncToggles(); applyDisplay(); };
+  $('fill-min').oninput = () => { S.fill.min = +$('fill-min').value || 0; applyDisplay(); };
+  $('fill-max').oninput = () => { S.fill.max = +$('fill-max').value || 0; applyDisplay(); };
   // projet / export
   $('save-project').onclick = () => { if (!S.loaded) return toast('Ouvrir d\'abord un assemblage.'); download(`${baseName()}_projet-sdc.json`, JSON.stringify(projectData(), null, 1), 'application/json'); };
-  $('load-project').onchange = async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; if (!S.loaded) return toast('Ouvrir d\'abord l\'assemblage STEP correspondant.'); try { applyProject(JSON.parse(await f.text())); refreshAll(); } catch (err) { toast('Projet illisible : ' + err.message); } };
+  $('load-project').onchange = async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; if (!S.loaded) return toast('Ouvrir d\'abord l\'assemblage STEP correspondant.'); try { if (/\.png$/i.test(f.name)) await loadScenePng(f); else { applyProject(JSON.parse(await f.text())); refreshAll(); } } catch (err) { toast('Fichier illisible : ' + err.message); } };
   $('export-btn').onclick = e => { e.stopPropagation(); $('export-menu').hidden = !$('export-menu').hidden; };
   document.addEventListener('click', () => { $('export-menu').hidden = true; });
   for (const b of document.querySelectorAll('[data-export]')) b.onclick = () => { if (!S.loaded) return toast('Ouvrir d\'abord un assemblage.'); ({ bom: exportBom, drill: exportDrill, png: exportPng, print: printReport })[b.dataset.export](); };
@@ -856,6 +933,7 @@ function wire() {
     const k = e.key.toLowerCase();
     if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); undo(); }
     else if ((e.ctrlKey || e.metaKey) && k === 'y') { e.preventDefault(); redo(); }
+    else if (k === 'escape' && S.faceMode) { S.faceMode = false; syncToggles(); }
     else if (k === 'h') hideSel(); else if (k === 'i') isolateSel(); else if (k === 'a' && !e.ctrlKey) showAll(); else if (k === 'f') fitSelection(); else if (k === 'escape') { clearSel(); S.selNet = null; refreshAll(); }
   });
 }

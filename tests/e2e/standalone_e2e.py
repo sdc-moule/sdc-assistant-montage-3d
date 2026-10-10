@@ -24,6 +24,7 @@ with sync_playwright() as p:
     # Version légère : le CDN est servi depuis node_modules (essai sans Internet, mêmes fichiers).
     dist = ROOT / "node_modules" / "occt-import-js" / "dist"
     pg.route("https://cdn.jsdelivr.net/npm/occt-import-js@*/dist/*", lambda r: r.fulfill(path=str(dist / r.request.url.rsplit("/", 1)[1]), headers={"Access-Control-Allow-Origin": "*"}))
+    pg.add_init_script("delete window.showSaveFilePicker")  # téléchargements directs pendant l'essai
     pg.goto(HTML.as_uri())
     pg.click("#demo2")
     pg.wait_for_function("window.__SDC__ && window.__SDC__.S.drill && document.getElementById('busy').hidden", timeout=120000)
@@ -58,6 +59,28 @@ with sync_playwright() as p:
     pg.click("#net-list .row.net >> nth=0")
     pg.screenshot(path=str(OUT / "4_circuits.png"))
     check(S("S.selNet") == "R1", "sélection d'un réseau")
+    # retirer une face (clic au centre de la vue sur une pièce) puis remettre
+    pg.click("#rail button[data-mode=explorer]"); pg.click("#skel-only") if S("S.skelOnly") else None
+    pg.evaluate("() => { const S = window.__SDC__.S; S.skelShow = false; }")
+    pg.click("[data-view=top]"); time.sleep(0.3)
+    pg.click("#faces-btn")
+    box = pg.locator("#viewport canvas").bounding_box()
+    pg.mouse.click(box["x"] + box["width"] * 0.3, box["y"] + box["height"] * 0.5); time.sleep(0.3)
+    check(sum(len(v) for v in S("S.hiddenFaces").values()) == 1, "retirer une face d'une pièce")
+    pg.screenshot(path=str(OUT / "5_face_retiree.png"))
+    pg.click("#faces-btn"); pg.click("#faces-reset")
+    check(sum(len(v) for v in S("S.hiddenFaces").values()) == 0, "remettre les faces")
+    # scène : mémoriser, exporter en PNG, recharger depuis le PNG
+    pg.click("#rail button[data-mode=eclate]"); pg.fill("#ex-amount", "60"); pg.dispatch_event("#ex-amount", "input")
+    pg.click("#scene-btn")
+    check(S("S.views.length") == 1 and S("S.views[0].state.ex.amount") == 60, "scène mémorisée avec l'éclaté")
+    with pg.expect_download() as d:
+        pg.click("#export-btn"); pg.click("[data-export=png]")
+    png = OUT / "scene.png"; d.value.save_as(png)
+    pg.fill("#ex-amount", "0"); pg.dispatch_event("#ex-amount", "input")
+    pg.set_input_files("#load-project", str(png)); time.sleep(0.5)
+    check(S("S.ex.amount") == 60, "scène restaurée depuis le PNG")
+    pg.fill("#ex-amount", "0"); pg.dispatch_event("#ex-amount", "input")
     # commentaire + persistance locale
     pg.click("#rail button[data-mode=notes]")
     pg.evaluate("() => window.__SDC__.select(['O006'])")

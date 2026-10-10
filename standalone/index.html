@@ -16,7 +16,7 @@
       <select id="quality" title="Finesse du maillage d'affichage (n'affecte pas le fichier)"><option value="rapide">Affichage rapide</option><option value="normale" selected>Affichage normal</option><option value="fine">Affichage fin</option></select>
       <span class="sep"></span>
       <button class="btn" id="save-project" title="Enregistrer commentaires, vues, classements (fichier projet JSON)">Enregistrer projet</button>
-      <label class="btn" title="Recharger un projet JSON">Charger projet<input id="load-project" type="file" accept=".json" hidden></label>
+      <label class="btn" title="Recharger un projet JSON ou une scène PNG">Charger projet / scène<input id="load-project" type="file" accept=".json,.png" hidden></label>
       <div class="menu"><button class="btn" id="export-btn">Exporter ▾</button>
         <div class="menu-list" id="export-menu" hidden>
           <button data-export="bom">Nomenclature (CSV Excel)</button>
@@ -43,7 +43,7 @@
       <div class="grid2">
         <button class="btn" id="show-all">Tout afficher</button>
         <button class="btn toggle" id="ghost-toggle" title="Rendre les pièces non sélectionnées presque transparentes">Fantôme autour</button>
-        <button class="btn toggle" id="edges-toggle">Arêtes</button>
+        <button class="btn toggle on" id="edges-toggle">Arêtes</button>
         <button class="btn toggle" id="bubbles-toggle">Repères (bulles)</button>
       </div>
       <label class="field">Couleurs<select id="color-mode"><option value="step">Couleurs du fichier</option><option value="repere">Une couleur par repère</option><option value="categorie">Par famille de pièce</option></select></label>
@@ -60,19 +60,13 @@
       <label class="field">Direction<select id="ex-dir"><option value="z">Empilage selon Z (plaques)</option><option value="radial">Écartement depuis le centre</option><option value="x">Selon X</option><option value="y">Selon Y</option></select></label>
       <label class="slider">Écartement <output id="ex-val">0 %</output><input id="ex-amount" type="range" min="0" max="100" value="0"></label>
       <div class="grid3"><button class="btn" id="ex-close">⏮ Fermé</button><button class="btn" id="ex-play">▶ Animer</button><button class="btn" id="ex-open">⏭ Éclaté</button></div>
-      <h3>Ouverture paramétrée</h3>
-      <p class="hint">Sélectionner les pièces mobiles, choisir l'axe et la course. Aucun contrôle mécanique n'est fait.</p>
-      <div class="grid3"><select id="op-axis"><option value="z">Z</option><option value="x">X</option><option value="y">Y</option></select><input id="op-course" type="number" value="100" step="5" title="Course (mm)"><select id="op-sign"><option value="1">+</option><option value="-1">−</option></select></div>
-      <button class="btn wide" id="op-add">Créer un groupe mobile avec la sélection</button>
-      <div id="op-list" class="list"></div>
-      <label class="slider">Fermé → ouvert <output id="op-val">0 %</output><input id="op-amount" type="range" min="0" max="100" value="0"></label>
     </section>
 
     <section data-panel="coupe" hidden>
       <h2>Coupes</h2>
       <p class="hint">Faire glisser pour balayer tout le volume. La coupe est visuelle (pas une section B-Rep exacte).</p>
       <div id="planes"></div>
-      <div class="grid2"><button class="btn toggle on" id="caps-toggle">Remplir la matière</button><button class="btn toggle on" id="planevis-toggle">Montrer le plan</button></div>
+      <div class="grid2"><button class="btn toggle on" id="caps-toggle">Remplir la matière</button><button class="btn toggle" id="planevis-toggle">Contour du plan</button></div>
       <button class="btn wide" id="cut-reset">Retirer toutes les coupes</button>
     </section>
 
@@ -80,6 +74,8 @@
       <h2>Perçages &amp; circuits</h2>
       <p class="hint">Détection des forages cylindriques et de leurs croisements. Classements <b>proposés</b> : à confirmer.</p>
       <div class="grid2"><button class="btn toggle" id="skel-only">Circuits seuls</button><button class="btn toggle on" id="skel-show">Afficher les circuits</button></div>
+      <div class="grid2"><button class="btn toggle on" id="fill-toggle" title="Forages représentés pleins (opaques) dans la plage de Ø">Forages pleins</button><button class="btn toggle" id="labels-toggle" title="Étiquettes P… Ø sur tous les perçages du réseau">Étiquettes Ø</button></div>
+      <div class="grid2"><label class="field">Pleins de Ø<input id="fill-min" type="number" value="3" step="0.5"></label><label class="field">à Ø<input id="fill-max" type="number" value="20" step="0.5"></label></div>
       <div class="filters">
         <label><input type="checkbox" id="f-circuit" checked> Circuits</label>
         <label><input type="checkbox" id="f-align"> Passages alignés</label>
@@ -100,8 +96,9 @@
       <textarea id="c-text" rows="3" placeholder="Commentaire en français"></textarea>
       <button class="btn wide primary" id="c-add">Ajouter le commentaire</button>
       <div id="c-list" class="list"></div>
-      <h3>Vues mémorisées</h3>
-      <div class="grid2"><input id="v-name" placeholder="Nom de la vue"><button class="btn" id="v-save">Mémoriser</button></div>
+      <h3>Scènes mémorisées</h3>
+      <p class="hint">Une scène garde caméra, éclaté, coupes, masquages, transparences, faces retirées et circuits. Le PNG enregistré contient la scène : le recharger par « Charger projet / scène ».</p>
+      <div class="grid2"><input id="v-name" placeholder="Nom de la scène"><button class="btn" id="v-save">Mémoriser</button></div>
       <div id="v-list" class="list"></div>
     </section>
   </aside>
@@ -123,12 +120,17 @@
       <button class="btn icon" data-view="top" title="Vue de dessus">Dessus</button>
       <button class="btn icon" data-view="front" title="Vue de face">Face</button>
       <button class="btn icon" data-view="right" title="Vue de droite">Droite</button>
-      <button class="btn icon" id="fit-all" title="Tout voir (F)">Tout voir</button>
+      <button class="btn icon" id="fit-all" title="Tout voir">⤢ Tout voir</button>
       <span class="sep"></span>
       <button class="btn icon toggle" id="multi" title="Sélection multiple (tablette)">Multi</button>
       <button class="btn icon toggle" id="measure" title="Mesure indicative entre deux points">Mesurer</button>
-      <button class="btn icon" id="undo" title="Annuler (Ctrl+Z)">↶</button>
-      <button class="btn icon" id="redo" title="Rétablir (Ctrl+Y)">↷</button>
+      <button class="btn icon toggle" id="faces-btn" title="Retirer une face d'une pièce pour voir l'intérieur">✂ Face</button>
+      <button class="btn icon" id="faces-reset" title="Remettre les faces retirées (de la sélection, ou toutes)">↺ Faces</button>
+      <span class="sep"></span>
+      <button class="btn icon" id="scene-btn" title="Mémoriser la scène (vue, éclaté, coupe…)">📷 Scène</button>
+      <button class="btn icon" id="copy-btn" title="Copier l'image de la vue dans le presse-papiers">⧉ Copier</button>
+      <button class="btn icon" id="undo" title="Annuler (Ctrl+Z)">↶ Annuler</button>
+      <button class="btn icon" id="redo" title="Rétablir (Ctrl+Y)">↷ Rétablir</button>
     </div>
 
     <div class="selbar" id="selbar" hidden>

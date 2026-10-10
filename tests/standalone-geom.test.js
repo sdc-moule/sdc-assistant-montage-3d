@@ -104,3 +104,18 @@ test('ZIP : extraction du STEP (deflate), identique à l\'original', async () =>
   assert.equal(z.name, 'BCR essai.step');
   assert.ok(Buffer.from(z.bytes).equals(fs.readFileSync(src)));
 });
+
+test('PNG : la scène intégrée (iTXt UTF-8) est relue à l\'identique', async () => {
+  const { pngWithText, pngText } = await import('../standalone/src/geom/png-meta.js');
+  const zlib = await import('node:zlib');
+  // PNG minimal 1×1 valide
+  const crc = b => { let c = ~0; for (const x of b) { c ^= x; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; } return ~c >>> 0; };
+  const chunk = (t, d) => { const b = Buffer.alloc(12 + d.length); b.writeUInt32BE(d.length); b.write(t, 4); d.copy(b, 8); b.writeUInt32BE(crc(Buffer.concat([Buffer.from(t), d])), 8 + d.length); return b; };
+  const ihdr = Buffer.from([0, 0, 0, 1, 0, 0, 0, 1, 8, 2, 0, 0, 0]);
+  const png = Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(Buffer.from([0, 255, 0, 0]))), chunk('IEND', Buffer.alloc(0))]);
+  const txt = JSON.stringify({ name: 'Coupe collecteur éclaté', cuts: { y: 12.5 } });
+  const out = pngWithText(png, 'sdc-montage3d-scene', txt);
+  assert.equal(pngText(out, 'sdc-montage3d-scene'), txt);
+  assert.equal(pngText(png, 'sdc-montage3d-scene'), null);
+  assert.deepEqual([...out.subarray(-12, -8)], [0, 0, 0, 0]); // IEND reste le dernier chunk
+});
