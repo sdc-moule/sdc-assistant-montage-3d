@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0",
+  "units": "mm",
+  "assembly_id": "demo-synthetique-v1",
+  "source_sha256": "demo-sans-step",
+  "status": "WIP",
+  "warning": "Démonstration synthétique : trois blocs fictifs, sans validation de conception de moule.",
+  "occurrences": [
+    {"id":"demo-base","name":"Bloc inférieur fictif","reference":null,"reference_confirmed":false,"dimensions_mm":[180,120,25],"dimension_frame":"assemblage","volume_mm3":540000,"position_mm":[0,0,0],"color":"#547b99","status":"DEMO"},
+    {"id":"demo-middle","name":"Bloc intermédiaire fictif","reference":null,"reference_confirmed":false,"dimensions_mm":[160,100,20],"dimension_frame":"assemblage","volume_mm3":320000,"position_mm":[0,0,22.5],"color":"#ccaa70","status":"DEMO"},
+    {"id":"demo-top","name":"Bloc supérieur fictif","reference":null,"reference_confirmed":false,"dimensions_mm":[180,120,25],"dimension_frame":"assemblage","volume_mm3":540000,"position_mm":[0,0,45],"color":"#8aa8b8","status":"DEMO"}
+  ]
+}

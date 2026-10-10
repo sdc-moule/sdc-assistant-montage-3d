@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sdc-moule.github.io/sdc-assistant-montage-3d/schemas/assembly.schema.json",
+  "title": "Assemblage de consultation SDC 1.0",
+  "type": "object",
+  "required": ["schema_version", "units", "assembly_id", "source_sha256", "occurrences"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "units": {"const": "mm"},
+    "assembly_id": {"type": "string", "minLength": 1},
+    "source_sha256": {"type": "string", "minLength": 1},
+    "status": {"enum": ["WIP", "REVIEW", "BLOCKED", "APPROVED"]},
+    "occurrences": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "dimensions_mm", "dimension_frame", "reference_confirmed"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "name": {"type": "string"},
+          "reference": {"type": ["string", "null"]},
+          "reference_confirmed": {"type": "boolean"},
+          "dimensions_mm": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "number", "minimum": 0}},
+          "dimension_frame": {"enum": ["piece", "assemblage"]},
+          "volume_mm3": {"type": ["number", "null"], "minimum": 0},
+          "status": {"type": "string"}
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,13 @@
+# Contrat d’échange 1.0
+
+`assembly.json` : schema_version `1.0`, units `mm`, assembly_id, source_sha256, occurrences. Chaque occurrence porte un id unique, un name, une reference nullable, reference_confirmed, dimensions_mm `[X,Y,Z]`, dimension_frame explicite, volume_mm3 et status. Le champ warning décrit les limites d’import. Les JSON Schemas se trouvent dans schemas ; le frontend effectue aussi ses propres vérifications minimales.
+
+`assembly.glb` : un maillage nommé par occurrence. Les sommets sont en mm dans le repère assemblage pour le convertisseur actuel. Pas d’URI externe. Un même STEP inchangé conserve SHA-256, ordre et ids ; un changement de source bloque la restauration, plutôt que de reporter silencieusement les annotations.
+
+`projet-sdc.json` : assembly_id, source_sha256, occurrence_ids, camera (position, target), display (explode, section, sectionPosition, inverse, items). Chaque item enregistre visible, opacity et comment. Le projet ne contient pas le maillage. Version initiale : une seule vue ; pas encore de correspondance après réimport d’un STEP modifié.
+
+Le convertisseur 0.2.0 ajoute tree (groupes et occurrences, parent_id), freecad_name, placement_matrix et les contrôles brep_valid/strict_bop. Une anomalie BOP sur une géométrie BRep valide est signalée REVIEW. Les positions GLB sont déjà transformées dans le repère assemblage ; placement_matrix est une information de traçabilité, pas une deuxième transformation à appliquer.
+
+La nomenclature numérote selon l’ordre des occurrences. Une référence confirmée regroupe les occurrences et cumule la quantité. Les références non confirmées ne fusionnent jamais. Aucun numéro n’est une référence industrielle automatiquement validée.
+
+API locale : GET /api/environment (disponibilité et jeton), POST /api/import-step?name=... (contenu STEP brut), GET /api/jobs/{id} (queued/converting/ready/failed), GET /api/projects (bibliothèque), GET /api/projects/{id}/assembly.json ou assembly.glb. Les écritures exigent Origin local et X-SDC-Token ; id est un UUID hexadécimal. Le nom utilisateur ne sert jamais de chemin système. job.json, la source copiée et les résultats restent dans le dossier d’import local.

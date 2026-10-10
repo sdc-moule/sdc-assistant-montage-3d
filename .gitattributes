@@ -1,0 +1,11 @@
+* text=auto
+*.bat text eol=crlf
+*.py text eol=lf
+*.js text eol=lf
+*.cs text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.zip -text
+*.jpg -text
+# Conserver exactement les documents de spécification fournis.
+docs/specifications/* -text whitespace=-blank-at-eol

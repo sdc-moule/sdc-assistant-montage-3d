@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="fr">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SDC · Assistant Montage 3D</title></head>
+<body>
+<header><strong>SDC · Assistant Montage 3D</strong><span>Version 0.2.0 · consultation STEP</span></header>
+<main>
+<aside>
+  <h1>Assemblage</h1>
+  <label>Fichier STEP / STP<input id="step" type="file" accept=".step,.stp"></label>
+  <button id="open-step">Ouvrir le STEP</button>
+  <progress id="import-progress" hidden></progress>
+  <p id="environment" role="status">Connexion au moteur STEP…</p>
+  <label>Assemblages récemment importés<select id="recent"><option value="">Choisir un assemblage</option></select></label>
+  <button id="open-recent">Réouvrir l’assemblage</button>
+  <details><summary>Autres possibilités d’ouverture</summary>
+  <button id="demo">Charger la démonstration</button>
+  <label>Maillage GLB<input id="glb" type="file" accept=".glb"></label>
+  <label>Métadonnées JSON<input id="metadata" type="file" accept=".json"></label>
+  <button id="import">Ouvrir GLB + JSON</button>
+  </details>
+  <p id="status" role="status"></p>
+  <label>Rechercher<input id="search" type="search" placeholder="Repère, référence, dimensions…"></label>
+  <div id="tree" aria-label="Liste des occurrences"></div>
+  <h2>Affichage de la sélection</h2>
+  <div class="buttons"><button id="hide">Masquer</button><button id="isolate">Isoler</button><button id="show">Tout afficher</button><button id="fit">Cadrer</button></div>
+  <label>Opacité <input id="opacity" type="range" min="0" max="100" value="100"></label>
+  <h2>Éclaté visuel</h2>
+  <label>Amplitude provisoire <input id="explode" type="range" min="0" max="100" value="0"></label>
+  <h2>Coupe visuelle</h2>
+  <label>Plan<select id="section"><option value="">Désactivé</option><option>XZ</option><option>YZ</option><option>XY</option></select></label>
+  <label>Position<input id="section-position" type="range" min="0" max="100" value="50"></label>
+  <label class="check"><input id="inverse" type="checkbox">Inverser le côté visible</label>
+  <h2>Commentaire de la sélection</h2>
+  <textarea id="comment" rows="3" placeholder="Observation en français"></textarea><button id="annotate">Enregistrer le commentaire</button>
+  <h2>Projet de consultation</h2>
+  <button id="save">Télécharger le projet JSON</button>
+  <label>Restaurer un projet<input id="project" type="file" accept=".json"></label>
+  <div class="buttons"><button id="csv">Nomenclature CSV</button><button id="print">Imprimer / PDF</button></div>
+</aside>
+<section class="workbench"><div id="viewport" aria-label="Vue 3D"></div><div id="details">Ouvrir un STEP pour consulter ses composants.</div>
+<div class="bom"><h2>Nomenclature provisoire</h2><table><thead><tr><th>Repère</th><th>Désignation</th><th>Référence</th><th>Qté</th><th>X × Y × Z (mm)</th><th>Statut</th></tr></thead><tbody id="bom"></tbody></table></div>
+</section>
+</main>
+<footer>Le STEP source reste inchangé. Dimensions d’encombrement ; éclaté provisoire ; coupe graphique sans section B-Rep exacte.</footer>
+<script type="module" src="/frontend/src/main.js"></script>
+</body></html>

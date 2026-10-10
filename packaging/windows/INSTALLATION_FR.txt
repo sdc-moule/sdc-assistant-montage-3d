@@ -1,0 +1,67 @@
+SDC ASSISTANT MONTAGE 3D - VERSION 0.2.0
+
+INSTALLER SUR UN PC WINDOWS 10/11 DE L'ATELIER
+
+1. Extraire entierement le ZIP Installation_Atelier_SDC_v0_2_0.
+2. Double-cliquer sur Install.exe puis confirmer l'installation.
+3. FreeCAD est detecte s'il est deja installe. Sinon, accepter son
+   telechargement officiel et terminer son installation Windows.
+4. Lancer le raccourci SDC Assistant Montage 3D du bureau.
+5. Choisir un fichier .step ou .stp puis cliquer Ouvrir le STEP.
+
+Le lanceur, le convertisseur Python et le visualisateur sont inclus.
+FreeCAD fournit Python et OpenCascade : aucun pip, Node.js, npm,
+pythonocc ou OCP supplementaire n'est necessaire sur le PC atelier.
+Internet n'est necessaire que pour installer FreeCAD s'il est absent.
+Le bouton Installer_FreeCAD.exe reutilise toute installation deja detectee.
+Il telecharge la version Windows x64 officielle depuis FreeCAD/FreeCAD,
+verifie l'empreinte SHA-256 de la publication, puis lance son installateur.
+Des droits administrateur peuvent etre demandes par l'installateur FreeCAD.
+Navigateur requis : Chrome ou Edge recent avec WebGL2.
+
+MODE PORTABLE
+
+Sans installer SDC : lancer Portable\Demarrer_SDC.bat.
+FreeCAD doit etre present sur ce PC pour l'ouverture STEP.
+Le dossier complet doit rester ensemble : EXE, backend et app.
+Pour FreeCAD portable ou un chemin non detecte, choisir son bin\python.exe
+dans la configuration du lanceur (icone SDC pres de l'horloge).
+
+UTILISATION
+
+L'application s'ouvre sur http://127.0.0.1:18740/.
+Choisir le STEP ; la conversion locale peut prendre plusieurs minutes
+selon sa taille. Attendre la fin avant d'importer un autre fichier.
+La taille maximale d'un fichier est 512 Mo ; conversion limitee a 30 minutes.
+Les sources importees et les maillages convertis sont conserves dans :
+%LOCALAPPDATA%\SDC\Montage3DData\projects
+Le STEP original selectionne n'est jamais reecrit.
+La liste des assemblages importes permet de les rouvrir sans reconversion.
+Telecharger le projet JSON pour conserver commentaires et etat d'affichage.
+Les identifications et regroupements industriels restent a confirmer.
+
+ARRET / MISE A JOUR
+
+Pour quitter : icone SDC pres de l'horloge, clic droit, Quitter SDC.
+Fermer seulement le navigateur laisse le serveur actif.
+Quitter SDC avant de lancer une mise a jour avec Install.exe.
+Une conversion en cours est interrompue a la fermeture ; la source est intacte.
+Installation SDC : %LOCALAPPDATA%\SDC\AssistantMontage3D
+Les imports sont dans le dossier de donnees distinct, conserve aux mises a jour.
+
+DESINSTALLATION
+
+Quitter SDC, supprimer le dossier AssistantMontage3D et le raccourci du bureau.
+Ne supprimer Montage3DData que si ses imports ne sont plus utiles.
+FreeCAD et les projets JSON telecharges ne sont pas desinstalles par cette action.
+
+LIMITES
+
+Consultation STEP fonctionnelle ; reception sur les moules et BCR de l'atelier
+encore necessaire. Couleurs de presentation ; references a confirmer.
+Une piece a plusieurs solides est decomposee avec une alerte.
+Une anomalie BOP stricte reste visible en REVIEW si le BRep est valide.
+Un BRep invalide arrete la conversion sans reparation automatique.
+Pas de controle de collisions, tolerances ou autorisation de fabrication.
+Les executables SDC ne sont pas signes numeriquement ; respecter la politique
+du service informatique sans desactiver les protections Windows.
