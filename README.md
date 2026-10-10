@@ -37,11 +37,15 @@ Le serveur écoute exclusivement sur `http://127.0.0.1:18740/`. Aucun accès LAN
 | Repérage | Repères provisoires uniques, pas de fusion automatique de références incertaines |
 | Consultation | Sélection synchronisée, recherche, orbite/panoramique/zoom/cadrage, masquage/isolation/opacité |
 | Sous-ensembles | Liste des groupes importés et isolation de leurs occurrences |
-| Éclaté et coupes | Éclaté global provisoire, clipping XZ/YZ/XY, inversion, combinaison coupe/éclaté |
+| Éclaté et coupes | Éclaté global provisoire, clipping XZ/YZ/XY, inversion, combinaison coupe/éclaté ; pièces coupées remplies, hachures atténuées (réglables), contour de coupe renforcé |
+| Cotation | Deux faces, deux axes, face + axe (distance, ou angle si non parallèles), cylindre / arc / sphère (Ø ou R, bascule possible). Cotes conservées, masquables une à une ou toutes, enregistrées dans le projet |
+| Interface | Menu ancré à largeur réglable, ou détaché (déplaçable, redimensionnable) ; sections et liste d’occurrences repliables |
 | Persistance | Bibliothèque d’imports locale, projet JSON téléchargé, restauration sur même source |
 | Documentation | Commentaires, CSV, impression navigateur/PDF |
 
-À compléter selon le cahier des charges : bulles à flèche, import de nomenclature externe, confirmation/modification de références dans l’interface, couleurs STEP natives, ouverture paramétrée, vecteurs d’éclaté éditables, multisélection, annuler/rétablir, vues nommées multiples, mesure indicative, mode BCR classé, XLSX et PNG/PDF dédiés. La [feuille de route](docs/roadmap.md) conserve ces écarts explicites.
+À compléter selon le cahier des charges : bulles à flèche, import de nomenclature externe, confirmation/modification de références dans l’interface, couleurs STEP natives, ouverture paramétrée, vecteurs d’éclaté éditables, multisélection, annuler/rétablir, vues nommées multiples, cotation fonctionnelle (tolérances, chaînes de cotes), mode BCR classé, XLSX et PNG/PDF dédiés. La [feuille de route](docs/roadmap.md) conserve ces écarts explicites.
+
+La **cotation** lit le maillage d’affichage : plans, cylindres et sphères sont reconnus par ajustement sur les sommets (rayons et distances exacts au bruit numérique près, mais valeurs **indicatives**, à contrôler sur le STEP). Les cotes entre deux occurrences sont masquées pendant l’éclaté. Le remplissage de coupe suppose des solides fermés.
 
 Les dimensions sont des encombrements dans le **repère assemblage**, pas des cotes fonctionnelles. Les couleurs servent à la présentation. Un composant contenant plusieurs solides est séparé avec une alerte ; un arbre absent du STEP ne peut pas être inventé. Les instances ou assemblages complexes sous forme de liens demandent une réception sur les fichiers concernés.
 

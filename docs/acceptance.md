@@ -17,6 +17,8 @@ Statut : WIP, essais sur données industrielles à réaliser. Aucun STEP client 
 | Arbre et instances STEP | Toutes les occurrences sans double comptage | Groupes et répétitions synthétiques testés ; liens complexes à réceptionner |
 | Nomenclature associée | Références et quantités rapprochées | Non implémenté |
 | Source inchangée | SHA-256 avant/après identique | Vérifié par le convertisseur |
+| Cotation (plans, axes, cylindres, rayons) | Valeurs identiques aux cotes du STEP/FreeCAD sur un moule réel | Tests synthétiques et essai navigateur ; à réceptionner sur STEP réel (découpage en faces du convertisseur FreeCAD supposé) |
+| Coupe | Remplissage, hachures atténuées, contours nets | Essai navigateur sur solides synthétiques ; pièces non fermées à vérifier |
 | Impression | Vue + tableau, sans commandes | Essai navigateur requis |
 
 Documenter pour chaque STEP : empreinte, version FreeCAD/OCCT, nombres de solides et occurrences, volumes, boîtes englobantes, erreurs BRep/BOP, capture et décision humaine. Les tests automatiques sans FreeCAD ne remplacent pas ces essais.

@@ -1,1 +1,104 @@
-:root{font-family:Segoe UI,Arial,sans-serif;color:#173048;background:#eef2f6;font-size:14px}*{box-sizing:border-box}body{margin:0}header{background:#163149;color:white;padding:18px 24px;display:flex;justify-content:space-between;gap:15px}header span{color:#bfd1dd}main{display:grid;grid-template-columns:300px 1fr;min-height:85vh}aside{background:white;padding:18px;border-right:1px solid #ccd6de;overflow:auto;max-height:89vh}h1{font-size:21px;margin-top:0}h2{font-size:15px;margin:18px 0 10px}label{display:block;margin:12px 0}input:not([type=checkbox]),select,textarea{width:100%;margin-top:6px}input[type=search],select,textarea{padding:8px;border:1px solid #bccbd5;border-radius:5px}button{cursor:pointer;padding:8px 10px;border:1px solid #bbcbd5;border-radius:5px;background:#f5f8fa;color:#173048;margin:3px 0}button:hover{background:#dfecf4}button.selected,tr.selected{background:#cce7f8}.buttons{display:flex;gap:5px;flex-wrap:wrap}#tree button{display:block;width:100%;text-align:left}#status{font-size:12px;color:#945017;white-space:pre-wrap}.workbench{min-width:0;padding:14px}#viewport{height:54vh;min-height:280px;background:#e0e8ef;border-radius:8px;overflow:hidden}canvas{display:block}#details{padding:12px;background:white;margin:10px 0;border-radius:6px;white-space:pre-wrap}.bom{overflow:auto;background:white;padding:12px;border-radius:6px}table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;padding:9px;border-bottom:1px solid #dbe3e9}tbody tr{cursor:pointer}footer{padding:14px 24px;font-size:12px}.check{display:flex;gap:8px}@media(max-width:800px){main{grid-template-columns:1fr}aside{max-height:none}header{flex-direction:column}#viewport{height:50vh}}@media print{header{background:white;color:black}aside,footer{display:none}main{display:block}.workbench{padding:0}#viewport{height:110mm}.bom{overflow:visible}tr{break-inside:avoid}header span{color:#333}}
+:root{font-family:Segoe UI,Arial,sans-serif;color:#173048;background:#eef2f6;font-size:14px}
+*{box-sizing:border-box}
+body{margin:0}
+header{background:#163149;color:white;padding:18px 24px;display:flex;justify-content:space-between;gap:15px}
+header span{color:#bfd1dd}
+h1{font-size:21px;margin-top:0}
+h2{font-size:15px;margin:18px 0 10px}
+label{display:block;margin:12px 0}
+input:not([type=checkbox]),select,textarea{width:100%;margin-top:6px}
+input[type=search],select,textarea{padding:8px;border:1px solid #bccbd5;border-radius:5px}
+button{cursor:pointer;padding:8px 10px;border:1px solid #bbcbd5;border-radius:5px;background:#f5f8fa;color:#173048;margin:3px 0}
+button:hover{background:#dfecf4}
+button.selected,tr.selected{background:#cce7f8}
+button[aria-pressed=true]{background:#d9480f;border-color:#b53a08;color:white}
+.buttons{display:flex;gap:5px;flex-wrap:wrap}
+#status{font-size:12px;color:#945017;white-space:pre-wrap}
+.check{display:flex;gap:8px}
+footer{padding:14px 24px;font-size:12px}
+.hint{font-size:12px;color:#4d6577;margin:6px 0}
+
+/* Disposition : menu | poignée | zone de travail */
+main{display:grid;grid-template-columns:var(--menu-w,320px) 8px minmax(0,1fr);min-height:85vh}
+main.menu-floating{grid-template-columns:minmax(0,1fr)}
+aside{background:white;border-right:1px solid #ccd6de;display:flex;flex-direction:column;min-width:0;max-height:89vh;position:relative}
+.menu-body{overflow:auto;padding:12px 18px 18px;flex:1;min-height:0}
+.menu-bar{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#163149;color:white;cursor:grab;user-select:none;touch-action:none;flex:none}
+.menu-bar:active{cursor:grabbing}
+.menu-bar .grip{opacity:.7;font-size:18px;line-height:1}
+.menu-bar strong{flex:1}
+.menu-bar button{margin:0;padding:4px 8px;font-size:12px;background:#27506f;border-color:#3d6a8c;color:white}
+.menu-bar button:hover{background:#356b92}
+aside.collapsed .menu-body,aside.collapsed .edge{display:none}
+main:not(.menu-floating) aside.collapsed .menu-bar{flex-direction:column;height:100%;padding:8px 4px;gap:10px}
+main:not(.menu-floating) aside.collapsed .menu-bar strong,main:not(.menu-floating) aside.collapsed #menu-float{display:none}
+aside.floating{position:fixed;z-index:60;max-height:none;border:1px solid #6f8ea4;border-radius:8px;box-shadow:0 12px 36px rgba(8,28,46,.38);overflow:hidden}
+aside.floating .menu-bar{border-radius:7px 7px 0 0}
+aside.floating.collapsed .menu-bar{border-radius:7px}
+.edge{position:absolute;z-index:2;touch-action:none}
+.edge-r{top:0;right:-3px;bottom:0;width:8px;cursor:ew-resize}
+.edge-b{left:0;right:0;bottom:-3px;height:8px;cursor:ns-resize}
+.corner{right:-3px;bottom:-3px;width:16px;height:16px;cursor:nwse-resize;background:linear-gradient(135deg,transparent 50%,#6f8ea4 50% 58%,transparent 58% 72%,#6f8ea4 72% 80%,transparent 80%)}
+main:not(.menu-floating) .edge{display:none}
+.splitter{cursor:col-resize;background:#d7e0e7;touch-action:none;position:relative}
+.splitter::after{content:"";position:absolute;left:2px;right:2px;top:50%;height:44px;margin-top:-22px;border-radius:3px;background:repeating-linear-gradient(#7e97a9 0 2px,transparent 2px 5px)}
+.splitter:hover,.splitter:focus-visible{background:#b8cbd9;outline:none}
+.splitter[hidden]{display:none}
+
+/* Liste arborescente réductible */
+.tree-wrap{margin:10px 0}
+.tree-head{display:flex;justify-content:space-between;align-items:center;font-weight:600}
+.tree-head button{margin:0;padding:2px 8px}
+#tree{height:var(--tree-h,190px);overflow:auto;border:1px solid #d3dde5;border-radius:5px;padding:2px;background:#fbfdfe}
+.tree-wrap.closed #tree{display:none}
+#tree button{display:block;width:100%;text-align:left}
+.row-handle{height:10px;cursor:ns-resize;touch-action:none;position:relative}
+.row-handle::after{content:"";position:absolute;left:calc(50% - 22px);width:44px;top:3px;height:4px;border-radius:2px;background:#9fb4c4}
+.row-handle:hover::after,.row-handle:focus-visible::after{background:#4f7a99}
+.row-handle:focus-visible{outline:none}
+
+/* Sections repliables */
+details.section{border-top:1px solid #dbe3e9;margin-top:12px;padding-top:4px}
+details>summary{cursor:pointer;font-weight:600;font-size:15px;padding:6px 0}
+
+/* Vue 3D, cotes et outils */
+.workbench{min-width:0;padding:14px}
+#viewport{height:54vh;min-height:280px;background:#e0e8ef;border-radius:8px;overflow:hidden;position:relative}
+canvas{display:block}
+.labels{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.dim-label{position:absolute;left:0;top:0;white-space:nowrap;pointer-events:auto;cursor:pointer;background:rgba(255,255,255,.94);border:1px solid #d9480f;color:#7c2d12;font-weight:600;font-size:12px;padding:1px 7px;border-radius:10px;user-select:none;will-change:transform}
+.dim-label[hidden]{display:none}
+.viewport-tools{position:absolute;top:8px;left:8px;display:flex;gap:6px;flex-wrap:wrap}
+.viewport-tools button{margin:0;padding:5px 10px;background:rgba(255,255,255,.92);box-shadow:0 1px 4px rgba(8,28,46,.25)}
+.viewport-tools button[aria-pressed=true]{background:#d9480f}
+.viewport-tools button.off{opacity:.7;text-decoration:line-through}
+.dim-hint{position:absolute;left:8px;right:8px;bottom:8px;padding:6px 10px;border-radius:6px;background:rgba(22,49,73,.9);color:white;font-size:12px;pointer-events:none}
+#viewport.measuring canvas{cursor:crosshair}
+#dim-list{margin:8px 0}
+.dim-row{display:flex;align-items:center;gap:4px;padding:3px 0;border-bottom:1px solid #eef2f6}
+.dim-row .dim-text{flex:1;min-width:0;overflow-wrap:anywhere}
+.dim-row.is-hidden .dim-text{color:#8aa0b0;text-decoration:line-through}
+.dim-row button{margin:0;padding:2px 7px}
+#details{padding:12px;background:white;margin:10px 0;border-radius:6px;white-space:pre-wrap}
+.bom{overflow:auto;background:white;padding:12px;border-radius:6px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+td,th{text-align:left;padding:9px;border-bottom:1px solid #dbe3e9}
+tbody tr{cursor:pointer}
+
+@media(max-width:800px){
+  main{grid-template-columns:1fr}
+  .splitter{display:none}
+  aside:not(.floating){max-height:none}
+  header{flex-direction:column}
+  #viewport{height:50vh}
+}
+@media print{
+  header{background:white;color:black}
+  aside,footer,.splitter,.viewport-tools,.dim-hint{display:none}
+  main{display:block}
+  .workbench{padding:0}
+  #viewport{height:110mm}
+  .bom{overflow:visible}
+  tr{break-inside:avoid}
+  header span{color:#333}
+}

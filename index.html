@@ -3,8 +3,11 @@
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SDC · Assistant Montage 3D</title></head>
 <body>
 <header><strong>SDC · Assistant Montage 3D</strong><span>Version 0.2.0 · consultation STEP</span></header>
-<main>
-<aside>
+<main id="layout">
+<aside id="menu" aria-label="Menu">
+  <div id="menu-bar" class="menu-bar" title="Glisser pour détacher et déplacer le menu · double-clic : détacher / ancrer"><span class="grip" aria-hidden="true">⠿</span><strong>Menu</strong>
+    <button id="menu-float" type="button">⧉ Détacher</button><button id="menu-collapse" type="button" aria-expanded="true">«</button></div>
+  <div id="menu-body" class="menu-body">
   <h1>Assemblage</h1>
   <label>Fichier STEP / STP<input id="step" type="file" accept=".step,.stp"></label>
   <button id="open-step">Ouvrir le STEP</button>
@@ -20,27 +23,58 @@
   </details>
   <p id="status" role="status"></p>
   <label>Rechercher<input id="search" type="search" placeholder="Repère, référence, dimensions…"></label>
-  <div id="tree" aria-label="Liste des occurrences"></div>
-  <h2>Affichage de la sélection</h2>
+  <div id="tree-wrap" class="tree-wrap">
+    <div class="tree-head"><span>Occurrences</span><button id="tree-toggle" type="button" aria-expanded="true" title="Réduire / déployer la liste">▾</button></div>
+    <div id="tree" aria-label="Liste des occurrences"></div>
+    <div id="tree-resize" class="row-handle" role="separator" aria-orientation="horizontal" aria-label="Hauteur de la liste" tabindex="0" title="Glisser pour réduire ou agrandir la liste · double-clic : replier"></div>
+  </div>
+  <details class="section" open><summary>Affichage de la sélection</summary>
   <div class="buttons"><button id="hide">Masquer</button><button id="isolate">Isoler</button><button id="show">Tout afficher</button><button id="fit">Cadrer</button></div>
   <label>Opacité <input id="opacity" type="range" min="0" max="100" value="100"></label>
-  <h2>Éclaté visuel</h2>
+  </details>
+  <details class="section" open id="dim-section"><summary>Cotation</summary>
+  <p class="hint">Deux faces, deux axes, face + axe : distance (ou angle si non parallèles). Un cylindre ou un rayon : Ø ou R.</p>
+  <div class="buttons"><button id="dim-pair" type="button" aria-pressed="false">Distance / angle</button><button id="dim-round" type="button" aria-pressed="false">Ø / R</button></div>
+  <div id="dim-list" aria-label="Cotes"></div>
+  <div class="buttons"><button id="dim-toggle-all" type="button">Masquer les cotes</button><button id="dim-clear" type="button">Tout effacer</button></div>
+  <p class="hint">Cotes indicatives mesurées sur le maillage d’affichage : à contrôler sur le STEP avant tout usage en fabrication.</p>
+  </details>
+  <details class="section" open><summary>Éclaté visuel</summary>
   <label>Amplitude provisoire <input id="explode" type="range" min="0" max="100" value="0"></label>
-  <h2>Coupe visuelle</h2>
+  </details>
+  <details class="section" open><summary>Coupe visuelle</summary>
   <label>Plan<select id="section"><option value="">Désactivé</option><option>XZ</option><option>YZ</option><option>XY</option></select></label>
   <label>Position<input id="section-position" type="range" min="0" max="100" value="50"></label>
   <label class="check"><input id="inverse" type="checkbox">Inverser le côté visible</label>
-  <h2>Commentaire de la sélection</h2>
+  <label>Intensité des hachures <input id="hatch" type="range" min="0" max="100" value="25"></label>
+  </details>
+  <details class="section" open><summary>Commentaire de la sélection</summary>
   <textarea id="comment" rows="3" placeholder="Observation en français"></textarea><button id="annotate">Enregistrer le commentaire</button>
-  <h2>Projet de consultation</h2>
+  </details>
+  <details class="section" open><summary>Projet de consultation</summary>
   <button id="save">Télécharger le projet JSON</button>
   <label>Restaurer un projet<input id="project" type="file" accept=".json"></label>
   <div class="buttons"><button id="csv">Nomenclature CSV</button><button id="print">Imprimer / PDF</button></div>
+  </details>
+  </div>
+  <div id="menu-resize-r" class="edge edge-r" title="Redimensionner"></div>
+  <div id="menu-resize-b" class="edge edge-b" title="Redimensionner"></div>
+  <div id="menu-resize" class="edge corner" title="Redimensionner"></div>
 </aside>
-<section class="workbench"><div id="viewport" aria-label="Vue 3D"></div><div id="details">Ouvrir un STEP pour consulter ses composants.</div>
+<div id="splitter" class="splitter" role="separator" aria-orientation="vertical" aria-label="Largeur du menu" aria-valuemin="200" aria-valuemax="720" tabindex="0" title="Glisser pour réduire ou élargir le menu · double-clic : réduire"></div>
+<section class="workbench"><div id="viewport" aria-label="Vue 3D">
+  <div id="labels" class="labels" aria-hidden="true"></div>
+  <div id="viewport-tools" class="viewport-tools">
+    <button id="menu-toggle-tools" type="button" title="Réduire / déployer le menu">☰ Menu</button>
+    <button id="tool-pair" type="button" aria-pressed="false" title="Cliquer deux éléments : faces, axes ou face + axe">Distance</button>
+    <button id="tool-round" type="button" aria-pressed="false" title="Cliquer un cylindre ou un rayon : Ø / R">Ø / R</button>
+    <button id="tool-hide" type="button" aria-pressed="false" title="Masquer / afficher toutes les cotes">Cotes visibles</button>
+  </div>
+  <div id="dim-hint" class="dim-hint" role="status" hidden></div>
+</div><div id="details">Ouvrir un STEP pour consulter ses composants.</div>
 <div class="bom"><h2>Nomenclature provisoire</h2><table><thead><tr><th>Repère</th><th>Désignation</th><th>Référence</th><th>Qté</th><th>X × Y × Z (mm)</th><th>Statut</th></tr></thead><tbody id="bom"></tbody></table></div>
 </section>
 </main>
-<footer>Le STEP source reste inchangé. Dimensions d’encombrement ; éclaté provisoire ; coupe graphique sans section B-Rep exacte.</footer>
+<footer>Le STEP source reste inchangé. Dimensions d’encombrement ; éclaté provisoire ; coupe graphique sans section B-Rep exacte ; cotes indicatives sur maillage.</footer>
 <script type="module" src="/frontend/src/main.js"></script>
 </body></html>

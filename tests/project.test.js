@@ -7,3 +7,16 @@ test('les références ambiguës restent distinctes', () => { assert.equal(build
 test('les identifiants dupliqués et dimensions invalides sont refusés', () => { assert.throws(()=>validateAssembly({...assembly,occurrences:[item('1'),item('1')]})); assert.throws(()=>validateAssembly({...assembly,occurrences:[{...item('1'),dimensions_mm:[NaN,2,3]}]})); });
 test('projet restaurable seulement sur la même source et occurrences',()=> { const project=makeProject(assembly,{explode:0,section:'',sectionPosition:50,inverse:false,items:{}},{position:[1,2,3],target:[0,0,0]}); assert.equal(validateProject(project,assembly),project); assert.throws(()=>validateProject({...project,source_sha256:'other'},assembly)); assert.throws(()=>validateProject({...project,occurrence_ids:['1','1']},assembly)); });
 test('CSV protège séparateurs et formules de tableur',()=> { const output=csv([{...item('1'),name:'=1+2;"test"',repere:1,quantity:1}]); assert.ok(output.includes("'=1+2;\"\"test\"\"")); });
+test('cotes enregistrées : références valides seulement, hachures bornées',()=> {
+  const display={explode:0,section:'',sectionPosition:50,inverse:false,hatch:25,items:{}}, cam={position:[1,2,3],target:[0,0,0]};
+  const dims={feature_version:1,hidden:false,items:[{id:'c1',kind:'pair',refs:[{m:'1',f:0},{m:'2',f:3}],hidden:false},{id:'c2',kind:'round',refs:[{m:'1',f:2}],mode:'diameter',hidden:true}]};
+  const project=makeProject(assembly,display,cam,dims);
+  assert.equal(validateProject(project,assembly),project);
+  assert.doesNotThrow(()=>validateProject(makeProject(assembly,display,cam),assembly));
+  const bad=items=>()=>validateProject(makeProject(assembly,display,cam,{...dims,items}),assembly);
+  assert.throws(bad([{id:'x',kind:'pair',refs:[{m:'1',f:0}],hidden:false}]));
+  assert.throws(bad([{id:'x',kind:'round',refs:[{m:'inconnu',f:0}],hidden:false}]));
+  assert.throws(bad([{id:'x',kind:'round',refs:[{m:'1',f:-1}],hidden:false}]));
+  assert.throws(bad([{id:'x',kind:'round',refs:[{m:'1',f:0}],mode:'autre',hidden:false}]));
+  assert.throws(()=>validateProject(makeProject(assembly,{...display,hatch:140},cam),assembly));
+});
