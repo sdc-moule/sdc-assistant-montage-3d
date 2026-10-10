@@ -11,10 +11,11 @@ Double-clic → Chrome ou Edge. Pas d'installation, pas de FreeCAD. Le STEP est 
 | --- | --- |
 | Ouverture | STEP/STP AP203/214/242, IGES, aussi en archive ZIP (le plus gros fichier CAO de l'archive est ouvert) ; glisser-déposer ; 3 finesses d'affichage ; empreinte SHA-256 |
 | Arborescence / nomenclature | Sous-ensembles du STEP, repères uniques, regroupement nom + signature géométrique **à valider**, jumeaux de noms différents signalés non fusionnés, référence et validation saisies par repère |
-| Sélection | Clic 3D, arborescence, nomenclature, bulles ; Ctrl ou bouton « Multi » ; recherche (repère, nom, dimension, Ø de perçage) ; Entrée = sélectionner tous les résultats |
+| Sélection | Clic 3D, arborescence, nomenclature, bulles ; Ctrl ou bouton « Multi » ; **fenêtre** (« ▭ Fenêtre » ou Maj + glisser : gauche → droite = pièces entièrement dedans, droite → gauche = pièces touchées) ; recherche (repère, nom, dimension, Ø de perçage) ; Entrée = sélectionner tous les résultats |
 | Visibilité | Masquer, isoler, tout afficher, transparence 0–100 %, fantôme autour de la sélection, familles BCR (plaques, collecteurs, busettes, obturateurs, résistances, visserie, guidage, refroidissement) proposées par les noms et corrigeables, annuler/rétablir |
 | Repérage | Bulles numérotées à flèche, anti-chevauchement, déplaçables à la souris, tous / sélection |
 | Éclaté | Tout / sélection, empilage Z, X, Y ou radial (écartement ×4), animation, retour exact à 0 |
+| Ouverture paramétrée | Groupes mobiles = sélection ; **translation** (axe X/Y/Z, sens, course mm) ou **rotation / charnière** (axe pris en touchant un cylindre — axe, goupille, alésage — ou une arête droite, angle °) ; groupes enchaînés (plaque qui coulisse puis volet qui pivote) ; curseur fermé → ouvert, animation ; retour exact à fermé ; mémorisé dans projet et scènes |
 | Faces | « ✂ Face » : retirer une face B-Rep d'une pièce pour voir logements, formes et perçages ; « ↺ Faces » : remettre (sélection ou tout) ; annulable |
 | Coupes | XZ, YZ, XY simultanées, curseur en mm sur toute l'étendue, inversion, remplissage de la matière coupée, contour du plan en option (pas de plaque translucide), compatibles éclaté |
 | Perçages & circuits | Voir ci-dessous |

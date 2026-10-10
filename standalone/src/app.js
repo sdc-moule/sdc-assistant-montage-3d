@@ -63,7 +63,7 @@ const S = {
   objs: new Map(), items: {}, sel: new Set(), mode: 'explorer', multi: false,
   ghost: false, edges: true, bubbles: false, bubbleScope: 'all', colorMode: 'step',
   catOf: {}, catOverride: {}, catOff: new Set(),
-  ex: { amount: 0, dir: 'z', scope: 'all', ids: null }, exVec: new Map(),
+  ex: { amount: 0, dir: 'z', scope: 'all', ids: null }, exVec: new Map(), moves: [], open: 0, opType: 'translation', pickAxis: false, hinge: null, boxMode: false,
   cuts: { x: { on: false, pos: 0, flip: false }, y: { on: false, pos: 0, flip: false }, z: { on: false, pos: 0, flip: false } }, caps: true, planeVis: false, hiddenFaces: {}, faceMode: false, drillLabels: false, fill: { on: true, min: 3, max: 20 },
   drill: null, netClass: {}, skelOnly: false, skelShow: false, selNet: null, selFeature: null, filters: { circuit: true, alignement: false, 'isolé': false, 'alésage': false, dmin: 0, dmax: 999 }, maxDrill: 32, cyl: null,
   comments: [], views: [], rowNotes: {}, bubbleOff: {},
@@ -145,7 +145,7 @@ function install(res, name, hash) {
   const { parts } = partsFromOcct(res);
   const kept = parts.filter(p => p.index.length >= 3);
   if (!kept.length) throw new Error('aucun solide trouvé dans le fichier.');
-  Object.assign(S, { loaded: true, fileName: name, hash, parts: kept, byId: new Map(kept.map(p => [p.id, p])), items: {}, sel: new Set(), comments: [], views: [], rowNotes: {}, bubbleOff: {}, netClass: {}, catOverride: {}, catOff: new Set(), hiddenFaces: {}, undo: [], redo: [], selNet: null, selFeature: null });
+  Object.assign(S, { loaded: true, fileName: name, hash, parts: kept, byId: new Map(kept.map(p => [p.id, p])), items: {}, sel: new Set(), comments: [], views: [], rowNotes: {}, bubbleOff: {}, netClass: {}, catOverride: {}, catOff: new Set(), hiddenFaces: {}, moves: [], open: 0, hinge: null, undo: [], redo: [], selNet: null, selFeature: null });
   S.ex = { amount: 0, dir: 'z', scope: 'all', ids: null };
   S.stats = new Map(kept.map(p => [p.id, meshStats(p.positions, p.index)]));
   S.bom = buildBom(kept, S.stats);
@@ -302,11 +302,25 @@ function computeExplodeVectors() {
     S.exVec.set(id, v);
   }
 }
-function partOffset(id) {
-  const v = new THREE.Vector3();
-  const e = S.exVec.get(id); if (e) v.addScaledVector(e, S.ex.amount / 100);
-  return v;
+// Transformation d'une pièce = éclaté ∘ mouvements d'ouverture (translations, rotations autour d'un axe).
+// À « fermé » et éclaté 0, c'est exactement l'identité : la position du STEP est restituée.
+function moveMatrix(m, t) {
+  if (m.type === 'rotation') {
+    const o = new THREE.Vector3(...m.origin), d = new THREE.Vector3(...m.dir).normalize();
+    return new THREE.Matrix4().makeTranslation(o.x, o.y, o.z).multiply(new THREE.Matrix4().makeRotationAxis(d, THREE.MathUtils.degToRad(m.sign * m.angle * t))).multiply(new THREE.Matrix4().makeTranslation(-o.x, -o.y, -o.z));
+  }
+  const v = AX[m.axis].clone().multiplyScalar(m.sign * m.course * t);
+  return new THREE.Matrix4().makeTranslation(v.x, v.y, v.z);
 }
+function partMatrix(id) {
+  const M = new THREE.Matrix4();
+  const e = S.exVec.get(id); if (e && S.ex.amount) M.makeTranslation(e.x * S.ex.amount / 100, e.y * S.ex.amount / 100, e.z * S.ex.amount / 100);
+  if (S.open) for (const m of S.moves) if (m.ids.includes(id)) M.multiply(moveMatrix(m, S.open));
+  return M;
+}
+const xf = (id, v) => v.clone().applyMatrix4(partMatrix(id));
+function partBox(id) { const st = S.stats.get(id); return new THREE.Box3(new THREE.Vector3(...st.min), new THREE.Vector3(...st.max)).applyMatrix4(partMatrix(id)); }
+function placeObject(obj, id) { partMatrix(id).decompose(obj.position, obj.quaternion, obj.scale); }
 function cutPlanes() {
   const planes = [];
   for (const k of ['x', 'y', 'z']) { const c = S.cuts[k]; if (!c.on) continue; const n = AX[k].clone().multiplyScalar(c.flip ? 1 : -1); planes.push(new THREE.Plane(n, c.flip ? -c.pos : c.pos)); }
@@ -314,7 +328,7 @@ function cutPlanes() {
 }
 function currentBounds() {
   const b = new THREE.Box3();
-  for (const [id, o] of S.objs) { const st = S.stats.get(id), off = partOffset(id); b.expandByPoint(new THREE.Vector3(...st.min).add(off)); b.expandByPoint(new THREE.Vector3(...st.max).add(off)); }
+  for (const id of S.objs.keys()) b.union(partBox(id));
   return b;
 }
 
@@ -338,7 +352,7 @@ function applyDisplay() {
     if (S.skelOnly && S.skelShow) op = Math.min(op, 0.07);
     else if (S.ghost && S.sel.size && !selected) op = Math.min(op, 0.12);
     o.grp.visible = visible && op > 0.001;
-    o.grp.position.copy(partOffset(id));
+    placeObject(o.grp, id);
     const m = o.mesh.material;
     m.color.copy(baseColor(id));
     m.emissive.set(selected ? 0xd85a00 : 0x000000); m.emissiveIntensity = selected ? 0.55 : 0;
@@ -354,7 +368,8 @@ function applyDisplay() {
       o.edges.visible = true; o.edges.material.clippingPlanes = planes; o.edges.material.opacity = 0.45 * Math.max(op, 0.2);
     } else if (o.edges) o.edges.visible = false;
   }
-  for (const [pid, g] of S.skelGroups ?? []) g.position.copy(partOffset(pid));
+  for (const [pid, g] of S.skelGroups ?? []) placeObject(g, pid);
+  drawHinge();
   styleSkeleton();
   drawPlaneHelpers(planes);
 }
@@ -374,6 +389,47 @@ function drawPlaneHelpers() {
   }
 }
 
+// ---------------------------------------------------------------- axe de charnière (ouverture en rotation)
+// Toucher un cylindre (alésage, axe, goupille, bossage) → son axe ; sinon l'arête vive la plus proche → sa droite.
+function findHingeAxis(h) {
+  const id = h.object.userData.id, p = h.point.clone().applyMatrix4(partMatrix(id).invert()); // repère d'origine STEP
+  const cyl = S.cyl?.get(id), cands = cyl ? [...cyl.holes, ...cyl.bosses] : [];
+  let best = null;
+  for (const c of cands) {
+    const a = new THREE.Vector3(...c.start), d = new THREE.Vector3(...c.axis), t = p.clone().sub(a).dot(d);
+    if (t < -1 || t > c.length + 1) continue;
+    const err = Math.abs(p.clone().sub(a).addScaledVector(d, -t).length() - c.radius);
+    if (err < Math.max(0.3, 0.06 * c.radius) && (!best || err < best.err)) best = { err, origin: c.start, dir: c.axis, label: `axe du cylindre Ø${fmt(c.diameter, 1)}` };
+  }
+  if (!best) {
+    const o = S.objs.get(id);
+    o.edgeGeo ??= new THREE.EdgesGeometry(o.mesh.geometry, 28);
+    const P = o.edgeGeo.getAttribute('position'), A = new THREE.Vector3(), B = new THREE.Vector3(), q = new THREE.Vector3();
+    let bd = Infinity;
+    for (let i = 0; i < P.count; i += 2) {
+      A.fromBufferAttribute(P, i); B.fromBufferAttribute(P, i + 1);
+      new THREE.Line3(A, B).closestPointToPoint(p, true, q);
+      const d = q.distanceTo(p);
+      if (d < bd && A.distanceTo(B) > 1e-3) { bd = d; best = { origin: A.toArray(), dir: B.clone().sub(A).normalize().toArray(), label: `arête (longueur ${fmt(A.distanceTo(B), 1)} mm)` }; }
+    }
+  }
+  if (best) best.part = S.byId.get(id).name;
+  return best;
+}
+function drawHinge() {
+  helperRoot.children.filter(c => c.userData.hinge).forEach(c => { c.geometry.dispose(); helperRoot.remove(c); });
+  const axes = [];
+  if (S.hinge && S.mode === 'eclate') axes.push({ ...S.hinge, color: 0xd7301f });
+  if (S.mode === 'eclate') for (const m of S.moves) if (m.type === 'rotation') axes.push({ origin: m.origin, dir: m.dir, color: 0x7b3fbf, ref: m.ids[0] });
+  const L = S.bounds.getSize(new THREE.Vector3()).length() * 0.6;
+  for (const a of axes) {
+    const o = new THREE.Vector3(...a.origin), d = new THREE.Vector3(...a.dir).normalize();
+    const g = new THREE.BufferGeometry().setFromPoints([o.clone().addScaledVector(d, -L / 2), o.clone().addScaledVector(d, L / 2)]);
+    const line = new THREE.Line(g, new THREE.LineDashedMaterial({ color: a.color, dashSize: L / 60, gapSize: L / 90, depthTest: false }));
+    line.computeLineDistances(); line.renderOrder = 12; line.userData.hinge = true; helperRoot.add(line);
+  }
+}
+
 // ---------------------------------------------------------------- caméra
 function fitBox(box, dirVec) {
   if (box.isEmpty()) return;
@@ -389,7 +445,7 @@ function setView(v) {
 }
 function fitSelection() {
   if (!S.sel.size) return fitBox(currentBounds());
-  const b = new THREE.Box3(); for (const id of S.sel) { const st = S.stats.get(id), off = partOffset(id); b.expandByPoint(new THREE.Vector3(...st.min).add(off)); b.expandByPoint(new THREE.Vector3(...st.max).add(off)); }
+  const b = new THREE.Box3(); for (const id of S.sel) b.union(partBox(id));
   fitBox(b);
 }
 
@@ -436,7 +492,17 @@ renderer.domElement.addEventListener('pointerup', ev => {
   controls.enabled = true;
   if (dragBubble) { const d = dragBubble; dragBubble = null; if (!d.moved) select(S.bom.find(r => r.repere === d.b.repere).ids, ev.ctrlKey || ev.shiftKey || S.multi); else saveLocal(); return; }
   if (!down || Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > 6 || !S.loaded) return;
+  if ((S.boxMode || ev.shiftKey) && !S.pickAxis && !S.faceMode && !S.measure.on) { const h0 = pick(ev); if (h0) select([h0.object.userData.id], true); return; }
   const h = pick(ev);
+  if (S.pickAxis) {
+    if (!h) return;
+    const ax = findHingeAxis(h);
+    if (!ax) return toast('Aucun axe trouvé sur cette pièce : toucher un cylindre ou une arête droite.');
+    S.hinge = ax; S.pickAxis = false; $('op-pick').classList.remove('on');
+    $('op-axis-info').textContent = `Axe : ${ax.label} de ${ax.part} · direction (${ax.dir.map(v => fmt(v, 2)).join(' ; ')})`;
+    applyDisplay(); toast('Axe choisi. Sélectionner les pièces qui pivotent puis « Créer un groupe mobile ».');
+    return;
+  }
   if (S.faceMode) { if (h) { pushHistory(); const id = h.object.userData.id; (S.hiddenFaces[id] ??= []).push(faceOfHit(h)); refreshAll(); } return; }
   if (S.measure.on) { if (h) { S.measure.pts.push(h.point.clone()); if (S.measure.pts.length > 2) S.measure.pts = [h.point.clone()]; drawMeasure(); } return; }
   if (S.mode === 'percages' && S.skelShow) { const f = pickFeature(ev); if (f) { selectFeature(f.id, true); return; } }
@@ -489,7 +555,7 @@ function drawBubbles(r) {
   for (const row of rows) {
     const id = row.ids.find(i => S.objs.get(i).grp.visible && S.objs.get(i).mesh.material.opacity > 0.15);
     if (!id) continue;
-    const o = S.objs.get(id), a = project(o.anchor.clone().add(partOffset(id)));
+    const o = S.objs.get(id), a = project(xf(id, o.anchor));
     if (a.z > 1 || a.x < -50 || a.y < -50 || a.x > r.width + 50 || a.y > r.height + 50) continue;
     const dir = new THREE.Vector2(a.x - cx, a.y - cy); if (dir.length() < 1) dir.set(1, -1); dir.normalize();
     const off = S.bubbleOff[row.repere] ?? [0, 0];
@@ -519,12 +585,12 @@ function drawNetLabels() {
       for (const f of fs) {
         if (S.items[f.partId]?.visible === false) continue;
         if (!S.drillLabels && f.id !== S.selFeature) continue;
-        const m = new THREE.Vector3(...f.start).add(new THREE.Vector3(...f.end)).multiplyScalar(0.5).add(partOffset(f.partId)), p = project(m);
+        const m = xf(f.partId, new THREE.Vector3(...f.start).add(new THREE.Vector3(...f.end)).multiplyScalar(0.5)), p = project(m);
         if (p.z < 1) label(p.x, p.y, `${f.id} Ø${fmt(f.diameter, 1)}`, f.id === S.selFeature ? '#b38600' : netColor(n));
       }
     } else if (S.drillLabels) {
       const longest = fs.reduce((a, b) => (b.length > a.length ? b : a));
-      const m = new THREE.Vector3(...longest.start).add(new THREE.Vector3(...longest.end)).multiplyScalar(0.5).add(partOffset(longest.partId)), p = project(m);
+      const m = xf(longest.partId, new THREE.Vector3(...longest.start).add(new THREE.Vector3(...longest.end)).multiplyScalar(0.5)), p = project(m);
       if (p.z < 1) label(p.x, p.y, `${n.id} · ${netLabel(n)}`, netColor(n));
     }
   }
@@ -543,7 +609,7 @@ function loop() {
 }
 
 // ---------------------------------------------------------------- panneaux
-function refreshAll() { applyDisplay(); renderTree(); renderBom(); renderCard(); renderSelbar(); renderCategories(); if (S.mode === 'percages') renderNets(); if (S.mode === 'notes') { renderComments(); renderViews(); } if (S.mode === 'coupe') renderPlanes(); saveLocal(); }
+function refreshAll() { applyDisplay(); renderTree(); renderBom(); renderCard(); renderSelbar(); renderCategories(); if (S.mode === 'percages') renderNets(); if (S.mode === 'notes') { renderComments(); renderViews(); } if (S.mode === 'eclate') renderMoves(); if (S.mode === 'coupe') renderPlanes(); saveLocal(); }
 
 function matches(id, term) {
   if (!term) return true;
@@ -636,6 +702,58 @@ function renderCategories() {
 }
 
 
+// ---------------------------------------------------------------- panneau ouverture
+function renderMoves() {
+  const box = $('op-list'); box.replaceChildren();
+  S.moves.forEach((m, i) => box.append(el('div', { class: 'row' },
+    el('span', { class: 'badge' }, i + 1),
+    el('span', { class: 'name', title: m.axisLabel ?? '' }, m.type === 'rotation' ? `⟳ ${m.sign * m.angle}° autour de ${m.axisLabel}` : `↕ ${m.sign > 0 ? '+' : '−'}${m.axis.toUpperCase()} ${m.course} mm`, el('span', { class: 'hint' }, ` · ${m.ids.length} pièce(s)`)),
+    el('button', { class: 'eye', title: 'Sélectionner les pièces du groupe', onclick: () => select(m.ids) }, '◎'),
+    el('button', { class: 'eye', title: 'Supprimer', onclick: () => { S.moves = S.moves.filter(x => x !== m); refreshAll(); } }, '✕'))));
+  if (!S.moves.length) box.append(el('p', { class: 'hint' }, 'Aucun groupe mobile défini.'));
+}
+
+// ---------------------------------------------------------------- sélection par fenêtre
+// Gauche → droite : pièces entièrement dans le cadre ; droite → gauche : pièces touchées (convention CAO).
+function boxSelect(x0, y0, x1, y1, additive) {
+  const r = overlay.getBoundingClientRect();
+  const L = Math.min(x0, x1) - r.left, R = Math.max(x0, x1) - r.left, T = Math.min(y0, y1) - r.top, B = Math.max(y0, y1) - r.top;
+  const crossing = x1 < x0, inRect = q => q.z < 1 && q.x >= L && q.x <= R && q.y >= T && q.y <= B;
+  const ids = [];
+  for (const [id, o] of S.objs) {
+    if (!o.grp.visible || o.mesh.material.opacity <= 0.15) continue;
+    const M = partMatrix(id), P = o.part.positions, step = Math.max(3, Math.floor(P.length / 3 / 400) * 3), v = new THREE.Vector3();
+    let all = true, any = false;
+    for (let i = 0; i < P.length; i += step) {
+      const q = project(v.set(P[i], P[i + 1], P[i + 2]).applyMatrix4(M));
+      if (inRect(q)) any = true; else all = false;
+      if (crossing ? any : !all) break;
+    }
+    if (crossing ? any : all) ids.push(id);
+  }
+  if (!ids.length && !additive) { clearSel(); return; }
+  if (!additive) S.sel.clear();
+  for (const id of ids) S.sel.add(id);
+  refreshAll(); toast(`${ids.length} pièce(s) ${crossing ? 'touchée(s)' : 'entièrement dans la fenêtre'}.`);
+}
+let rubber = null;
+viewport.addEventListener('pointerdown', ev => {
+  if (!S.loaded || ev.button !== 0 || !(S.boxMode || ev.shiftKey)) return;
+  rubber = { x: ev.clientX, y: ev.clientY, additive: ev.ctrlKey || ev.metaKey || S.multi };
+  controls.enabled = false; // avant OrbitControls (phase de capture)
+}, { capture: true });
+window.addEventListener('pointermove', ev => {
+  if (!rubber) return;
+  const r = viewport.getBoundingClientRect(), d = $('selrect');
+  d.hidden = false; d.classList.toggle('cross', ev.clientX < rubber.x);
+  Object.assign(d.style, { left: Math.min(ev.clientX, rubber.x) - r.left + 'px', top: Math.min(ev.clientY, rubber.y) - r.top + 'px', width: Math.abs(ev.clientX - rubber.x) + 'px', height: Math.abs(ev.clientY - rubber.y) + 'px' });
+});
+window.addEventListener('pointerup', ev => {
+  if (!rubber) return;
+  const r0 = rubber; rubber = null; $('selrect').hidden = true; controls.enabled = true;
+  if (Math.hypot(ev.clientX - r0.x, ev.clientY - r0.y) > 6) { boxSelect(r0.x, r0.y, ev.clientX, ev.clientY, r0.additive); down = null; }
+});
+
 // ---------------------------------------------------------------- panneau coupes
 function renderPlanes() {
   const box = $('planes'); box.replaceChildren();
@@ -657,7 +775,7 @@ function renderPlanes() {
 
 // ---------------------------------------------------------------- panneau perçages & circuits
 function selectNet(id) { S.selNet = S.selNet === id ? null : id; S.selFeature = null; S.skelShow = true; $('skel-show').classList.add('on'); refreshAll(); if (S.selNet) fitNet(S.drill.networks.find(n => n.id === id)); }
-function fitNet(n) { const b = new THREE.Box3(); for (const fid of n.features) { const f = S.drill.featureById.get(fid), o = partOffset(f.partId); b.expandByPoint(new THREE.Vector3(...f.start).add(o)); b.expandByPoint(new THREE.Vector3(...f.end).add(o)); } b.expandByScalar(10); fitBox(b); }
+function fitNet(n) { const b = new THREE.Box3(); for (const fid of n.features) { const f = S.drill.featureById.get(fid); b.expandByPoint(xf(f.partId, new THREE.Vector3(...f.start))); b.expandByPoint(xf(f.partId, new THREE.Vector3(...f.end))); } b.expandByScalar(10); fitBox(b); }
 function selectFeature(fid, fromClick = false) {
   const n = S.drill.netOfFeature.get(fid);
   if (S.selNet !== n.id) { S.selNet = n.id; }
@@ -696,7 +814,7 @@ function renderNets() {
       el('div', {}, `Extrémité A (${f.open.start ? 'débouchante' : 'fond / jonction'}) : ${rel(f.start)}`),
       el('div', {}, `Extrémité B (${f.open.end ? 'débouchante' : 'fond / jonction'}) : ${rel(f.end)}`),
       el('div', { class: 'hint' }, 'Coordonnées en mm depuis le coin mini (X,Y,Z) de la boîte de la pièce, repère assemblage. Valeurs indicatives (maillage) ; taraudages non détectés.'),
-      el('button', { class: 'btn wide', onclick: () => { const o = partOffset(f.partId); const b = new THREE.Box3().setFromPoints([new THREE.Vector3(...f.start).add(o), new THREE.Vector3(...f.end).add(o)]).expandByScalar(f.diameter * 3); fitBox(b); } }, 'Cadrer ce perçage'));
+      el('button', { class: 'btn wide', onclick: () => { const b = new THREE.Box3().setFromPoints([xf(f.partId, new THREE.Vector3(...f.start)), xf(f.partId, new THREE.Vector3(...f.end))]).expandByScalar(f.diameter * 3); fitBox(b); } }, 'Cadrer ce perçage'));
   }
   det.append(el('div', { class: 'net-detail' },
     el('div', { class: 'grid2' }, el('b', {}, `${n.id} · ${n.features.length} perçage(s)`), sel),
@@ -717,11 +835,11 @@ function renderComments() {
   if (!S.comments.length) box.append(el('p', { class: 'hint' }, 'Aucun commentaire.'));
 }
 function viewState() {
-  return { camera: { position: camera.position.toArray(), target: controls.target.toArray() }, items: JSON.parse(JSON.stringify(S.items)), catOff: [...S.catOff], cuts: JSON.parse(JSON.stringify(S.cuts)), ex: { ...S.ex }, hiddenFaces: JSON.parse(JSON.stringify(S.hiddenFaces)), ghost: S.ghost, bubbles: S.bubbles, skelShow: S.skelShow, skelOnly: S.skelOnly, selNet: S.selNet, sel: [...S.sel] };
+  return { camera: { position: camera.position.toArray(), target: controls.target.toArray() }, items: JSON.parse(JSON.stringify(S.items)), catOff: [...S.catOff], cuts: JSON.parse(JSON.stringify(S.cuts)), ex: { ...S.ex }, hiddenFaces: JSON.parse(JSON.stringify(S.hiddenFaces)), moves: JSON.parse(JSON.stringify(S.moves)), open: S.open, ghost: S.ghost, bubbles: S.bubbles, skelShow: S.skelShow, skelOnly: S.skelOnly, selNet: S.selNet, sel: [...S.sel] };
 }
 function applyViewState(v) {
   pushHistory();
-  Object.assign(S.items, v.items); S.catOff = new Set(v.catOff ?? []); S.cuts = v.cuts; S.ex = v.ex; S.hiddenFaces = v.hiddenFaces ?? {}; S.ghost = !!v.ghost; S.bubbles = !!v.bubbles; S.skelShow = !!v.skelShow; S.skelOnly = !!v.skelOnly; S.selNet = v.selNet ?? null; S.sel = new Set((v.sel ?? []).filter(id => S.objs.has(id)));
+  Object.assign(S.items, v.items); S.catOff = new Set(v.catOff ?? []); S.cuts = v.cuts; S.ex = v.ex; S.hiddenFaces = v.hiddenFaces ?? {}; if (v.moves) S.moves = v.moves.map(m => ({ ...m, ids: m.ids.filter(id => S.objs.has(id)) })); S.open = v.open ?? 0; S.ghost = !!v.ghost; S.bubbles = !!v.bubbles; S.skelShow = !!v.skelShow; S.skelOnly = !!v.skelOnly; S.selNet = v.selNet ?? null; S.sel = new Set((v.sel ?? []).filter(id => S.objs.has(id)));
   computeExplodeVectors(); syncToggles();
   camera.position.fromArray(v.camera.position); controls.target.fromArray(v.camera.target); controls.update();
   refreshAll();
@@ -741,6 +859,8 @@ function syncToggles() {
   $('ghost-toggle').classList.toggle('on', S.ghost); $('bubbles-toggle').classList.toggle('on', S.bubbles); $('edges-toggle').classList.toggle('on', S.edges);
   $('skel-show').classList.toggle('on', S.skelShow); $('skel-only').classList.toggle('on', S.skelOnly);
   $('ex-amount').value = S.ex.amount; $('ex-val').textContent = `${Math.round(S.ex.amount)} %`; $('ex-dir').value = S.ex.dir; $('ex-scope').value = S.ex.scope;
+  $('op-amount').value = Math.round(S.open * 100); $('op-val').textContent = `${Math.round(S.open * 100)} %`;
+  $('op-pick').classList.toggle('on', S.pickAxis); $('boxsel').classList.toggle('on', S.boxMode);
   $('faces-btn').classList.toggle('on', S.faceMode); $('labels-toggle').classList.toggle('on', S.drillLabels); $('fill-toggle').classList.toggle('on', S.fill.on);
   $('caps-toggle').classList.toggle('on', S.caps); $('planevis-toggle').classList.toggle('on', S.planeVis);
 }
@@ -751,7 +871,7 @@ let saveTimer;
 function projectData() {
   return { application: 'SDC Montage 3D', version: APP_VERSION, schema: 'sdc-montage3d-projet/2', fichier: S.fileName, empreinte_sha256: S.hash, date: new Date().toISOString(),
     occurrences: S.parts.map(p => ({ id: p.id, nom: p.name, signature: signature(p, S.stats.get(p.id)), repere: S.rowOf.get(p.id).repere })),
-    maxDrill: S.maxDrill, comments: S.comments, views: S.views, netClass: S.netClass, rowNotes: S.rowNotes, catOverride: S.catOverride, bubbleOff: S.bubbleOff, display: viewState() };
+    maxDrill: S.maxDrill, comments: S.comments, views: S.views, netClass: S.netClass, moves: S.moves, rowNotes: S.rowNotes, catOverride: S.catOverride, bubbleOff: S.bubbleOff, display: viewState() };
 }
 function saveLocal() { if (!S.loaded) return; clearTimeout(saveTimer); saveTimer = setTimeout(() => { try { localStorage.setItem(LS(), JSON.stringify(projectData())); } catch { /* stockage indisponible : le fichier projet reste possible */ } }, 400); }
 function restoreLocal() { try { const raw = localStorage.getItem(LS()); if (raw) { applyProject(JSON.parse(raw), true); toast('Annotations et vues de ce fichier restaurées.'); } } catch { /* rien */ } }
@@ -766,6 +886,7 @@ function applyProject(pr, silent = false) {
     if (!confirm(`Ce projet a été créé sur un autre fichier (${pr.fichier}). ${m.size} occurrence(s) retrouvée(s), ${unsure} sans correspondance. Les numéros de repère et réseaux peuvent différer. Continuer ?`)) return;
   }
   if (Number.isFinite(pr.maxDrill) && pr.maxDrill !== S.maxDrill && S.cyl) { S.maxDrill = pr.maxDrill; $('f-maxdrill').value = pr.maxDrill; rebuildNetworks(); }
+  S.moves = (pr.moves ?? []).map(m => ({ ...m, ids: m.ids.map(map).filter(Boolean) })).filter(m => m.ids.length);
   S.comments = (pr.comments ?? []).map(c => ({ ...c, ids: c.ids.map(map).filter(Boolean) }));
   S.views = pr.empreinte_sha256 === S.hash ? (pr.views ?? []) : [];
   S.netClass = pr.empreinte_sha256 === S.hash ? (pr.netClass ?? {}) : {};
@@ -914,6 +1035,22 @@ function wire() {
   $('v-save').onclick = () => { if (!S.loaded) return; saveScene($('v-name').value.trim()); $('v-name').value = ''; };
   $('scene-btn').onclick = () => { if (!S.loaded) return; saveScene(); };
   $('copy-btn').onclick = () => { if (S.loaded) copyScene(null); };
+  for (const b of document.querySelectorAll('#op-type button')) b.onclick = () => { S.opType = b.dataset.op; for (const x of document.querySelectorAll('#op-type button')) x.classList.toggle('on', x === b); $('op-tr').hidden = S.opType !== 'translation'; $('op-rot').hidden = S.opType !== 'rotation'; if (S.opType !== 'rotation') { S.pickAxis = false; syncToggles(); } };
+  $('op-pick').onclick = () => { S.pickAxis = !S.pickAxis; if (S.pickAxis) { S.faceMode = false; S.measure.on = false; $('measure').classList.remove('on'); toast('Toucher un cylindre (axe, goupille, alésage) ou une arête droite qui sert de charnière.', 6000); } syncToggles(); };
+  $('op-add').onclick = () => {
+    if (!S.sel.size) return toast('Sélectionner d\'abord les pièces mobiles.');
+    if (S.opType === 'rotation') {
+      if (!S.hinge) return toast('Choisir d\'abord l\'axe de rotation (🎯).');
+      S.moves.push({ type: 'rotation', ids: [...S.sel], origin: S.hinge.origin, dir: S.hinge.dir, axisLabel: `${S.hinge.label} (${S.hinge.part})`, angle: Math.abs(+$('op-angle').value || 0), sign: +$('op-rsign').value });
+    } else S.moves.push({ type: 'translation', ids: [...S.sel], axis: $('op-axis').value, sign: +$('op-sign').value, course: Math.abs(+$('op-course').value || 0) });
+    if (!S.open) S.open = 1;
+    refreshAll(); syncToggles(); toast('Groupe mobile créé ; curseur « Fermé → ouvert » pour le régler.');
+  };
+  $('op-amount').oninput = () => { S.open = +$('op-amount').value / 100; $('op-val').textContent = `${$('op-amount').value} %`; applyDisplay(); };
+  $('op-amount').onchange = () => saveLocal();
+  const animOpen = target => { const from = S.open, t0 = performance.now(); const step = t => { const k = Math.min(1, (t - t0) / 1500), e = k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2; S.open = from + (target - from) * e; syncToggles(); applyDisplay(); if (k < 1) requestAnimationFrame(step); else saveLocal(); }; requestAnimationFrame(step); };
+  $('op-close').onclick = () => animOpen(0); $('op-open').onclick = () => animOpen(1);
+  $('boxsel').onclick = () => { S.boxMode = !S.boxMode; syncToggles(); if (S.boxMode) toast('Glisser un rectangle : gauche → droite = pièces entièrement dedans, droite → gauche = pièces touchées. Ctrl pour ajouter.', 6000); };
   $('faces-btn').onclick = () => { S.faceMode = !S.faceMode; if (S.faceMode) { S.measure.on = false; $('measure').classList.remove('on'); toast('Toucher une face pour la retirer (logements, formes et perçages deviennent visibles). « Remettre les faces » pour annuler.', 6000); } syncToggles(); };
   $('faces-reset').onclick = () => { pushHistory(); if (S.sel.size) for (const id of S.sel) delete S.hiddenFaces[id]; else S.hiddenFaces = {}; refreshAll(); };
   $('labels-toggle').onclick = () => { S.drillLabels = !S.drillLabels; syncToggles(); };
@@ -933,7 +1070,7 @@ function wire() {
     const k = e.key.toLowerCase();
     if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); undo(); }
     else if ((e.ctrlKey || e.metaKey) && k === 'y') { e.preventDefault(); redo(); }
-    else if (k === 'escape' && S.faceMode) { S.faceMode = false; syncToggles(); }
+    else if (k === 'escape' && (S.faceMode || S.pickAxis || S.boxMode)) { S.faceMode = false; S.pickAxis = false; S.boxMode = false; syncToggles(); }
     else if (k === 'h') hideSel(); else if (k === 'i') isolateSel(); else if (k === 'a' && !e.ctrlKey) showAll(); else if (k === 'f') fitSelection(); else if (k === 'escape') { clearSel(); S.selNet = null; refreshAll(); }
   });
 }
@@ -941,4 +1078,4 @@ async function gunzip(b64) { const bin = Uint8Array.from(atob(b64), c => c.charC
 
 // ---------------------------------------------------------------- démarrage
 wire(); resize(); loop();
-window.__SDC__ = { S, loadBytes, setMode, select, selectNet, extractCylinders, buildNetworks }; // accès pour essais automatisés
+window.__SDC__ = { S, loadBytes, setMode, select, selectNet, extractCylinders, buildNetworks, project, xf, partBox: id => { const b = partBox(id); return [...b.min.toArray(), ...b.max.toArray()]; }, THREE }; // accès pour essais automatisés

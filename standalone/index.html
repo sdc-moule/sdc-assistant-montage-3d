@@ -60,6 +60,19 @@
       <label class="field">Direction<select id="ex-dir"><option value="z">Empilage selon Z (plaques)</option><option value="radial">Écartement depuis le centre</option><option value="x">Selon X</option><option value="y">Selon Y</option></select></label>
       <label class="slider">Écartement <output id="ex-val">0 %</output><input id="ex-amount" type="range" min="0" max="100" value="0"></label>
       <div class="grid3"><button class="btn" id="ex-close">⏮ Fermé</button><button class="btn" id="ex-play">▶ Animer</button><button class="btn" id="ex-open">⏭ Éclaté</button></div>
+      <h3>Ouverture paramétrée</h3>
+      <p class="hint">Simuler l'ouverture du moule ou d'un élément : sélectionner les pièces mobiles, choisir le mouvement, créer le groupe, puis glisser « Fermé → ouvert ». Plusieurs groupes s'enchaînent (ex. plaque qui coulisse puis volet qui pivote). Aucun contrôle mécanique n'est fait.</p>
+      <div class="tabs" id="op-type"><button data-op="translation" class="on">↕ Translation</button><button data-op="rotation">⟳ Rotation (charnière)</button></div>
+      <div id="op-tr" class="grid3"><select id="op-axis" title="Axe"><option value="z">Z</option><option value="x">X</option><option value="y">Y</option></select><input id="op-course" type="number" value="100" step="5" title="Course (mm)"><select id="op-sign" title="Sens"><option value="1">+</option><option value="-1">−</option></select></div>
+      <div id="op-rot" hidden>
+        <button class="btn wide toggle" id="op-pick">🎯 Choisir l'axe : toucher un cylindre (axe) ou une arête (contour)</button>
+        <p class="hint" id="op-axis-info">Aucun axe choisi.</p>
+        <div class="grid2"><label class="field">Angle (°)<input id="op-angle" type="number" value="90" step="5"></label><label class="field">Sens<select id="op-rsign"><option value="1">+</option><option value="-1">−</option></select></label></div>
+      </div>
+      <button class="btn wide" id="op-add">Créer un groupe mobile avec la sélection</button>
+      <div id="op-list" class="list"></div>
+      <label class="slider">Fermé → ouvert <output id="op-val">0 %</output><input id="op-amount" type="range" min="0" max="100" value="0"></label>
+      <div class="grid2"><button class="btn" id="op-close">⏮ Fermé</button><button class="btn" id="op-open">⏭ Ouvert</button></div>
     </section>
 
     <section data-panel="coupe" hidden>
@@ -106,6 +119,7 @@
   <main class="stage">
     <div id="viewport"></div>
     <canvas id="overlay"></canvas>
+    <div id="selrect" hidden></div>
     <div id="drop" hidden><div>Déposer le fichier STEP ici</div></div>
     <div id="welcome" class="welcome">
       <h1>Ouvrir un assemblage</h1>
@@ -123,6 +137,7 @@
       <button class="btn icon" id="fit-all" title="Tout voir">⤢ Tout voir</button>
       <span class="sep"></span>
       <button class="btn icon toggle" id="multi" title="Sélection multiple (tablette)">Multi</button>
+      <button class="btn icon toggle" id="boxsel" title="Sélection par fenêtre : glisser un rectangle (gauche → droite : pièces entièrement dedans ; droite → gauche : pièces touchées). Raccourci : Maj + glisser">▭ Fenêtre</button>
       <button class="btn icon toggle" id="measure" title="Mesure indicative entre deux points">Mesurer</button>
       <button class="btn icon toggle" id="faces-btn" title="Retirer une face d'une pièce pour voir l'intérieur">✂ Face</button>
       <button class="btn icon" id="faces-reset" title="Remettre les faces retirées (de la sélection, ou toutes)">↺ Faces</button>
@@ -158,7 +173,7 @@
   <ul>
     <li><b>Tourner</b> : glisser avec un doigt / clic gauche. <b>Déplacer</b> : deux doigts / clic droit. <b>Zoom</b> : pincer / molette.</li>
     <li><b>Sélectionner</b> : toucher une pièce, une ligne de l'arborescence, de la nomenclature ou une bulle. Toucher le vide pour désélectionner.</li>
-    <li><b>Plusieurs pièces</b> : Ctrl + clic, ou activer « Multi ».</li>
+    <li><b>Plusieurs pièces</b> : Ctrl + clic, « Multi », ou fenêtre (« ▭ Fenêtre » ou Maj + glisser) : de gauche à droite = pièces entièrement dans le cadre, de droite à gauche = pièces touchées.</li>
     <li>Raccourcis : <b>H</b> masquer, <b>I</b> isoler, <b>A</b> tout afficher, <b>F</b> cadrer, <b>Échap</b> désélectionner, <b>Ctrl+Z/Y</b>.</li>
     <li><b>Perçages &amp; circuits</b> : les forages sont détectés sur le maillage d'affichage. Les diamètres et longueurs sont <b>indicatifs</b> ; les taraudages ne sont pas détectables.</li>
     <li>Aucun calcul de collision, de jeu, de tolérance ou de serrage n'est réalisé. Le fichier STEP n'est jamais modifié.</li>

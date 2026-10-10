@@ -9,7 +9,7 @@ Chaque phase exige une réception sur un moule et un BCR, avec et sans nomenclat
 
 ## Application autonome 1.0 (`standalone/`)
 Couvre en HTML unique les phases 1 à 4 côté consultation (voir [standalone.md](standalone.md)) et ajoute le module
-perçages & circuits. L'ouverture paramétrée a été retirée de l'application autonome à la demande de l'atelier (éclaté suffisant). Restent à faire : import d'une nomenclature externe CSV/XLSX, export XLSX natif, vecteurs d'éclaté
+perçages & circuits. Restent à faire : import d'une nomenclature externe CSV/XLSX, export XLSX natif, vecteurs d'éclaté
 édités pièce par pièce, sections B-Rep exactes (backend OpenCascade/FreeCAD), réception sur moule et BCR réels.
 Pistes : diagramme 2D schématique des circuits (entrées/sorties numérotées pour le branchement des raccords),
 volume d'eau par circuit, export DXF des axes de perçage par face pour la FAO, lecture des couleurs de faces STEP.

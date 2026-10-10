@@ -81,6 +81,37 @@ with sync_playwright() as p:
     pg.set_input_files("#load-project", str(png)); time.sleep(0.5)
     check(S("S.ex.amount") == 60, "scène restaurée depuis le PNG")
     pg.fill("#ex-amount", "0"); pg.dispatch_event("#ex-amount", "input")
+    # ouverture paramétrée : rotation du collecteur autour de l'axe de la buse (cylindre Ø30), puis retour exact
+    pg.click("[data-view=iso]"); time.sleep(0.3)
+    pg.click("#rail button[data-mode=eclate]")
+    pg.click("#op-type button[data-op=rotation]")
+    pg.click("#op-pick")
+    pt = pg.evaluate("() => { const T = window.__SDC__.THREE; const q = window.__SDC__.project(new T.Vector3(10.6, -10.6, 137)); return [q.x, q.y]; }")
+    r = pg.locator("#overlay").bounding_box()
+    pg.mouse.click(r["x"] + pt[0], r["y"] + pt[1]); time.sleep(0.3)
+    hinge = S("S.hinge && S.hinge.label")
+    check(bool(hinge) and "Ø30" in hinge, f"axe de charnière pris sur le cylindre de la buse ({hinge})")
+    pg.evaluate("() => window.__SDC__.select(['O006'])")
+    pg.fill("#op-angle", "90"); pg.click("#op-add"); time.sleep(0.3)
+    size = pg.evaluate("() => { const b = window.__SDC__.partBox('O006'); return [b[3]-b[0], b[4]-b[1]]; }")
+    check(abs(size[0] - 60) < 1 and abs(size[1] - 220) < 1, f"collecteur tourné de 90° autour de l'axe ({size[0]:.1f} × {size[1]:.1f})")
+    pg.screenshot(path=str(OUT / "6_rotation.png"))
+    pg.fill("#op-amount", "0"); pg.dispatch_event("#op-amount", "input")
+    check(S("Math.max(...[...S.objs.values()].map(o => o.grp.position.length() + Math.abs(1 - Math.abs(o.grp.quaternion.w))))") == 0, "fermé : retour exact (position et orientation)")
+    pg.evaluate("() => { window.__SDC__.S.moves = []; }")
+    # sélection par fenêtre
+    pg.click("#s-clear") if pg.is_visible("#s-clear") else None
+    pg.click("#boxsel")
+    v = pg.locator("#viewport").bounding_box()
+    pg.mouse.move(v["x"] + 5, v["y"] + 5); pg.mouse.down(); pg.mouse.move(v["x"] + v["width"] * 0.5, v["y"] + v["height"] * 0.5, steps=5); pg.mouse.move(v["x"] + v["width"] - 5, v["y"] + v["height"] - 5, steps=5); pg.mouse.up()
+    n_all = S("S.sel.size")
+    check(n_all == 15, f"fenêtre gauche → droite sur toute la vue : {n_all} pièces")
+    pg.click("#s-clear")
+    cx, cy = v["x"] + v["width"] * 0.5, v["y"] + v["height"] * 0.5
+    pg.mouse.move(cx + 30, cy - 30); pg.mouse.down(); pg.mouse.move(cx - 30, cy + 30, steps=5); pg.mouse.up()
+    n_cross = S("S.sel.size")
+    check(0 < n_cross < 15, f"fenêtre droite → gauche (pièces touchées) : {n_cross} pièces")
+    pg.click("#boxsel"); pg.click("#s-clear") if pg.is_visible("#s-clear") else None
     # commentaire + persistance locale
     pg.click("#rail button[data-mode=notes]")
     pg.evaluate("() => window.__SDC__.select(['O006'])")
