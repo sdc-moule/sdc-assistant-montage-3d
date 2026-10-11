@@ -27,7 +27,7 @@ THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
 THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
 THREE.Mesh.prototype.raycast = acceleratedRaycast;
 
-const APP_VERSION = '1.5.1';
+const APP_VERSION = '1.6.0';
 const $ = id => document.getElementById(id);
 const el = (tag, props = {}, ...kids) => { const e = document.createElement(tag); for (const [k, v] of Object.entries(props)) { if (k === 'class') e.className = v; else if (k === 'style') e.style.cssText = v; else if (k.startsWith('on')) e[k] = v; else if (v !== undefined && v !== null) e.setAttribute(k, v); } for (const k of kids.flat()) if (k !== null && k !== undefined && k !== false) e.append(k instanceof Node ? k : document.createTextNode(String(k))); return e; };
 const fmt = (x, d = 1) => (Number.isFinite(x) ? (Math.abs(x) < 0.5 * 10 ** -d ? 0 : x).toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d }) : '—');
@@ -572,7 +572,7 @@ function showAll() { pushHistory(); for (const it of Object.values(S.items)) { i
 
 // ---------------------------------------------------------------- pointeur 3D
 const ray = new THREE.Raycaster(); ray.firstHitOnly = false;
-let down = null, dragBubble = null;
+let down = null, dragBubble = null, appuiLongFait = false; // appuiLongFait : l'appui long a ouvert le menu, le relâchement ne doit pas sélectionner
 function ndc(ev) { const r = renderer.domElement.getBoundingClientRect(); return new THREE.Vector2(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1); }
 function pick(ev) {
   ray.setFromCamera(ndc(ev), camera);
@@ -593,6 +593,7 @@ renderer.domElement.addEventListener('pointermove', ev => {
 });
 renderer.domElement.addEventListener('pointerup', ev => {
   controls.enabled = true;
+  if (appuiLongFait) { appuiLongFait = false; return; }
   if (dragBubble) { const d = dragBubble; dragBubble = null; if (!d.moved) select(S.bom.find(r => r.repere === d.b.repere).ids, ev.ctrlKey || ev.shiftKey || S.multi); else saveLocal(); return; }
   if (!down || Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > 6 || !S.loaded) return;
   if ((S.boxMode || ev.shiftKey) && !S.pickAxis && !S.faceMode && !S.measure.on) { const h0 = pick(ev); if (h0) select([h0.object.userData.id], true); return; }
@@ -1474,6 +1475,72 @@ function setupReste() {
   renderReste();
 }
 
+// ---------------------------------------------------------------- mode tactile (écran de présentation, table tactile)
+// Même application, même fichier : grands boutons (échelle A− / A+), appui long sur une pièce = menu à l'endroit touché
+// (sur un écran d'un mètre, on ne va pas chercher un bouton au bord). Actif d'office si un écran tactile est détecté.
+const ECHELLES = [1, 1.25, 1.5, 1.75, 2, 2.5];
+const prefTactile = { actif: null, e: 1.25 };
+function lirePrefTactile() {
+  try { const m = localStorage.getItem('sdc-tactile'); prefTactile.actif = m === '1' ? true : m === '0' ? false : null; const e = parseFloat(localStorage.getItem('sdc-echelle')); if (ECHELLES.includes(e)) prefTactile.e = e; } catch { /* stockage indisponible */ }
+}
+function appliquerTactile() {
+  const actif = prefTactile.actif ?? (navigator.maxTouchPoints > 0 && matchMedia('(any-pointer: coarse)').matches);
+  document.body.classList.toggle('tactile', actif); document.body.style.setProperty('--e', actif ? prefTactile.e : 1);
+  $('tactile-toggle').classList.toggle('on', actif); $('ech-minus').hidden = $('ech-plus').hidden = !actif;
+  $('ech-minus').disabled = prefTactile.e <= ECHELLES[0]; $('ech-plus').disabled = prefTactile.e >= ECHELLES.at(-1);
+  fermerMenuCtx(); resize();
+}
+const memoriserPrefTactile = () => { try { localStorage.setItem('sdc-tactile', prefTactile.actif === null ? '' : prefTactile.actif ? '1' : '0'); localStorage.setItem('sdc-echelle', String(prefTactile.e)); } catch { /* rien */ } };
+function fermerMenuCtx() { const m = $('ctxmenu'); if (m) m.hidden = true; }
+function ouvrirMenuCtx(x, y) {
+  const m = $('ctxmenu'), ids = [...S.sel]; if (!ids.length) return;
+  const rows = rowsOf(ids), aUsiner = rows.filter(r => etatRow(r).etat !== 'achete'), tousFinis = aUsiner.length > 0 && aUsiner.every(r => etatRow(r).fini);
+  const opaque = ids.every(id => S.items[id].opacity > 0.9);
+  const b = (txt, fn, off = false) => el('button', { class: 'btn', ...(off ? { disabled: '' } : {}), onclick: () => { fermerMenuCtx(); fn(); } }, txt);
+  m.replaceChildren(el('div', { class: 'ctx-title' }, rows.length === 1 ? `Repère ${rows[0].repere} · ${nomRow(rows[0])}` : `${ids.length} pièces`),
+    b(tousFinis ? '↩ Remettre à faire' : (aUsiner.length ? '✔ Fini' : '🛒 Pièce achetée'), () => marquerFini(ids, !tousFinis), !aUsiner.length),
+    b('◎ Isoler', isolateSel), b('🙈 Masquer', hideSel), b('🔍 Cadrer', fitSelection),
+    b(opaque ? '◐ Rendre transparent' : '● Rendre opaque', () => { pushHistory(); for (const id of ids) S.items[id].opacity = opaque ? 0.35 : 1; refreshAll(); }),
+    b('➕ Groupe…', () => {
+      const n = prompt('Nom du groupe (existant ou nouveau)'); if (n === null || !n.trim()) return;
+      const g = trouverGroupe(S.groups, n);
+      if (g) { const k = ajouterAuGroupe(g, ids); refreshAll(); toast(`${k} pièce(s) ajoutée(s) à « ${g.nom} ».`); }
+      else { try { const ng = creerGroupe(S.groups, n, ids, { origine: 'Sélection manuelle' }); refreshAll(); toast(`Groupe « ${ng.nom} » créé : ${ng.ids.length} pièce(s).`); } catch (e) { if (e instanceof ErreurGroupe) toast('Groupe : ' + e.message, 5000); else throw e; } }
+    }),
+    rows.length === 1 ? b('✎ Renommer…', () => { const n = prompt('Nouveau nom du repère (vide = nom du STEP)', nomRow(rows[0])); if (n === null) return; try { const v = nomRepere(n, { origine: rows[0].designation }); const note = { ...(S.rowNotes[rows[0].repere] ?? {}) }; if (v) note.nom = v; else delete note.nom; S.rowNotes[rows[0].repere] = note; refreshAll(); } catch (e) { if (e instanceof ErreurNom) toast('Nom : ' + e.message, 5000); else throw e; } }) : null);
+  m.hidden = false;
+  const st = m.parentElement.getBoundingClientRect();
+  m.style.left = Math.max(8, Math.min(x - st.left + 12, st.width - m.offsetWidth - 8)) + 'px';
+  m.style.top = Math.max(8, Math.min(y - st.top - 12, st.height - m.offsetHeight - 8)) + 'px';
+}
+let appuiLong = null, appuiLongT0 = 0;
+function setupTactile() {
+  lirePrefTactile(); appliquerTactile();
+  $('tactile-toggle').onclick = () => { prefTactile.actif = !document.body.classList.contains('tactile'); memoriserPrefTactile(); appliquerTactile(); };
+  const echelle = d => { const i = ECHELLES.indexOf(prefTactile.e); prefTactile.e = ECHELLES[Math.max(0, Math.min(ECHELLES.length - 1, i + d))]; if (prefTactile.actif === null) prefTactile.actif = true; memoriserPrefTactile(); appliquerTactile(); };
+  $('ech-minus').onclick = () => echelle(-1); $('ech-plus').onclick = () => echelle(1);
+  const cv = renderer.domElement;
+  cv.addEventListener('pointerdown', ev => {
+    appuiLongFait = false; fermerMenuCtx();
+    if (ev.pointerType === 'mouse' || !S.loaded) return;
+    if (appuiLong) { clearTimeout(appuiLong.timer); appuiLong = null; return; } // deuxième doigt : zoom / déplacement, pas d'appui long
+    const x = ev.clientX, y = ev.clientY; appuiLongT0 = ev.timeStamp;
+    appuiLong = { x, y, timer: setTimeout(() => {
+      appuiLong = null;
+      const h = pick({ clientX: x, clientY: y }); if (!h) return;
+      const id = h.object.userData.id; if (!S.sel.has(id)) select([id]);
+      appuiLongFait = true; ouvrirMenuCtx(x, y);
+    }, S.appuiLongMs ?? 550) };
+  });
+  cv.addEventListener('pointermove', ev => { if (appuiLong && Math.hypot(ev.clientX - appuiLong.x, ev.clientY - appuiLong.y) > 12) { clearTimeout(appuiLong.timer); appuiLong = null; } });
+  for (const t of ['pointerup', 'pointercancel']) cv.addEventListener(t, () => { if (appuiLong) { clearTimeout(appuiLong.timer); appuiLong = null; } });
+  // Machine lente : si l'image a mis plus de 0,55 s à s'afficher, le délai a pu expirer alors que le doigt était déjà levé
+  // (relâchement plus de 0,1 s avant le délai) : c'était un appui bref, on referme le menu et la sélection se fait.
+  cv.addEventListener('pointerup', ev => { if (appuiLongFait && ev.timeStamp - appuiLongT0 < (S.appuiLongMs ?? 550) - 100) { fermerMenuCtx(); appuiLongFait = false; } }, true);
+  cv.addEventListener('contextmenu', ev => ev.preventDefault()); // pas de menu natif au doigt
+  addEventListener('keydown', ev => { if (ev.key === 'Escape') fermerMenuCtx(); });
+}
+
 // ---------------------------------------------------------------- pilotage par commandes JSON (onglet « Commande », window.SDC)
 // Le jeu de commandes, la validation et l'exécution sont dans geom/commande.js (pur). Ici : le « ctx » qui agit sur l'état.
 const nrm = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
@@ -1627,5 +1694,5 @@ function setupCommande() {
 }
 
 // ---------------------------------------------------------------- démarrage
-wire(); setupPanels(); setupGroupes(); setupReste(); setupCommande(); resize(); loop();
+wire(); setupPanels(); setupGroupes(); setupReste(); setupTactile(); setupCommande(); resize(); loop();
 window.__SDC__ = { S, loadBytes, setMode, select, selectNet, extractCylinders, buildNetworks, project, xf, partBox: id => { const b = partBox(id); return [...b.min.toArray(), ...b.max.toArray()]; }, fitBox, THREE }; // accès pour essais automatisés

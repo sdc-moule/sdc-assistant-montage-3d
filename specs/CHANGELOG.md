@@ -1,5 +1,9 @@
 # Historique du cahier des charges
 
+## 1.10 — 11 octobre 2026 (Claude Code, demande de Christophe : écran tactile de présentation de 1 m)
+- Nouveau domaine **TACTILE** (TAC-01 à TAC-03) : mode tactile dans le même fichier (pas de version séparée, pour ne pas dupliquer le code) — interface agrandie à échelle réglable A− / A+, appui long sur une pièce = menu contextuel. TAC-03 (lasso au doigt, gestes multi-doigts, réception sur l'écran réel) à faire.
+- Application autonome 1.5.1 → **1.6.0**. La v1.9 passe en archive figée.
+
 ## 1.9 — 11 octobre 2026 (Claude Code, décision de Christophe)
 - **Décision écrite** : les marqueurs d'intersection et d'extrémité des circuits (billes) sont **annulés** à l'affichage. La fonction n'est pas supprimée : option « Marqueurs d'intersection » (désactivée par défaut), exigence **PER-08**.
 - Application autonome 1.5.0 → **1.5.1**. La v1.8 passe en archive figée.

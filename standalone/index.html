@@ -14,6 +14,8 @@
       <label class="btn primary big" title="Ouvrir un fichier STEP, STP, IGES"><svg viewBox="0 0 24 24"><path d="M4 20h16M12 4v12m0-12-5 5m5-5 5 5"/></svg><span>Ouvrir un STEP</span><input id="file" type="file" accept=".step,.stp,.iges,.igs,.brep,.zip" hidden></label>
       <button class="btn" id="demo" title="Assemblage d'essai synthétique (BCR + plaque refroidie)">Démo</button>
       <select id="quality" title="Finesse du maillage d'affichage (n'affecte pas le fichier)"><option value="rapide">Affichage rapide</option><option value="normale" selected>Affichage normal</option><option value="fine">Affichage fin</option></select>
+      <button class="btn toggle" id="tactile-toggle" title="Mode tactile : grands boutons, appui long sur une pièce = menu contextuel">Tactile</button>
+      <button class="btn" id="ech-minus" hidden title="Interface plus petite">A−</button><button class="btn" id="ech-plus" hidden title="Interface plus grande">A+</button>
       <span class="sep"></span>
       <button class="btn" id="save-project" title="Enregistrer commentaires, vues, classements (fichier projet JSON)">Enregistrer projet</button>
       <label class="btn" title="Recharger un projet JSON ou une scène PNG">Charger projet / scène<input id="load-project" type="file" accept=".json,.png" hidden></label>
@@ -218,6 +220,7 @@
       <label class="op">Transparence<input id="s-opacity" type="range" min="0" max="100" value="100"></label>
       <button class="btn" id="s-clear">✕</button>
     </div>
+    <div id="ctxmenu" hidden></div>
     <div id="toast" hidden></div>
   </main>
 

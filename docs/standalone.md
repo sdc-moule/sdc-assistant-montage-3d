@@ -1,4 +1,4 @@
-# Application autonome — SDC Montage 3D 1.5.1
+# Application autonome — SDC Montage 3D 1.6
 
 Deux variantes, même application :
 - `SDC_Montage_3D.html` (~4,6 Mo) : complète, **hors ligne**. Le moteur OpenCascade (3,9 Mo compressé) est embarqué.
@@ -27,6 +27,7 @@ Double-clic → Chrome ou Edge. Pas d'installation, pas de FreeCAD. Le STEP est 
 | Reste à faire | Onglet **Reste à faire** : coche **« fini »** par repère (barre de sélection, colonne Fini de la nomenclature, fiche, onglet) ; pièces **achetées** (vis, écrou, rondelle, joint, bague, colonne) détectées d'office d'après la désignation — **proposé**, corrigeable par « À usiner » / « Acheté » — et exclues du reste à faire ; totaux, listes À faire / Faites / Achetées, sélection, isolement, coloration orange / vert / gris, colonne « avancement » du CSV. Coche par repère (toutes les occurrences) ; saisie manuelle, pas une validation de fabrication. Coche par occurrence : à faire (AVA-05) |
 | Renommer | **Double clic** (ou double appui) sur un nom dans la nomenclature, la fiche ou « Reste à faire » : Entrée valide, Échap annule, champ vide rétablit le nom du STEP. Le nom d'origine reste affiché ; le nom est enregistré dans le projet (par repère), repris dans le CSV (colonne `designation_origine`), le rapport et la recherche. Le STEP n'est jamais modifié. L'arborescence garde les noms du STEP (DES-04) |
 | Finesse d'affichage | Sélecteur **Affichage rapide / normal / fin** actif **à chaud** : le maillage est recalculé (ou relu du cache) sur le fichier ouvert, sans le rouvrir ; annotations, groupes, coches, noms, caméra, visibilité, coupes et éclaté conservés. Le STEP n'est pas modifié ; dimensions et Ø viennent du maillage affiché (tolérance ≈ 0,05 mm en normal) |
+| Mode tactile | Pour écran de présentation ou table tactile, dans le même fichier : activé d'office si un écran tactile est détecté (bouton **Tactile** pour forcer / quitter) ; boutons et champs agrandis, **A− / A+** (100 à 250 %, mémorisé) ; **appui long sur une pièce** = menu à l'endroit touché (fini, isoler, masquer, cadrer, transparent, groupe, renommer) ; un doigt tourne, deux doigts zooment et déplacent. Essais avec touches simulées ; réception sur l'écran réel à faire (TAC-03) |
 | Pilotage IA | Onglet **Commande** : coller un bloc JSON fourni par l'assistant, **Exécuter** ; API `window.SDC` ; validation de toute la série avant exécution, écritures confirmées par l'opérateur, « ↩ Avant la commande », contexte copiable pour l'IA (mode d'emploi + nomenclature). Guide et demandes types : [`pilotage-ia.md`](pilotage-ia.md) |
 | Rendu | Éclairage studio embarqué, couleurs STEP en sRGB (fidèles à la CAO), arêtes par défaut |
 
