@@ -1,0 +1,660 @@
+{
+  "projet": "SDC Assistant Montage 3D",
+  "version": "1.3",
+  "date": "2026-10-10",
+  "langue_interface": "fr-FR",
+  "statut": "cahier_des_charges_aligne_sur_l_application_autonome_1_0",
+  "remplace": "specs/v1.2 (archivée, inchangée)",
+  "objectif": "Explorer un assemblage de moule ou de bloc froid BCR depuis un STEP, générer une nomenclature repérée, afficher éclatés, ouvertures et coupes dynamiques pour les professionnels de l'atelier. Ajout v1.3 : module perçages & circuits (refroidissement, distribution matière, squelette des réseaux), ouverture en rotation sur charnière, scènes PNG.",
+  "public": [
+    "monteurs",
+    "ajusteurs",
+    "bureau_etudes"
+  ],
+  "livrables": {
+    "autonome": {
+      "dossier": "standalone/",
+      "fichiers_produits": [
+        "dist-standalone/SDC_Montage_3D.html",
+        "dist-standalone/SDC_Montage_3D_leger.html"
+      ],
+      "lecture_STEP": "OpenCascade WASM (occt-import-js) dans le navigateur",
+      "installation": "aucune ; Chrome ou Edge récent",
+      "version_application": "1.0.0",
+      "documentation": "docs/standalone.md"
+    },
+    "windows_0_2": {
+      "dossiers": [
+        "frontend/",
+        "backend/",
+        "packaging/"
+      ],
+      "lecture_STEP": "FreeCAD headless via moteur Python local",
+      "documentation": "README.md, docs/architecture.md"
+    }
+  },
+  "statuts_possibles": [
+    "fait",
+    "partiel",
+    "à faire",
+    "non détectable",
+    "existant"
+  ],
+  "definition_statut": {
+    "fait": "réalisé et vérifié par un test automatique ou un essai documenté sur données synthétiques",
+    "partiel": "réalisé en partie ; voir note",
+    "à faire": "non réalisé",
+    "non détectable": "impossible depuis les données STEP",
+    "existant": "présent dans un autre livrable"
+  },
+  "exigences": [
+    {
+      "id": "IMP-01",
+      "domaine": "import",
+      "exigence": "Ouvrir STEP AP203/AP214/AP242, STP, IGES, aussi zippés (le plus gros fichier CAO de l'archive)",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "partiel : ZIP du moule 10970 ouvert",
+      "preuve": [
+        "tests/e2e/standalone_e2e.py « ouverture d'un STEP zippé »",
+        "tests/standalone-geom.test.js « ZIP »"
+      ]
+    },
+    {
+      "id": "IMP-02",
+      "domaine": "import",
+      "exigence": "Conserver toutes les occurrences, transformations, noms, couleurs et l'arbre du STEP",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "partiel : moule 10970 (228 occurrences)",
+      "preuve": [
+        "tests/standalone-geom.test.js « lecture STEP : 15 occurrences »"
+      ],
+      "note": "Couleurs STEP appliquées en sRGB."
+    },
+    {
+      "id": "IMP-03",
+      "domaine": "import",
+      "exigence": "Fichier source en lecture seule ; empreinte SHA-256 liant annotations et fichier",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "à faire",
+      "preuve": [
+        "standalone/src/step-loader.js sha256",
+        "AGENTS.md règle 1"
+      ]
+    },
+    {
+      "id": "IMP-04",
+      "domaine": "import",
+      "exigence": "Accents ISO-8859-1 bruts (STEP non conformes) corrigés en mémoire en \\X\\HH",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "fait : noms du moule 10970 lisibles",
+      "preuve": [
+        "tests/standalone-geom.test.js « STEP : accents ISO-8859-1 »"
+      ]
+    },
+    {
+      "id": "IMP-05",
+      "domaine": "import",
+      "exigence": "Mémoriser le maillage converti sur le poste (IndexedDB, 6 derniers fichiers) pour une réouverture rapide",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "à faire",
+      "preuve": [
+        "essai moule 10970 44 Mo : 198 s puis 10 s"
+      ],
+      "note": "Lecture STEP ≈ 4 s/Mo la première fois (analyse OpenCascade mono-thread)."
+    },
+    {
+      "id": "IMP-06",
+      "domaine": "import",
+      "exigence": "Rapprocher une nomenclature externe CSV / XLSX / JSON avec validation des ambiguïtés",
+      "statut": "à faire",
+      "livrable": "autonome",
+      "reception_atelier": "à faire"
+    },
+    {
+      "id": "NOM-01",
+      "domaine": "nomenclature",
+      "exigence": "Repères uniques ; regroupement nom + signature géométrique « à valider » ; géométries identiques sous noms différents signalées, jamais fusionnées",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "à faire",
+      "preuve": [
+        "tests/standalone-geom.test.js « nomenclature »"
+      ]
+    },
+    {
+      "id": "NOM-02",
+      "domaine": "nomenclature",
+      "exigence": "Bulles numérotées à flèche, anti-chevauchement, déplaçables, cliquables, en option (tous / sélection)",
+      "statut": "partiel",
+      "livrable": "autonome",
+      "reception_atelier": "à faire",
+      "note": "Filtre « par sous-ensemble » des bulles non réalisé."
+    },
+    {
+      "id": "NOM-03",
+      "domaine": "nomenclature",
+      "exigence": "Saisir une référence et valider un repère",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "à faire"
+    },
+    {
+      "id": "NOM-04",
+      "domaine": "nomenclature",
+      "exigence": "Export nomenclature CSV (Excel FR) et dans le rapport PDF",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "à faire"
+    },
+    {
+      "id": "NOM-05",
+      "domaine": "nomenclature",
+      "exigence": "Export nomenclature XLSX natif",
+      "statut": "à faire",
+      "livrable": "autonome",
+      "reception_atelier": "à faire"
+    },
+    {
+      "id": "NAV-01",
+      "domaine": "navigation",
+      "exigence": "Orbite, panoramique, zoom, vues Iso/Dessus/Face/Droite, tout voir, cadrer la sélection",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "à faire"
+    },
+    {
+      "id": "NAV-02",
+      "domaine": "navigation",
+      "exigence": "Sélection : clic, Ctrl / « Multi », fenêtre (gauche→droite : entièrement dedans ; droite→gauche : touchées) ; synchronisation 3D / arborescence / nomenclature / bulles",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "à faire",
+      "preuve": [
+        "tests/e2e/standalone_e2e.py « fenêtre »"
+      ]
+    },
+    {
+      "id": "NAV-03",
+      "domaine": "navigation",
+      "exigence": "Masquer, isoler, tout afficher, par pièce, sous-ensemble, famille ; annuler / rétablir",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "à faire",
+      "preuve": [
+        "tests/e2e/standalone_e2e.py « isoler », « annuler »"
+      ]
+    },
+    {
+      "id": "NAV-04",
+      "domaine": "navigation",
+      "exigence": "Transparence 0–100 % par sélection, mode fantôme autour de la sélection",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "à faire"
+    },
+    {
+      "id": "NAV-05",
+      "domaine": "navigation",
+      "exigence": "Recherche par repère, nom, référence, dimension, sous-ensemble, Ø de perçage",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "à faire"
+    },
+    {
+      "id": "NAV-06",
+      "domaine": "navigation",
+      "exigence": "Cotation (remplace « Mesurer ») : toucher un cylindre → Ø (ou R si arc) ; deux éléments (faces, axes, face + axe, points) → distance si parallèles, angle sinon ; cotes conservées à l'écran, masquables une à une ou toutes, mémorisées dans projet et scènes",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "à faire",
+      "preuve": [
+        "tests/standalone-geom.test.js « cotation »",
+        "tests/e2e/standalone_e2e.py « cotation Ø », « deux faces parallèles »"
+      ],
+      "note": "Valeurs du maillage, indicatives."
+    },
+    {
+      "id": "NAV-07",
+      "domaine": "navigation",
+      "exigence": "Retirer une ou plusieurs faces B-Rep d'une pièce pour voir logements, formes et perçages ; remettre ; annulable",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "à faire",
+      "preuve": [
+        "tests/e2e/standalone_e2e.py « retirer une face »"
+      ]
+    },
+    {
+      "id": "NAV-08",
+      "domaine": "navigation",
+      "exigence": "Mode BCR : familles de pièces proposées par les noms (plaques, collecteurs, busettes, obturateurs, résistances, visserie, guidage, refroidissement), corrigeables, filtrables",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "à faire",
+      "note": "Proposition uniquement ; classement manuel prioritaire."
+    },
+    {
+      "id": "REN-01",
+      "domaine": "rendu",
+      "exigence": "Rendu lisible : éclairage studio embarqué, couleurs CAO, arêtes par défaut, intérieur de matière éclairé",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "à faire"
+    },
+    {
+      "id": "IHM-01",
+      "domaine": "interface",
+      "exigence": "Panneaux Outils et Pièces réductibles par poignée (bande verticale) et détachables en fenêtres flottantes déplaçables et redimensionnables ; barre d'outils 3D déplaçable par sa poignée et repliable ; disposition mémorisée sur le poste",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "à faire",
+      "preuve": [
+        "tests/e2e/standalone_e2e.py « réduire le panneau gauche », « détacher le panneau droit »"
+      ]
+    },
+    {
+      "id": "ECL-01",
+      "domaine": "eclate",
+      "exigence": "Éclaté tout / sélection, empilage Z, X, Y ou radial (écartement ×4), animation, retour exact à 0",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "à faire",
+      "preuve": [
+        "tests/e2e/standalone_e2e.py « retour exact à la position d'origine après éclaté »"
+      ]
+    },
+    {
+      "id": "ECL-02",
+      "domaine": "eclate",
+      "exigence": "Vecteurs d'éclaté éditables pièce par pièce",
+      "statut": "à faire",
+      "livrable": "autonome",
+      "reception_atelier": "à faire"
+    },
+    {
+      "id": "OUV-01",
+      "domaine": "ouverture",
+      "exigence": "Ouverture paramétrée par groupes mobiles en translation (axe, sens, course mm), curseur fermé → ouvert, animation, groupes enchaînés",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "à faire"
+    },
+    {
+      "id": "OUV-02",
+      "domaine": "ouverture",
+      "exigence": "Rotation autour d'une charnière : axe pris sur une pièce cylindrique (axe, goupille, alésage) ou une arête droite ; angle en degrés",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "à faire",
+      "preuve": [
+        "tests/e2e/standalone_e2e.py « axe de charnière », « tourné de 90° »"
+      ]
+    },
+    {
+      "id": "OUV-03",
+      "domaine": "ouverture",
+      "exigence": "Retour exact à fermé (position et orientation du STEP)",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "à faire",
+      "preuve": [
+        "tests/e2e/standalone_e2e.py « fermé : retour exact »"
+      ]
+    },
+    {
+      "id": "COU-01",
+      "domaine": "coupes",
+      "exigence": "Coupes XZ, YZ, XY simultanées, curseur en mm sur toute l'étendue, inversion, combinables avec éclaté et ouverture",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "à faire",
+      "preuve": [
+        "tests/e2e/standalone_e2e.py « coupe XZ activée »"
+      ]
+    },
+    {
+      "id": "COU-02",
+      "domaine": "coupes",
+      "exigence": "Matière coupée pleine, hachurage léger, contour des pièces coupées en trait épais (calcul par pièce et par plan) ; contour du plan en option",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "fait : coupe du moule 10970 contrôlée en capture",
+      "preuve": [
+        "tests/e2e/standalone_e2e.py « contours de coupe calculés »"
+      ]
+    },
+    {
+      "id": "COU-03",
+      "domaine": "coupes",
+      "exigence": "Section B-Rep exacte et export des profils (calcul OpenCascade dédié)",
+      "statut": "à faire",
+      "livrable": "autonome",
+      "reception_atelier": "à faire",
+      "note": "La coupe affichée est visuelle."
+    },
+    {
+      "id": "PER-01",
+      "domaine": "percages",
+      "exigence": "Détecter les perçages (cylindres concaves), perçages étagés, forages interrompus par une poche",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "à faire",
+      "preuve": [
+        "tests/standalone-geom.test.js « perçages », « logement Ø60 »"
+      ]
+    },
+    {
+      "id": "PER-02",
+      "domaine": "percages",
+      "exigence": "Détecter les pièces logées dans un perçage (obturateurs, vis, busettes)",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "à faire",
+      "preuve": [
+        "tests/standalone-geom.test.js « circuit de refroidissement »"
+      ]
+    },
+    {
+      "id": "PER-03",
+      "domaine": "percages",
+      "exigence": "Réseaux : forages sécants et continuité coaxiale entre pièces ; types circuit / passage aligné / perçage isolé / alésage-logement ; Ø maxi forage réglable (32 mm)",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "à faire",
+      "preuve": [
+        "tests/standalone-geom.test.js « distribution matière », « lamages »"
+      ]
+    },
+    {
+      "id": "PER-04",
+      "domaine": "percages",
+      "exigence": "Classement des réseaux proposé (distribution matière, refroidissement, fixation) et validé par l'opérateur",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "à faire"
+    },
+    {
+      "id": "PER-05",
+      "domaine": "percages",
+      "exigence": "Squelette des circuits, « circuits seuls », forages pleins Ø3–20 (réglable), étiquettes Ø en option, filtres type et Ø",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "à faire"
+    },
+    {
+      "id": "PER-06",
+      "domaine": "percages",
+      "exigence": "Fiche des perçages CSV : Ø, longueur, axe, extrémités en mm depuis le coin mini de la pièce, débouchant, pièce logée",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "à faire"
+    },
+    {
+      "id": "PER-07",
+      "domaine": "percages",
+      "exigence": "Taraudages, perçages coniques, obliques complexes, pointes de forêt",
+      "statut": "non détectable",
+      "livrable": "autonome",
+      "reception_atelier": "à faire",
+      "note": "Le STEP ne porte pas le filetage ; signalé dans l'aide."
+    },
+    {
+      "id": "DOC-01",
+      "domaine": "documentation",
+      "exigence": "Commentaires en français liés aux pièces : type (observation, montage, contrôle, anomalie), auteur, date, statut",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "à faire",
+      "preuve": [
+        "tests/e2e/standalone_e2e.py « commentaire restauré »"
+      ]
+    },
+    {
+      "id": "DOC-02",
+      "domaine": "documentation",
+      "exigence": "Scènes mémorisées avec vignette (caméra, éclaté, ouverture, coupes, masquages, transparences, faces retirées, circuits) ; PNG contenant la scène, rechargeable ; copie presse-papiers",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "à faire",
+      "preuve": [
+        "tests/e2e/standalone_e2e.py « scène restaurée depuis le PNG »",
+        "tests/standalone-geom.test.js « PNG »"
+      ]
+    },
+    {
+      "id": "DOC-03",
+      "domaine": "documentation",
+      "exigence": "Projet JSON + sauvegarde automatique par fichier ; réimport sur STEP modifié par nom + signature avec avertissement",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "à faire"
+    },
+    {
+      "id": "DOC-04",
+      "domaine": "documentation",
+      "exigence": "Capture PNG annotée, rapport imprimable / PDF (vue, nomenclature, circuits, commentaires)",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "à faire"
+    },
+    {
+      "id": "DOC-05",
+      "domaine": "documentation",
+      "exigence": "Enregistrement via « Enregistrer sous » ouvert sur Téléchargements (Chrome / Edge)",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "à faire"
+    },
+    {
+      "id": "ARC-01",
+      "domaine": "architecture",
+      "exigence": "Application en un seul fichier HTML hors ligne (4,6 Mo) + variante légère 0,35 Mo (moteur via Internet)",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "à faire",
+      "preuve": [
+        "standalone/build.mjs",
+        "tests/e2e/standalone_e2e.py"
+      ]
+    },
+    {
+      "id": "ARC-02",
+      "domaine": "architecture",
+      "exigence": "Application Windows 0.2 (Vite + moteur FreeCAD local) maintenue en parallèle",
+      "statut": "existant",
+      "livrable": "windows_0_2",
+      "reception_atelier": "à faire",
+      "note": "Développée avec Codex ; voir frontend/ backend/ packaging/."
+    },
+    {
+      "id": "REC-01",
+      "domaine": "reception",
+      "exigence": "Réception sur un moule réel",
+      "statut": "partiel",
+      "livrable": "autonome",
+      "reception_atelier": "à faire",
+      "note": "Moule 10970 (16 empreintes 630×500) : lecture, noms, coupes et perçages contrôlés ; validation atelier à faire."
+    },
+    {
+      "id": "REC-02",
+      "domaine": "reception",
+      "exigence": "Réception sur un BCR réel, avec et sans nomenclature",
+      "statut": "à faire",
+      "livrable": "autonome",
+      "reception_atelier": "à faire"
+    }
+  ],
+  "module_percages_circuits": {
+    "detection": "faces B-Rep maillées à normales coplanaires → cylindre ; ajustement de cercle ; concave = perçage, convexe = arbre",
+    "fusion": "faces coaxiales de même rayon fusionnées ; segments coaxiaux contigus d'une pièce = perçage étagé ; même Ø interrompu = un seul forage",
+    "liaisons": [
+      "sécantes : axes à moins de 0,95 × somme des rayons",
+      "coaxiales entre pièces différentes, écart ≤ 0,6 mm"
+    ],
+    "types_reseau": [
+      "circuit",
+      "alignement",
+      "isolé",
+      "alésage"
+    ],
+    "diametre_maxi_forage_mm": 32,
+    "alesage_si": "Ø > Ø maxi forage, ou L < 0,6 D et D > 12 mm",
+    "classements": [
+      "non classé",
+      "refroidissement",
+      "distribution matière",
+      "fixation",
+      "hydraulique / air",
+      "éjection",
+      "autre"
+    ],
+    "affichage": {
+      "forages_pleins_diametre_mm": [
+        3,
+        20
+      ],
+      "etiquettes_diametre": "option",
+      "extremites": "non dessinées (décision atelier)"
+    },
+    "limites": "valeurs issues du maillage d'affichage (≈ 0,05 mm en qualité normale) ; taraudages non détectables ; ce n'est pas une analyse de collision"
+  },
+  "ouverture_parametree": {
+    "mouvements": {
+      "translation": [
+        "axe X/Y/Z",
+        "sens",
+        "course_mm"
+      ],
+      "rotation": [
+        "axe pris sur cylindre ou arête",
+        "angle_deg",
+        "sens"
+      ]
+    },
+    "composition": "éclaté ∘ mouvements dans l'ordre de création (un groupe peut porter un autre groupe)",
+    "controle": "curseur continu fermé → ouvert, animation",
+    "avertissement": "Ne pas supposer qu'une position ouverte est contenue dans le STEP ni qu'un mouvement est mecaniquement admissible."
+  },
+  "scenes": {
+    "contenu": [
+      "camera",
+      "visibilite",
+      "opacites",
+      "familles_masquees",
+      "coupes",
+      "eclate",
+      "ouverture",
+      "faces_retirees",
+      "circuits",
+      "selection"
+    ],
+    "export": "PNG avec chunk iTXt « sdc-montage3d-scene » (JSON)",
+    "rechargement": "Charger projet / scène ; avertissement si empreinte différente"
+  },
+  "principes": {
+    "utilisateurs": "professionnels_autonomes",
+    "langue": "francais_pour_interface_annotations_et_rapports",
+    "fichier_STEP_source": "lecture_seule",
+    "ne_pas_faire": [
+      "detection_collisions",
+      "calcul_jeux",
+      "verification_tolerances",
+      "simulation_mecanique",
+      "verification_automatique_des_serrages"
+    ],
+    "donnees_inconnues": "afficher_non_renseigne_ou_a_verifier_jamais_inventer"
+  },
+  "hors_perimetre": [
+    "ordre_de_montage_impose",
+    "verification_automatique_de_tous_les_serrages",
+    "calcul_de_resistance",
+    "reconnaissance_fiable_de_toute_visserie_sans_nomenclature",
+    "detection_collisions",
+    "calcul_jeux",
+    "verification_tolerances",
+    "simulation_mecanique"
+  ],
+  "mesures": {
+    "distance_entre_points": "indicative",
+    "dimensions_encombrement": "calculees_depuis_BRep",
+    "pas_de_controle_de_tolerance": true,
+    "unite": "mm"
+  },
+  "nomenclature": {
+    "colonnes": [
+      "repere",
+      "designation",
+      "reference",
+      "quantite",
+      "sous_ensemble",
+      "X_mm",
+      "Y_mm",
+      "Z_mm",
+      "commentaire",
+      "origine_information",
+      "statut_validation"
+    ],
+    "numerotation": "entiers_positifs_uniques_par_reference_de_composant",
+    "occurrences_identiques": "meme_repere_et_quantite_cumulee",
+    "bulles": {
+      "forme": "cercle",
+      "contenu": "numero_repere",
+      "fleche": "trait_de_rappel_avec_pointe_vers_composant",
+      "ancrage": "point_visible_sur_composant",
+      "eviter_chevauchements": true,
+      "affichage": [
+        "tous",
+        "selection",
+        "sous_ensemble",
+        "masquer"
+      ],
+      "interaction": "clic_bulle_selectionne_piece_et_ligne_nomenclature",
+      "options": [
+        "deplacer_bulle",
+        "masquer_bulle",
+        "afficher_bulles_selection",
+        "trait_de_rappel_avec_pointe",
+        "export_avec_bulles"
+      ]
+    },
+    "export": [
+      "CSV",
+      "PDF (rapport)",
+      "XLSX (à faire)"
+    ],
+    "regroupement": {
+      "identiques": "par_reference_confirmee_ou_signature_geometrique_validee",
+      "occurrences": "quantite_et_emplacements_distincts",
+      "ambiguite": "pas_de_fusion_automatique"
+    }
+  },
+  "persistance": {
+    "projet_json": "sdc-montage3d-projet/2",
+    "stockage_local": "localStorage (annotations) + IndexedDB (maillages)",
+    "cle": "empreinte SHA-256 du fichier source",
+    "reimport": "conserver_annotations_si_identifiants_stables_sinon_signaler_correspondances_incertaines"
+  },
+  "environnement": {
+    "atelier": [
+      "Chrome ou Edge récent",
+      "WebGL2"
+    ],
+    "developpement": [
+      "Node.js ≥ 22",
+      "Python 3 + Playwright pour l'essai navigateur",
+      "OCP (cadquery-ocp-novtk) pour régénérer le STEP d'essai"
+    ],
+    "precaution": "verifier_versions_et_chemins_existants_avant_toute_installation"
+  },
+  "validation_attendue": [
+    "réception atelier sur le moule 10970",
+    "réception sur un BCR réel",
+    "confirmer les regroupements de nomenclature",
+    "valider les classements de circuits proposés"
+  ]
+}

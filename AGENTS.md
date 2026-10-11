@@ -1,0 +1,67 @@
+# Consignes pour les agents de code (Codex, Claude Code, …)
+
+Lire ce fichier en entier avant toute modification. Les règles métier priment sur la vitesse.
+
+## Ce que fait le dépôt
+Consultation d'assemblages STEP (moules caoutchouc/silicone, BCR) pour l'atelier SDC : repérage, nomenclature,
+masquage/isolation/transparence, éclatés, ouverture paramétrée, coupes, perçages et circuits. **Consultation
+uniquement** : aucune modification du STEP, aucune validation de fabrication.
+
+Deux livrables coexistent :
+
+| Dossier | Livrable | Lecture STEP |
+| --- | --- | --- |
+| `standalone/` | **Application autonome** : un seul fichier HTML (`dist-standalone/SDC_Montage_3D.html`) | OpenCascade WASM (`occt-import-js`) dans le navigateur |
+| `frontend/` + `backend/` + `packaging/` | Application Windows 0.2 (Vite + moteur Python FreeCAD local) | FreeCAD headless |
+
+Le code géométrique pur est dans `standalone/src/geom/` (sans Three.js, testable sous Node) :
+`from-occt.js` (pièces), `bom.js` (nomenclature, CSV), `holes.js` (cylindres/perçages), `circuits.js` (réseaux).
+
+## Cahier des charges (à lire avant de coder)
+- Version en vigueur : `specs/ACTUEL.json` → aujourd'hui `specs/v1.3/` (`.json` fait foi pour les ids et statuts, `.md` pour la lecture).
+- `specs/v1.2/` et toute version listée dans `specs/INTEGRITE.json` sont des **archives figées** : ne jamais les modifier,
+  les déplacer ni les supprimer (`tests/specs.test.js` échoue sinon). Évolution = nouveau dossier `specs/v1.x/`, voir `specs/README.md`.
+- Chaque PR cite les ids d'exigence touchés (`PER-03`, `OUV-02`…) et met à jour leur statut dans le `.json` **et** le tableau du `.md`.
+
+## Travail à plusieurs agents (Codex et Claude Code) — ne rien effacer par erreur
+- Une branche par agent et par sujet : `codex/<sujet>` ou `claude/<sujet>`. Jamais de push direct sur `main`, jamais de `push --force` sur une branche partagée.
+- Avant de commencer : `git fetch` puis partir de `main` à jour ; relire `specs/CHANGELOG.md` et les PR ouvertes.
+- **Ne supprimer aucun fichier ni aucune fonction existante** sans décision écrite de Christophe dans `specs/CHANGELOG.md`.
+  Une fonction retirée de l'interface reste documentée (statut « abandonné »), elle n'est pas effacée du cahier des charges.
+- Périmètres : `standalone/` (application autonome) et `frontend/` `backend/` `packaging/` (application Windows 0.2) sont
+  indépendants ; modifier l'un ne doit pas casser ni réécrire l'autre. Code géométrique partagé uniquement dans `standalone/src/geom/`.
+- Fichiers générés (`dist/`, `dist-standalone/`) : jamais committés, toujours reconstruits.
+
+## Commandes
+```bash
+npm ci
+npm test                       # tests Node (dont géométrie sur tests/fixtures/bcr_synthetique.step)
+npm run build:standalone       # → SDC_Montage_3D.html (4,6 Mo, hors ligne) + SDC_Montage_3D_leger.html (0,35 Mo, CDN)
+python tests/e2e/standalone_e2e.py [captures] [SDC_Montage_3D_leger.html]   # essai navigateur (Playwright + Chromium), doit afficher uniquement des OK
+npm run build                  # application Vite 0.2
+```
+Données d'essai : `python tools/make_test_step.py tests/fixtures/bcr_synthetique.step` (OCP : `pip install cadquery-ocp-novtk`).
+Ajouter un nouveau cas = ajouter une géométrie au générateur + un test qui vérifie le résultat attendu chiffré.
+
+## Règles non négociables
+1. Le fichier source est en **lecture seule**. Les annotations vivent dans le projet JSON / localStorage, liés à l'empreinte SHA-256.
+2. Interface, messages, exports et commentaires **en français**.
+3. Toute valeur déduite est marquée (« proposé », « à vérifier », « indicatif »). Jamais de fusion automatique de références ambiguës.
+4. Hors périmètre : collisions, jeux, tolérances, serrages, simulation. Ne pas en ajouter sans décision écrite.
+5. Le retour à zéro de l'éclaté et de l'ouverture doit restituer **exactement** la position du STEP (décalage = 0).
+6. Pas de dépendance réseau à l'exécution pour la version complète. Seule la variante `_leger` charge le moteur OCCT depuis jsDelivr, et doit l'annoncer clairement en cas d'échec.
+7. Ne jamais committer de STEP client (`*.step` ignoré, sauf `tests/fixtures/` synthétiques).
+
+## Pièges connus
+- `three-mesh-bvh` réordonne l'index de la géométrie : toujours lui donner une **copie** (`p.index.slice()`), l'analyse des perçages utilise les plages de faces B-Rep de l'index d'origine.
+- Sous `file://`, un Worker `blob:` ne peut pas faire `importScripts(blob:)` : le moteur OCCT est concaténé dans la source du Worker.
+- `[hidden]` doit rester `display:none !important` (sinon les classes `display:flex` l'emportent).
+- Renderer créé avec `stencil: true` : indispensable aux coupes pleines (capSet/updateCaps).
+- Les couleurs STEP sont sRGB : `setRGB(..., THREE.SRGBColorSpace)`, sinon rendu délavé.
+- Lecture STEP ~4 s/Mo (analyse OCCT mono-thread), indépendante de la finesse : le cache IndexedDB évite de relire.
+- Les dimensions et diamètres proviennent du maillage d'affichage : tolérance ~0,05 mm en qualité normale.
+
+## Définition de « terminé »
+`npm test` vert, `npm run build:standalone` OK, `tests/e2e/standalone_e2e.py` sans ÉCHEC, captures relues,
+README/feuille de route mis à jour avec le comportement **réel** (pas les intentions). Une fonction n'est pas
+« faite » parce qu'un bouton existe.

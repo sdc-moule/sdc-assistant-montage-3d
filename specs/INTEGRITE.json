@@ -1,0 +1,9 @@
+{
+  "regle": "Versions archivées : ne jamais modifier ni supprimer. Nouvelle version = nouveau dossier.",
+  "versions": {
+    "1.2": {
+      "SDC_Assistant_Montage_3D_v1_2_FR.json": "9eae213316336418961fe2b0af8b05e7806c59762ee9ef2a85ca2e5fe6969510",
+      "SDC_Cahier_des_charges_Montage_3D_v1_2_FR.md": "902ab1da5c13a25ac85b0a9bed2c295494450c1f07bf657c42274daa3aa9d9de"
+    }
+  }
+}

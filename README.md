@@ -1,5 +1,11 @@
 # SDC Assistant Montage 3D
 
+> **Nouveau — application autonome 1.0** : un seul fichier HTML, hors ligne, sans FreeCAD ni installation, avec module
+> **Perçages & circuits** (refroidissement, distribution matière, squelette des réseaux). Construire avec
+> `npm ci && npm run build:standalone` ou télécharger l'artefact *SDC-Montage-3D-HTML-autonome* de la CI.
+> Voir [docs/standalone.md](docs/standalone.md). Cahier des charges en vigueur : [specs/](specs/README.md) (v1.3).
+> Consignes agents (Codex, Claude Code) : [AGENTS.md](AGENTS.md).
+
 Application Windows en français pour ouvrir directement un **STEP/STP**, consulter ses composants en 3D, rechercher un repère, isoler des pièces ou sous-ensembles, modifier l’opacité, afficher un éclaté ou une coupe, et sauvegarder un projet de consultation.
 
 **Version 0.2.0 : chargement STEP local fonctionnel.** La démonstration est une option distincte, désactivée au démarrage. Statut de développement **WIP** : essais de conversion et de consultation réussis sur assemblages STEP synthétiques ; réception sur les moules et BCR de l’atelier à effectuer.
