@@ -12,6 +12,7 @@ function fauxCtx() {
     { id: 'O003', repere: 2, nom: 'VIS_CHC_M10x40', sous_ensemble: 'BCR / visserie', famille: 'visserie', famille_label: 'Visserie / goupilles', visible: true, opacite_pct: 100, selectionnee: false, dims_mm: [10, 10, 40], volume_cm3: 3, type_usinage: 'tournage', revolution_pct: 100, diametre_mm: 10, longueur_mm: 40, dim_max_mm: 40, dim_min_mm: 10, brut_mm: [40, 10, 10] },
     { id: 'O004', repere: 3, nom: 'COLLECTEUR', sous_ensemble: 'BCR', famille: 'collecteur', famille_label: 'Collecteurs', visible: true, opacite_pct: 100, selectionnee: false, dims_mm: [120, 60, 50], volume_cm3: 200, type_usinage: 'fraisage', revolution_pct: 30, diametre_mm: null, longueur_mm: null, dim_max_mm: 120, dim_min_mm: 50, brut_mm: [120, 60, 50] },
   ];
+  pieces.forEach(x => { x.avancement = x.repere === 2 ? 'achete' : 'a_faire'; });
   const rec = nom => (...a) => { appels.push([nom, ...a]); };
   const ctx = {
     appels, pieces: () => pieces, charge: () => true,
@@ -35,6 +36,9 @@ function fauxCtx() {
   ctx.groupeAjouter = (nom, ids) => { const g = groupes.find(x => x.nom === nom); if (!g) throw new ErreurCommande(`groupe « ${nom} » inconnu.`); const n = ids.filter(i => !g.ids.includes(i)); g.ids.push(...n); appels.push(['groupeAjouter', nom, ids]); return n.length; };
   ctx.groupeRetirer = (nom, ids) => { const g = groupes.find(x => x.nom === nom); if (!g) throw new ErreurCommande(`groupe « ${nom} » inconnu.`); const av = g.ids.length; g.ids = g.ids.filter(i => !ids.includes(i)); appels.push(['groupeRetirer', nom, ids]); return av - g.ids.length; };
   ctx.groupeSupprimer = nom => { const i = groupes.findIndex(x => x.nom === nom); if (i < 0) throw new ErreurCommande(`groupe « ${nom} » inconnu.`); groupes.splice(i, 1); appels.push(['groupeSupprimer', nom]); };
+  ctx.resteAFaire = () => ({ totaux: { reperes: { a_faire: 2, fini: 0, achete: 1 } }, a_faire: [{ repere: 1 }, { repere: 3 }], achetes_proposes: [{ repere: 2 }] });
+  ctx.marquerFini = (ids, fini) => { appels.push(['marquerFini', ids, fini]); return { reperes: ids.length, achetes: 0 }; };
+  ctx.marquerAchete = (ids, v) => { appels.push(['marquerAchete', ids, v]); return ids.length; };
   ctx.circuits = q => { appels.push(['circuits', q]); return { message: 'ok' }; };
   ctx.sauverAvant = () => appels.push(['sauverAvant']);
   ctx.sceneSauver = n => { appels.push(['sceneSauver', n]); return n ?? 'Scène 1'; };
@@ -246,6 +250,22 @@ test('le contexte IA mentionne les types d\'usinage et rappelle qu\'ils sont pro
   assert.match(t, /"type":"tournage"/); assert.match(t, /groupe_creer/); assert.match(t, /DÉDUITS de la forme du maillage/);
   const c = fauxCtx(); c.nomenclature = () => [{ repere: 1, designation: 'VIS', quantite: 4, famille: 'Visserie', sous_ensemble: '', dims_mm: [10, 10, 40], type_usinage: 'tournage', diametre_mm: 10, longueur_mm: 40, brut_mm: [40, 10, 10], statut: 'à vérifier' }, { repere: 2, designation: 'PLAQUE', quantite: 1, famille: 'Plaques', sous_ensemble: '', dims_mm: [300, 200, 40], type_usinage: 'fraisage', diametre_mm: null, longueur_mm: null, brut_mm: [300, 200, 40], statut: 'à vérifier' }];
   const ctxt = contexteIA(c);
-  assert.match(ctxt, /1 \| VIS \| 4 \| Visserie \| — \| 10×10×40 \| tournage \| Ø10×40 \| à vérifier/);
-  assert.match(ctxt, /2 \| PLAQUE \| 1 \| Plaques \| — \| 300×200×40 \| fraisage \| 300×200×40 \| à vérifier/);
+  assert.match(ctxt, /1 \| VIS \| 4 \| Visserie \| — \| 10×10×40 \| tournage \| Ø10×40 \| — \| à vérifier/);
+  assert.match(ctxt, /2 \| PLAQUE \| 1 \| Plaques \| — \| 300×200×40 \| fraisage \| 300×200×40 \| — \| à vérifier/);
+});
+
+test('reste à faire : cible « avancement », lecture et écritures confirmées', async () => {
+  const c = fauxCtx();
+  assert.deepEqual(resoudreCible(c, { avancement: 'achetee' }), ['O002', 'O003']);
+  assert.deepEqual(resoudreCible(c, { avancement: ['a_faire'], type: 'fraisage' }), ['O001', 'O004']);
+  assert.throws(() => resoudreCible(c, { avancement: 'fini' }), /aucune pièce/);
+  let r = await run(fauxCtx(), { cmd: 'isoler', cible: { avancement: 'bientôt' } }); assert.equal(r.ok, false); assert.match(JSON.stringify(r), /inconnu/);
+  r = await run(c, { cmd: 'reste_a_faire' }); assert.equal(r.ok, true); assert.equal(r.resultats[0].donnees.totaux.reperes.a_faire, 2); assert.match(r.resultats[0].message, /2 repères? à faire/);
+  const lot = { commandes: [{ cmd: 'marquer_fini', cible: [1] }, { cmd: 'marquer_achete', cible: { nom: 'collecteur' }, achete: false }] };
+  r = await run(c, lot); assert.equal(r.ok, false); assert.ok(!c.appels.some(a => a[0] === 'marquerFini'), 'refusé sans confirmation');
+  let vu; r = await run(c, lot, { confirmer: l => { vu = l; return true; } });
+  assert.equal(r.ok, true, JSON.stringify(r)); assert.match(vu[0], /Cocher « fini » pour 1 pièce \(repères 1\)/); assert.match(vu[1], /Déclarer « à usiner »/);
+  assert.deepEqual(c.appels.find(a => a[0] === 'marquerFini').slice(1), [['O001'], true]); assert.deepEqual(c.appels.find(a => a[0] === 'marquerAchete').slice(1), [['O004'], false]);
+  r = await run(c, { cmd: 'marquer_achete', cible: [2], auto: true }, { confirmer: () => true }); assert.equal(r.ok, true);
+  assert.equal(c.appels.at(-1)[2], null, 'auto = retour à la détection');
 });

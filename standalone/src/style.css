@@ -205,3 +205,13 @@ table.bom td.dims { white-space: nowrap; font-variant-numeric: tabular-nums; fon
 .gdot { width: 14px; height: 14px; border-radius: 50%; flex: none; border: 1px solid rgba(0,0,0,.25); }
 .tag.typ-tournage { background: #dbe8f3; color: var(--steel-d); } .tag.typ-fraisage { background: #fdf2dc; color: var(--warn); } .tag.typ-mixte { background: #ece4f6; color: #5b3a8c; }
 .row .dims { font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* reste à faire */
+.rst-total { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 8px 0 4px; text-align: center; }
+.rst-total div { background: #eef2f5; border-radius: 8px; padding: 6px 2px; font-size: 12px; color: var(--muted); }
+.rst-total b { display: block; font-size: 20px; color: var(--ink, #1d2b36); }
+.rst-total .af b { color: #c25e08; } .rst-total .fi b { color: var(--ok); }
+#rst-bar { width: 100%; height: 10px; margin-bottom: 8px; }
+.row .fini { width: 22px; height: 22px; flex: none; }
+.tag.achat { background: #e6e9ed; color: #4a525a; } .tag.fini { background: #e1f3e8; color: var(--ok); } .tag.afaire { background: #fde9d4; color: #a14d06; }
+table.bom td .fini { width: 20px; height: 20px; }

@@ -3,6 +3,8 @@
 // ni une gamme d'usinage. Une pièce est « ronde » si la quasi-totalité de ses faces latérales est une surface de révolution
 // autour d'un même axe (cylindre, cône, tore, sphère…) ; les faces planes perpendiculaires à l'axe sont neutres.
 
+import { validerAvancement, avancementCorrespond } from './avancement.js';
+
 export const TYPES = ['tournage', 'mixte', 'fraisage'];
 export const SEUIL_TOURNAGE = 90; // % de surface latérale de révolution : au moins → tournage
 export const SEUIL_MIXTE = 50;    // entre les deux seuils → mixte (rond + usinages) ; en dessous → fraisage
@@ -114,7 +116,7 @@ export function analyserTypologie(part, cyl) {
 
 // ------------------------------------------------------------------ filtre (partagé par la fenêtre de saisie et les commandes JSON)
 const PLAGES = { diametre_mm: 'diametre_mm', longueur_mm: 'longueur_mm', plus_grande_dim_mm: 'dim_max_mm', plus_petite_dim_mm: 'dim_min_mm' };
-export const CLES_CRITERES = ['type', 'famille', 'sauf_famille', 'nom', ...Object.keys(PLAGES)];
+export const CLES_CRITERES = ['type', 'famille', 'sauf_famille', 'nom', 'avancement', ...Object.keys(PLAGES)];
 const ALIAS_TYPE = { tournage: 'tournage', tourne: 'tournage', rond: 'tournage', ronde: 'tournage', ronds: 'tournage', revolution: 'tournage', fraisage: 'fraisage', prismatique: 'fraisage', prismatiques: 'fraisage', mixte: 'mixte' };
 export const normaliserType = v => ALIAS_TYPE[norm(v)] ?? null;
 
@@ -125,6 +127,7 @@ export function validerCriteres(c) {
     if (!l.length) return '« type » : au moins une valeur attendue (tournage, fraisage, mixte).';
     for (const t of l) if (typeof t !== 'string' || !normaliserType(t)) return `« type » : « ${t} » inconnu. Admis : tournage, fraisage (ou prismatique), mixte.`;
   }
+  if (c.avancement !== undefined) { const e = validerAvancement(c.avancement); if (e) return e; }
   for (const k of ['famille', 'sauf_famille', 'nom']) if (c[k] !== undefined && !(typeof c[k] === 'string' && c[k].trim())) return `« ${k} » : texte non vide attendu.`;
   for (const k of Object.keys(PLAGES)) {
     const r = c[k]; if (r === undefined) continue;
@@ -146,6 +149,7 @@ export function correspond(p, c) {
     if (r.min !== undefined && v < r.min - TOLERANCE_MM) return false;
     if (r.max !== undefined && v > r.max + TOLERANCE_MM) return false;
   }
+  if (c.avancement !== undefined && !avancementCorrespond(p.avancement, c.avancement)) return false;
   if (c.nom && !norm(p.nom).includes(norm(c.nom))) return false;
   if (c.famille) { const t = norm(c.famille); if (!(norm(p.famille) === t || norm(p.famille_label).startsWith(t) || norm(p.famille_label).includes(t))) return false; }
   if (c.sauf_famille) { const t = norm(c.sauf_famille); if (norm(p.famille) === t || norm(p.famille_label).startsWith(t)) return false; }
@@ -160,6 +164,7 @@ export function resumeCriteres(c) {
   for (const [k, l] of Object.entries(lib)) { const r = c[k]; if (!r) continue; parts.push(`${l}${r.min !== undefined ? ' ≥ ' + r.min : ''}${r.min !== undefined && r.max !== undefined ? ' et' : ''}${r.max !== undefined ? ' ≤ ' + r.max : ''} mm`); }
   if (c.famille) parts.push(`famille « ${c.famille} »`);
   if (c.sauf_famille) parts.push(`sans ${c.sauf_famille}`);
+  if (c.avancement !== undefined) parts.push('avancement ' + (Array.isArray(c.avancement) ? c.avancement : [c.avancement]).join(' / '));
   if (c.nom) parts.push(`nom contient « ${c.nom} »`);
   return parts.length ? 'Filtre : ' + parts.join(' · ') : 'Toutes les pièces';
 }

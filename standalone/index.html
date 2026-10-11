@@ -31,6 +31,7 @@
   <nav class="rail" id="rail">
     <button data-mode="explorer" class="on"><svg viewBox="0 0 24 24"><path d="M12 3 3 8l9 5 9-5-9-5zM3 8v8l9 5 9-5V8"/></svg>Explorer</button>
     <button data-mode="groupes" title="Filtrer les pièces (tournage, fraisage, dimensions) et créer des groupes nommés"><svg viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4-2v-4z"/></svg>Filtres<br>groupes</button>
+    <button data-mode="reste" title="Reste à faire : pièces finies, pièces à usiner, pièces achetées"><svg viewBox="0 0 24 24"><path d="M5 12l4 4 10-10M4 20h16"/></svg>Reste<br>à faire</button>
     <button data-mode="eclate"><svg viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 14h6v6h-6zM10 10l4 4M14 4h6v6M4 14v6h6"/></svg>Démonter</button>
     <button data-mode="coupe"><svg viewBox="0 0 24 24"><path d="M3 12h18M6 5h12v14H6z" /></svg>Couper</button>
     <button data-mode="percages"><svg viewBox="0 0 24 24"><path d="M3 7h12M15 7v10M15 17h6M9 7v6M9 13H3"/><circle cx="15" cy="7" r="1.6"/><circle cx="9" cy="13" r="1.6"/></svg>Perçages<br>circuits</button>
@@ -48,7 +49,7 @@
         <button class="btn toggle on" id="edges-toggle">Arêtes</button>
         <button class="btn toggle" id="bubbles-toggle">Repères (bulles)</button>
       </div>
-      <label class="field">Couleurs<select id="color-mode"><option value="step">Couleurs du fichier</option><option value="repere">Une couleur par repère</option><option value="categorie">Par famille de pièce</option><option value="groupe">Par groupe</option></select></label>
+      <label class="field">Couleurs<select id="color-mode"><option value="step">Couleurs du fichier</option><option value="repere">Une couleur par repère</option><option value="categorie">Par famille de pièce</option><option value="groupe">Par groupe</option><option value="avancement">Par avancement</option></select></label>
       <label class="field">Bulles<select id="bubble-scope"><option value="all">Tous les repères visibles</option><option value="selection">Sélection seulement</option></select></label>
       <h3>Familles de pièces <small>(mode BCR)</small></h3>
       <p class="hint">Classement proposé d'après les noms du fichier. Corriger avec « Classer la sélection ».</p>
@@ -84,6 +85,17 @@
       <div id="grp-list" class="list"></div>
     </section>
 
+    <section data-panel="reste" hidden>
+      <h2>Reste à faire</h2>
+      <p class="hint">Cocher « fini » quand une pièce est usinée (par repère : toutes ses occurrences). Les <b>pièces achetées</b> (vis, écrous, rondelles, joints, bagues, colonnes) sont détectées d'après la désignation — <b>proposé</b>, corrigeable — et ne comptent pas dans le reste à faire.</p>
+      <div id="rst-total" class="rst-total"></div>
+      <progress id="rst-bar" max="100" value="0"></progress>
+      <div class="tabs" id="rst-tabs"><button data-f="a_faire" class="on">À faire</button><button data-f="fini">Faites</button><button data-f="achete">Achetées</button><button data-f="tout">Toutes</button></div>
+      <div class="grid2"><button class="btn" id="rst-sel">Sélectionner</button><button class="btn" id="rst-iso">Isoler</button></div>
+      <div class="grid2"><button class="btn" id="rst-fini" title="Cocher « fini » pour la sélection">✔ Sélection finie</button><button class="btn" id="rst-afaire" title="Décocher « fini » pour la sélection">↩ Sélection à refaire</button></div>
+      <button class="btn wide" id="rst-color" title="Colorer : à faire orange, fini vert, acheté gris">Colorer par avancement</button>
+      <div id="rst-list" class="list"></div>
+    </section>
     <section data-panel="eclate" hidden>
       <h2>Démonter / éclater</h2>
       <label class="field">Pièces concernées<select id="ex-scope"><option value="all">Tout l'assemblage</option><option value="selection">Sélection seulement</option></select></label>
@@ -201,6 +213,7 @@
       <button class="btn" id="s-fit">Cadrer</button>
       <button class="btn" id="s-hide">Masquer</button>
       <button class="btn" id="s-isolate">Isoler</button>
+      <label class="op" id="s-fini-box" title="Fini : toutes les occurrences du repère"><input type="checkbox" id="s-fini"> Fini</label>
       <label class="op">Transparence<input id="s-opacity" type="range" min="0" max="100" value="100"></label>
       <button class="btn" id="s-clear">✕</button>
     </div>
@@ -211,7 +224,7 @@
     <div class="tabs"><button data-tab="tree" class="on">Arborescence</button><button data-tab="bom">Nomenclature</button></div>
     <input id="search" type="search" placeholder="Chercher : repère, nom, Ø, dimension…">
     <div id="tab-tree" class="list tree"></div>
-    <div id="tab-bom" class="list" hidden><table class="bom"><thead><tr><th>Rep.</th><th>Désignation</th><th>Qté</th><th>X×Y×Z mm</th><th>Statut</th></tr></thead><tbody id="bom-body"></tbody></table></div>
+    <div id="tab-bom" class="list" hidden><table class="bom"><thead><tr><th>Rep.</th><th>Désignation</th><th>Qté</th><th>X×Y×Z mm</th><th>Statut</th><th title="Fini (usiné)">Fini</th></tr></thead><tbody id="bom-body"></tbody></table></div>
     <div id="part-card" class="card" hidden></div>
   </aside>
 </div>

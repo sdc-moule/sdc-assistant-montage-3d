@@ -1,4 +1,4 @@
-# Application autonome — SDC Montage 3D 1.2
+# Application autonome — SDC Montage 3D 1.3
 
 Deux variantes, même application :
 - `SDC_Montage_3D.html` (~4,6 Mo) : complète, **hors ligne**. Le moteur OpenCascade (3,9 Mo compressé) est embarqué.
@@ -24,6 +24,7 @@ Double-clic → Chrome ou Edge. Pas d'installation, pas de FreeCAD. Le STEP est 
 | Notes et scènes | Commentaires typés (observation, montage, contrôle, anomalie), auteur, statut ; « 📷 Scène » mémorise caméra, éclaté, coupes, masquages, transparences, faces retirées, circuits (vignette) ; PNG d'une scène = image + scène intégrée, rechargeable par « Charger projet / scène » ; « ⧉ Copier » vers le presse-papiers ; sauvegarde automatique par fichier + projet JSON ; réimport sur un STEP modifié par nom + signature avec avertissement |
 | Exports | Nomenclature CSV (Excel FR), fiche des perçages CSV, capture PNG annotée (avec scène), rapport imprimable / PDF ; boîte « Enregistrer sous » ouverte sur Téléchargements (Chrome/Edge) |
 | Filtres & groupes | Onglet **Filtres groupes** : type d'usinage **proposé** (tournage / mixte / fraisage d'après le taux de surface de révolution du maillage), Ø, longueur, plus grande / plus petite dimension, famille, nom, sans visserie ; sélectionner, isoler. **Groupes nommés** (« partie injection ») enregistrés dans le projet : sélectionner, isoler, masquer, colorer, ou servir de pièces mobiles (translation / rotation, retour exact à 0). Valeurs à vérifier sur plan (≈ 0,05 mm) ; pas de gamme ni de choix de machine. Réception sur pièces réelles : à faire (TYP-04) |
+| Reste à faire | Onglet **Reste à faire** : coche **« fini »** par repère (barre de sélection, colonne Fini de la nomenclature, fiche, onglet) ; pièces **achetées** (vis, écrou, rondelle, joint, bague, colonne) détectées d'office d'après la désignation — **proposé**, corrigeable par « À usiner » / « Acheté » — et exclues du reste à faire ; totaux, listes À faire / Faites / Achetées, sélection, isolement, coloration orange / vert / gris, colonne « avancement » du CSV. Coche par repère (toutes les occurrences) ; saisie manuelle, pas une validation de fabrication. Coche par occurrence : à faire (AVA-05) |
 | Pilotage IA | Onglet **Commande** : coller un bloc JSON fourni par l'assistant, **Exécuter** ; API `window.SDC` ; validation de toute la série avant exécution, écritures confirmées par l'opérateur, « ↩ Avant la commande », contexte copiable pour l'IA (mode d'emploi + nomenclature). Guide et demandes types : [`pilotage-ia.md`](pilotage-ia.md) |
 | Rendu | Éclairage studio embarqué, couleurs STEP en sRGB (fidèles à la CAO), arêtes par défaut |
 

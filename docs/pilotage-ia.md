@@ -111,6 +111,26 @@ Type, Ø et brut sont **proposés** d'après le maillage (≈ 0,05 mm) : à vér
 {"sdc": 1, "commandes": [{"cmd": "lister_groupes"}]}
 ```
 
+### Reste à faire
+Les pièces dont la désignation évoque vis, écrou, rondelle, joint, bague ou colonne sont « achetées » d'office (**proposé**) et ne comptent pas dans le reste à faire. La coche « fini » est un suivi de l'atelier, par repère. Marquer = écriture : l'opérateur confirme.
+
+**« Qu'est-ce qui reste à usiner ? »**
+```json
+{"sdc": 1, "commandes": [{"cmd": "lister_reste_a_faire"}, {"cmd": "isoler", "cible": {"avancement": "a_faire"}}]}
+```
+**« Montre ce qui est fait (en vert) et ce qui reste (en orange). »**
+```json
+{"sdc": 1, "commandes": [{"cmd": "tout_afficher"}, {"cmd": "isoler", "cible": {"avancement": ["a_faire", "fini"]}}]}
+```
+**« Les repères 3 et 4 sont finis. »** (écriture : confirmation demandée)
+```json
+{"sdc": 1, "commandes": [{"cmd": "marquer_fini", "cible": [3, 4]}]}
+```
+**« La bague du repère 9 est usinée chez nous, pas achetée. »** (écriture : confirmation demandée)
+```json
+{"sdc": 1, "commandes": [{"cmd": "marquer_achete", "cible": [9], "achete": false}]}
+```
+
 ### Contrôle et notes
 **« Note une anomalie sur les vis du repère 9. »** (écriture : confirmation demandée)
 ```json

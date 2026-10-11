@@ -19,13 +19,14 @@ import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { executer, contexteIA, modeEmploiIA, COMMANDES, VERSION_COMMANDES, ErreurCommande } from './geom/commande.js';
 import { analyserTypologie, correspond, validerCriteres, resumeCriteres, TYPES } from './geom/typologie.js';
+import { etatRepere, achatProbable, noteAvec, compter, LIBELLES as LIB_ETAT } from './geom/avancement.js';
 import { creerGroupe, trouverGroupe, ajouterAuGroupe, retirerDuGroupe, renommerGroupe, supprimerGroupe, groupesDe, reprendreGroupes, ErreurGroupe } from './geom/groupes.js';
 
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
 THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
 THREE.Mesh.prototype.raycast = acceleratedRaycast;
 
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.3.0';
 const $ = id => document.getElementById(id);
 const el = (tag, props = {}, ...kids) => { const e = document.createElement(tag); for (const [k, v] of Object.entries(props)) { if (k === 'class') e.className = v; else if (k === 'style') e.style.cssText = v; else if (k.startsWith('on')) e[k] = v; else if (v !== undefined && v !== null) e.setAttribute(k, v); } for (const k of kids.flat()) if (k !== null && k !== undefined && k !== false) e.append(k instanceof Node ? k : document.createTextNode(String(k))); return e; };
 const fmt = (x, d = 1) => (Number.isFinite(x) ? (Math.abs(x) < 0.5 * 10 ** -d ? 0 : x).toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d }) : '—');
@@ -361,6 +362,7 @@ function baseColor(id) {
   const o = S.objs.get(id), row = S.rowOf.get(id);
   if (S.colorMode === 'repere') return new THREE.Color(PALETTE[(row.repere - 1) % PALETTE.length]);
   if (S.colorMode === 'categorie') return new THREE.Color(CATEGORIES.find(c => c.id === catOf(id)).color);
+  if (S.colorMode === 'avancement') return new THREE.Color({ a_faire: '#e8730c', fini: '#2e9e5b', achete: '#aab2ba' }[etatId(id)]);
   if (S.colorMode === 'groupe') return new THREE.Color(groupesDe(S.groups, id)[0]?.couleur ?? '#c9d0d6'); // pièces hors groupe : gris clair
   return o.stepColor ? o.stepColor.clone() : new THREE.Color(PALETTE[(row.repere - 1) % PALETTE.length]);
 }
@@ -745,7 +747,7 @@ function loop() {
 }
 
 // ---------------------------------------------------------------- panneaux
-function refreshAll() { applyDisplay(); renderTree(); renderBom(); renderCard(); renderSelbar(); renderCategories(); renderGroups(); if (S.mode === 'groupes') renderFiltre(); if (S.mode === 'percages') renderNets(); if (S.mode === 'notes') { renderComments(); renderViews(); renderCotes(); } if (S.mode === 'eclate') renderMoves(); if (S.mode === 'coupe') renderPlanes(); saveLocal(); }
+function refreshAll() { applyDisplay(); renderTree(); renderBom(); renderCard(); renderSelbar(); renderCategories(); renderGroups(); if (S.mode === 'groupes') renderFiltre(); if (S.mode === 'reste') renderReste(); if (S.mode === 'percages') renderNets(); if (S.mode === 'notes') { renderComments(); renderViews(); renderCotes(); } if (S.mode === 'eclate') renderMoves(); if (S.mode === 'coupe') renderPlanes(); saveLocal(); }
 
 function matches(id, term) {
   if (!term) return true;
@@ -791,13 +793,17 @@ function renderBom() {
     const tagCls = st === 'validé' ? 'ok' : /regroup/.test(st) ? 'warn' : '';
     body.append(el('tr', { class: row.ids.some(id => S.sel.has(id)) ? 'sel' : '', onclick: e => select(row.ids, e.ctrlKey || S.multi) },
       el('td', {}, el('span', { class: 'badge' }, row.repere)), el('td', {}, row.designation, note.reference ? el('div', { class: 'hint' }, 'Réf. ' + note.reference) : null, row.notes.length ? el('div', { class: 'hint' }, row.notes.join(' · ')) : null),
-      el('td', {}, row.quantite), el('td', { class: 'dims' }, row.dims.map(x => fmt(x, 1)).join('×')), el('td', {}, el('span', { class: `tag ${tagCls}` }, st))));
+      el('td', {}, row.quantite), el('td', { class: 'dims' }, row.dims.map(x => fmt(x, 1)).join('×')), el('td', {}, el('span', { class: `tag ${tagCls}` }, st)),
+      el('td', { onclick: e => e.stopPropagation() }, etatRow(row).etat === 'achete' ? el('span', { class: 'tag achat', title: 'Pièce achetée (proposé) : pas à usiner' }, 'acheté') : coche(etatRow(row).fini, { title: 'Fini (usiné)', onchange: e => { marquerFini(row.ids, e.target.checked); } }))));
   }
 }
 function renderSelbar() {
   $('selbar').hidden = !S.sel.size;
   $('sel-count').textContent = S.sel.size === 1 ? `Repère ${S.rowOf.get([...S.sel][0]).repere}` : `${S.sel.size} pièces`;
   if (S.sel.size) $('s-opacity').value = Math.round(S.items[[...S.sel][0]].opacity * 100);
+  const aUsiner = rowsOf([...S.sel]).filter(r => etatRow(r).etat !== 'achete'), nFini = aUsiner.filter(r => etatRow(r).fini).length, c = $('s-fini');
+  c.disabled = !aUsiner.length; c.checked = aUsiner.length > 0 && nFini === aUsiner.length; c.indeterminate = nFini > 0 && nFini < aUsiner.length;
+  $('s-fini-box').title = aUsiner.length ? 'Fini : toutes les occurrences du repère' : 'Pièce achetée : pas à usiner';
 }
 function renderCard() {
   const card = $('part-card');
@@ -821,6 +827,7 @@ function renderCard() {
       S.typo.get(id) ? [el('dt', {}, 'Usinage'), el('dd', {}, texteTypo(S.typo.get(id)))] : null,
       groupesDe(S.groups, id).length ? [el('dt', {}, 'Groupes'), el('dd', {}, groupesDe(S.groups, id).map(g => g.nom).join(', '))] : null,
       el('dt', {}, 'Perçages'), el('dd', {}, holes.length ? [...byD].map(([k, n]) => `${n}× ${k}`).join(', ') : 'aucun détecté'),
+      el('dt', {}, 'Avancement'), el('dd', {}, el('span', { class: `tag ${etatRow(row).etat === 'fini' ? 'fini' : etatRow(row).etat === 'achete' ? 'achat' : 'afaire'}` }, LIB_ETAT[etatRow(row).etat] + (etatRow(row).achat === 'proposé' ? ' (proposé)' : '')), etatRow(row).etat === 'achete' ? null : el('label', { class: 'op' }, coche(etatRow(row).fini, { onchange: e => marquerFini(row.ids, e.target.checked) }), ' Fini'), ' ', el('button', { class: 'btn sm', onclick: () => basculerAchat(row) }, etatRow(row).etat === 'achete' ? 'À usiner' : 'Acheté')),
       el('dt', {}, 'Statut'), el('dd', {}, note.statut ?? row.statut)),
     row.notes.length ? el('p', { class: 'hint' }, row.notes.join(' · ')) : null,
     refInput,
@@ -1012,6 +1019,8 @@ function projectData() {
     maxDrill: S.maxDrill, comments: S.comments, views: S.views, netClass: S.netClass, moves: S.moves, cotes: S.cotes, rowNotes: S.rowNotes, catOverride: S.catOverride, bubbleOff: S.bubbleOff, groupes: S.groups, display: viewState() };
 }
 function saveLocal() { if (!S.loaded) return; clearTimeout(saveTimer); saveTimer = setTimeout(() => { try { localStorage.setItem(LS(), JSON.stringify(projectData())); } catch { /* stockage indisponible : le fichier projet reste possible */ } }, 400); }
+// L'enregistrement est différé de 400 ms : on le force à la fermeture / au rechargement de la page pour ne perdre aucune coche.
+addEventListener('pagehide', () => { if (S.loaded && saveTimer) { clearTimeout(saveTimer); saveTimer = 0; try { localStorage.setItem(LS(), JSON.stringify(projectData())); } catch { /* rien */ } } });
 function restoreLocal() { try { const raw = localStorage.getItem(LS()); if (raw) { applyProject(JSON.parse(raw), true); toast('Annotations et vues de ce fichier restaurées.'); } } catch { /* rien */ } }
 function applyProject(pr, silent = false) {
   let map = id => id;
@@ -1038,9 +1047,9 @@ function applyProject(pr, silent = false) {
 
 // ---------------------------------------------------------------- exports
 function exportBom() {
-  const header = ['repere', 'designation', 'reference', 'quantite', 'sous_ensemble', 'X_mm', 'Y_mm', 'Z_mm', 'volume_cm3', 'famille', 'commentaire', 'origine_information', 'statut_validation'];
+  const header = ['repere', 'designation', 'reference', 'quantite', 'sous_ensemble', 'X_mm', 'Y_mm', 'Z_mm', 'volume_cm3', 'famille', 'commentaire', 'origine_information', 'statut_validation', 'avancement'];
   const rows = S.bom.map(r => { const n = S.rowNotes[r.repere] ?? {}; const com = S.comments.filter(c => c.reperes.includes(r.repere)).map(c => `[${c.type}] ${c.text}`).join(' | ');
-    return [r.repere, r.designation, n.reference ?? '', r.quantite, r.sousEnsemble, ...r.dims.map(x => x.toFixed(2).replace('.', ',')), (r.volume / 1000).toFixed(2).replace('.', ','), CATEGORIES.find(c => c.id === catOf(r.ids[0])).label, [com, ...r.notes].filter(Boolean).join(' | '), r.origine, n.statut ?? r.statut]; });
+    return [r.repere, r.designation, n.reference ?? '', r.quantite, r.sousEnsemble, ...r.dims.map(x => x.toFixed(2).replace('.', ',')), (r.volume / 1000).toFixed(2).replace('.', ','), CATEGORIES.find(c => c.id === catOf(r.ids[0])).label, [com, ...r.notes].filter(Boolean).join(' | '), r.origine, n.statut ?? r.statut, LIB_ETAT[etatRow(r).etat] + (etatRow(r).achat === 'proposé' ? ' (proposé)' : '')]; });
   download(`${baseName()}_nomenclature.csv`, toCsv(header, rows), 'text/csv;charset=utf-8');
 }
 function exportDrill() {
@@ -1290,7 +1299,7 @@ function enregistrementsPieces() {
     const st = S.stats.get(p.id), it = S.items[p.id], c = CATEGORIES.find(k => k.id === catOf(p.id)), t = S.typo.get(p.id);
     return { id: p.id, repere: S.rowOf.get(p.id).repere, nom: p.name, sous_ensemble: p.path.join(' / '), famille: c.id, famille_label: c.label, visible: it.visible && !S.catOff.has(c.id), opacite_pct: Math.round(it.opacity * 100), selectionnee: S.sel.has(p.id), dims_mm: st.size.map(x => +x.toFixed(2)), volume_cm3: +(st.volume / 1000).toFixed(1),
       type_usinage: t?.type ?? null, revolution_pct: t?.revolution_pct ?? null, diametre_mm: t?.diametre_mm ?? null, longueur_mm: t?.longueur_mm ?? null, dim_max_mm: t?.dim_max_mm ?? null, dim_min_mm: t?.dim_min_mm ?? null, brut_mm: t?.brut_mm ?? null,
-      groupes: groupesDe(S.groups, p.id).map(g => g.nom) };
+      groupes: groupesDe(S.groups, p.id).map(g => g.nom), avancement: etatId(p.id) };
   });
 }
 const idsPresents = ids => ids.filter(id => S.objs.has(id));
@@ -1380,6 +1389,53 @@ function setupGroupes() {
   renderFiltre(); renderGroups();
 }
 
+// ---------------------------------------------------------------- reste à faire (avancement par repère)
+const etatRow = row => etatRepere(S.rowNotes[row.repere], row.designation);
+const etatId = id => etatRow(S.rowOf.get(id)).etat;
+const rowsOf = ids => [...new Set(ids.map(id => S.rowOf.get(id)))];
+function marquerFini(ids, fini) {
+  let reperes = 0, achetes = 0;
+  for (const row of rowsOf(ids)) { if (etatRow(row).etat === 'achete') { achetes++; continue; } S.rowNotes[row.repere] = noteAvec(S.rowNotes[row.repere], { fini }); reperes++; }
+  refreshAll(); return { reperes, achetes };
+}
+function marquerAchete(ids, v) { const rows = rowsOf(ids); for (const row of rows) S.rowNotes[row.repere] = noteAvec(S.rowNotes[row.repere], { achete: v }); refreshAll(); return rows.length; }
+function basculerAchat(row) { const veut = etatRow(row).etat !== 'achete'; marquerAchete(row.ids, veut === achatProbable(row.designation) ? null : veut); } // retour à « automatique » si la correction rejoint la détection
+const coche = (checked, props) => { const i = el('input', { type: 'checkbox', class: 'fini', ...props }); i.checked = !!checked; return i; }; // « checked » doit être une propriété, pas un attribut
+let resteFiltre = 'a_faire';
+function renderReste() {
+  const box = $('rst-list'); if (!box) return; box.replaceChildren();
+  const t = compter(S.bom.map(r => ({ etat: etatRow(r).etat, quantite: r.quantite })));
+  const tot = $('rst-total'); tot.replaceChildren(
+    el('div', { class: 'af' }, el('b', {}, t.reperes.a_faire), `à faire (${t.pieces.a_faire} pièces)`),
+    el('div', { class: 'fi' }, el('b', {}, t.reperes.fini), `faits (${t.pieces.fini} pièces)`),
+    el('div', {}, el('b', {}, t.reperes.achete), `achetés (${t.pieces.achete} pièces)`));
+  $('rst-bar').value = t.pct_fini ?? 0; $('rst-bar').title = t.pct_fini === null ? 'Rien à usiner' : `${t.pct_fini} % des pièces à usiner sont finies`;
+  for (const b of document.querySelectorAll('#rst-tabs button')) b.classList.toggle('on', b.dataset.f === resteFiltre);
+  const rows = S.bom.filter(r => resteFiltre === 'tout' || etatRow(r).etat === resteFiltre);
+  rstIds = rows.flatMap(r => r.ids);
+  for (const [k, d] of [['rst-sel', !rows.length], ['rst-iso', !rows.length]]) $(k).disabled = d;
+  if (!rows.length) box.append(el('p', { class: 'hint' }, S.loaded ? 'Aucun repère dans cette liste.' : 'Ouvrir d\'abord un assemblage.'));
+  for (const row of rows) {
+    const e = etatRow(row), cls = e.etat === 'fini' ? 'fini' : e.etat === 'achete' ? 'achat' : 'afaire';
+    box.append(el('div', { class: `row${row.ids.every(id => S.sel.has(id)) ? ' sel' : ''}`, onclick: ev => select(row.ids, ev.ctrlKey || ev.metaKey || ev.shiftKey || S.multi) },
+      e.etat === 'achete' ? el('span', { class: 'fini' }) : coche(e.fini, { title: 'Fini', onclick: ev => ev.stopPropagation(), onchange: ev => marquerFini(row.ids, ev.target.checked) }),
+      el('span', { class: 'badge' }, row.repere), el('span', { class: 'name', title: row.designation }, row.designation + (row.quantite > 1 ? ` ×${row.quantite}` : '')),
+      el('span', { class: `tag ${cls}`, title: e.achat === 'proposé' ? 'Détecté d\'après la désignation : à confirmer' : '' }, LIB_ETAT[e.etat] + (e.achat === 'proposé' ? ' ?' : '')),
+      el('button', { class: 'btn sm', title: e.etat === 'achete' ? 'Cette pièce est à usiner' : 'Cette pièce est achetée', onclick: ev => { ev.stopPropagation(); basculerAchat(row); } }, e.etat === 'achete' ? 'À usiner' : 'Acheté')));
+  }
+}
+let rstIds = [];
+function setupReste() {
+  for (const b of document.querySelectorAll('#rst-tabs button')) b.onclick = () => { resteFiltre = b.dataset.f; renderReste(); };
+  $('rst-sel').onclick = () => { if (rstIds.length) select(rstIds); };
+  $('rst-iso').onclick = () => { if (rstIds.length) isolateIds(rstIds); };
+  $('rst-fini').onclick = () => { if (!S.sel.size) return toast('Sélectionner d\'abord des pièces.'); const r = marquerFini([...S.sel], true); toast(`${r.reperes} repère(s) marqué(s) fini${r.achetes ? ` (${r.achetes} acheté(s) ignoré(s))` : ''}.`); };
+  $('rst-afaire').onclick = () => { if (!S.sel.size) return toast('Sélectionner d\'abord des pièces.'); const r = marquerFini([...S.sel], false); toast(`${r.reperes} repère(s) remis à faire.`); };
+  $('rst-color').onclick = () => { S.colorMode = 'avancement'; $('color-mode').value = 'avancement'; applyDisplay(); toast('Orange : à faire · vert : fini · gris : acheté.', 5000); };
+  $('s-fini').onchange = e => { if (S.sel.size) marquerFini([...S.sel], e.target.checked); };
+  renderReste();
+}
+
 // ---------------------------------------------------------------- pilotage par commandes JSON (onglet « Commande », window.SDC)
 // Le jeu de commandes, la validation et l'exécution sont dans geom/commande.js (pur). Ici : le « ctx » qui agit sur l'état.
 const nrm = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
@@ -1397,7 +1453,7 @@ function apiCtx() {
     pieces: enregistrementsPieces,
     recherche: (id, term) => matches(id, String(term).toLocaleLowerCase('fr')),
     reperesDe,
-    nomenclature: () => S.bom.map(r => { const n = S.rowNotes[r.repere] ?? {}; return { repere: r.repere, designation: r.designation, reference: n.reference ?? '', quantite: r.quantite, famille: fam(r.ids[0]).label, sous_ensemble: r.sousEnsemble, dims_mm: r.dims.map(x => +x.toFixed(1)), type_usinage: S.typo.get(r.ids[0])?.type ?? null, diametre_mm: S.typo.get(r.ids[0])?.diametre_mm ?? null, longueur_mm: S.typo.get(r.ids[0])?.longueur_mm ?? null, brut_mm: S.typo.get(r.ids[0])?.brut_mm ?? null, groupes: groupesDe(S.groups, r.ids[0]).map(g => g.nom), statut: n.statut ?? r.statut }; }),
+    nomenclature: () => S.bom.map(r => { const n = S.rowNotes[r.repere] ?? {}; return { repere: r.repere, designation: r.designation, reference: n.reference ?? '', quantite: r.quantite, famille: fam(r.ids[0]).label, sous_ensemble: r.sousEnsemble, dims_mm: r.dims.map(x => +x.toFixed(1)), type_usinage: S.typo.get(r.ids[0])?.type ?? null, diametre_mm: S.typo.get(r.ids[0])?.diametre_mm ?? null, longueur_mm: S.typo.get(r.ids[0])?.longueur_mm ?? null, brut_mm: S.typo.get(r.ids[0])?.brut_mm ?? null, groupes: groupesDe(S.groups, r.ids[0]).map(g => g.nom), avancement: etatRow(r).etat, achat: etatRow(r).achat, statut: n.statut ?? r.statut }; }),
     reseaux: () => (S.drill ? S.drill.networks.map(n => ({ id: n.id, type: n.kind, classement: netLabel(n), valide: netValidated(n), proposition: n.suggestion, nb_percages: n.features.length, diametres_mm: n.diameters.map(d => +d.toFixed(2)), longueur_totale_mm: +n.totalLength.toFixed(1), reperes: reperesDe(n.partIds) })) : []),
     percages(reseauId, ids) {
       if (!S.drill) return [];
@@ -1482,6 +1538,8 @@ function apiCtx() {
     commentaire: ({ ids, texte, type, statut, auteur }) => { S.comments.push({ ids, reperes: reperesDe(ids), type, status: statut, author: auteur ?? ($('c-author').value.trim() || ''), text: texte, date: new Date().toISOString() }); refreshAll(); },
     repereValider: (repere, valide) => { const n = S.rowNotes[repere] ?? {}; S.rowNotes[repere] = { ...n, statut: valide ? 'validé' : undefined }; refreshAll(); },
     repereReference: (repere, reference) => { const n = S.rowNotes[repere] ?? {}; S.rowNotes[repere] = { ...n, reference }; refreshAll(); },
+    resteAFaire: () => ({ totaux: compter(S.bom.map(r => ({ etat: etatRow(r).etat, quantite: r.quantite }))), a_faire: S.bom.filter(r => etatRow(r).etat === 'a_faire').map(r => ({ repere: r.repere, designation: r.designation, quantite: r.quantite, type_usinage: S.typo.get(r.ids[0])?.type ?? null, brut_mm: S.typo.get(r.ids[0])?.brut_mm ?? null })), achetes_proposes: S.bom.filter(r => etatRow(r).achat === 'proposé').map(r => ({ repere: r.repere, designation: r.designation })) }),
+    marquerFini, marquerAchete: (ids, v) => marquerAchete(ids, v),
     groupeCreer: (nom, ids) => { try { const g = creerGroupe(S.groups, nom, ids, { origine: 'commande JSON' }); refreshAll(); return g.nom; } catch (e) { throw e instanceof ErreurGroupe ? new ErreurCommande(e.message) : e; } },
     groupeAjouter: (nom, ids) => { const g = trouverGroupe(S.groups, nom); if (!g) throw new ErreurCommande(`groupe « ${nom} » inconnu. Groupes : ${S.groups.map(x => x.nom).join(', ') || 'aucun'}.`); const n = ajouterAuGroupe(g, ids); refreshAll(); return n; },
     groupeRetirer: (nom, ids) => { const g = trouverGroupe(S.groups, nom); if (!g) throw new ErreurCommande(`groupe « ${nom} » inconnu. Groupes : ${S.groups.map(x => x.nom).join(', ') || 'aucun'}.`); const n = retirerDuGroupe(g, ids); refreshAll(); return n; },
@@ -1530,5 +1588,5 @@ function setupCommande() {
 }
 
 // ---------------------------------------------------------------- démarrage
-wire(); setupPanels(); setupGroupes(); setupCommande(); resize(); loop();
+wire(); setupPanels(); setupGroupes(); setupReste(); setupCommande(); resize(); loop();
 window.__SDC__ = { S, loadBytes, setMode, select, selectNet, extractCylinders, buildNetworks, project, xf, partBox: id => { const b = partBox(id); return [...b.min.toArray(), ...b.max.toArray()]; }, fitBox, THREE }; // accès pour essais automatisés

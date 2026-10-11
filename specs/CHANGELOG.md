@@ -1,5 +1,10 @@
 # Historique du cahier des charges
 
+## 1.6 — 11 octobre 2026 (Claude Code, demande de Christophe)
+- Nouveau domaine **AVANCEMENT** (AVA-01 à AVA-05) : onglet « Reste à faire », coche « fini » par repère (barre de sélection, nomenclature, fiche), pièces **achetées** (vis, écrous, rondelles, joints, bagues, colonnes) détectées d'office d'après la désignation (« proposé », corrigeable) et exclues du reste à faire.
+- Décision : coche par **repère** (toutes les occurrences) ; coche par occurrence = AVA-05 à faire. Application autonome 1.2.0 → **1.3.0**. La v1.5 passe en archive figée.
+- Correctif : l'enregistrement local différé (400 ms) est forcé à la fermeture / au rechargement de la page.
+
 ## 1.5 — 11 octobre 2026 (Claude Code, demande de Christophe)
 - Nouveaux domaines **TYPOLOGIE** (TYP-01 à TYP-04) et **GROUPES** (GRP-01 à GRP-03) : fenêtre de filtre par type de pièce (tournage / fraisage / mixte, Ø, longueur, dimensions) et groupes de sélection nommés (« partie injection »…), utilisables pour sélectionner, isoler, masquer, colorer et déplacer selon un axe.
 - Type, Ø et brut sont **proposés** d'après le maillage (≈ 0,05 mm) ; aucune gamme d'usinage ni choix de machine. TYP-04 (réception sur pièces réelles, correction manuelle du type) reste à faire.
