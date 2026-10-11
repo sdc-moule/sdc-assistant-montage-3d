@@ -1,5 +1,9 @@
 # Historique du cahier des charges
 
+## 1.12 — 11 octobre 2026 (Claude Code, **décision écrite de Christophe** : « je valide les 5 recommandations à retirer »)
+- **IHM-02** : cinq fonctions retirées de l'interface — type/statut/auteur des commentaires, bouton « Valider le repère », choix des bulles « Sélection seulement », filtres Ø mini/maxi des perçages, bouton « Fantôme autour ». Le code et les commandes JSON sont conservés (aucune suppression de fonction) ; notes ajoutées à NAV-02, NAV-04, NOM-03, DOC-01. Réintégration possible sur simple décision.
+- Application autonome 1.7.0 → **1.7.1**. La v1.11 passe en archive figée.
+
 ## 1.11 — 11 octobre 2026 (Claude Code, demande de Christophe : refonte pour le personnel d'atelier)
 - Nouveau domaine **ATELIER** (ATE-01 à ATE-06) et **NAV-09** : parcours en 7 étapes numérotées, guide contextuel « Que faire maintenant ? », liste unique des pièces (arborescence et nomenclature rassemblées), vert = fini, démonstration retirée de la barre du haut, réglages rares regroupés, design sobre ; cotes dont le texte se déplace au glisser.
 - Les onglets « Arborescence » / « Nomenclature » deviennent « Pièces » / « Tableau » et le bouton « Reste à faire » devient l'étape « Suivi » : **aucune fonction supprimée**, identifiants et commandes JSON inchangés. ATE-06 (tri des fonctions discutables avec les monteurs) à faire : rien n'est retiré sans décision écrite ici.

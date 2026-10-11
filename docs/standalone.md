@@ -1,4 +1,4 @@
-# Application autonome — SDC Montage 3D 1.7
+# Application autonome — SDC Montage 3D 1.7.1
 
 Deux variantes, même application :
 - `SDC_Montage_3D.html` (~4,6 Mo) : complète, **hors ligne**. Le moteur OpenCascade (3,9 Mo compressé) est embarqué.
@@ -55,3 +55,6 @@ Un croisement détecté entre un canal et un perçage de vis est un fait géomé
 `tests/standalone-geom.test.js` vérifie les valeurs attendues sur l'assemblage synthétique ; `tests/e2e/standalone_e2e.py`
 vérifie l'interface. À faire : réception sur un moule réel et un BCR réel (nombre de perçages, circuits, ouvertures),
 avec relevé des écarts.
+
+
+**Retiré de l'interface le 11/10/2026 (IHM-02, décision de Christophe)** : type/statut/auteur des commentaires, « Valider le repère », bulles « Sélection seulement », filtres Ø mini/maxi des perçages, « Fantôme autour ». Code et commandes JSON conservés.

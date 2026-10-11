@@ -49,12 +49,12 @@
       <p class="hint">Touchez une pièce pour la sélectionner. <b>Ctrl</b> ou le bouton <b>Multi</b> pour en prendre plusieurs.</p>
       <div class="grid2">
         <button class="btn" id="show-all">Tout afficher</button>
-        <button class="btn toggle" id="ghost-toggle" title="Rendre les pièces non sélectionnées presque transparentes">Fantôme autour</button>
+        <button class="btn toggle" id="ghost-toggle" hidden title="Rendre les pièces non sélectionnées presque transparentes">Fantôme autour</button>
         <button class="btn toggle on" id="edges-toggle">Arêtes</button>
         <button class="btn toggle" id="bubbles-toggle">Repères (bulles)</button>
       </div>
       <label class="field">Couleurs<select id="color-mode"><option value="step">Couleurs du fichier</option><option value="repere">Une couleur par repère</option><option value="categorie">Par famille de pièce</option><option value="groupe">Par groupe</option><option value="avancement">Par avancement</option></select></label>
-      <label class="field">Bulles<select id="bubble-scope"><option value="all">Tous les repères visibles</option><option value="selection">Sélection seulement</option></select></label>
+      <label class="field" hidden>Bulles<select id="bubble-scope"><option value="all">Tous les repères visibles</option><option value="selection">Sélection seulement</option></select></label>
       <h3>Familles de pièces <small>(mode BCR)</small></h3>
       <p class="hint">Classement proposé d'après les noms du fichier. Corriger avec « Classer la sélection ».</p>
       <div id="categories" class="chips"></div>
@@ -144,7 +144,7 @@
         <label><input type="checkbox" id="f-bore"> Alésages / logements</label>
       </div>
       <label class="field">Ø maxi d'un forage (au-delà : alésage, logement, empreinte)<input id="f-maxdrill" type="number" value="32" step="1" min="1"></label>
-      <div class="grid2"><label class="field">Ø mini<input id="f-dmin" type="number" value="0" step="0.5"></label><label class="field">Ø maxi<input id="f-dmax" type="number" value="999" step="0.5"></label></div>
+      <div class="grid2" hidden><label class="field">Ø mini<input id="f-dmin" type="number" value="0" step="0.5"></label><label class="field">Ø maxi<input id="f-dmax" type="number" value="999" step="0.5"></label></div>
       <div id="net-list" class="list"></div>
       <div id="net-detail"></div>
     </section>
@@ -152,8 +152,8 @@
     <section data-panel="notes" hidden>
       <h2>Notes &amp; vues</h2>
       <h3>Commentaire sur la sélection</h3>
-      <div class="grid2"><select id="c-type"><option>observation</option><option>montage</option><option>contrôle</option><option>anomalie</option></select><select id="c-status"><option>ouvert</option><option>traité</option></select></div>
-      <input id="c-author" placeholder="Auteur">
+      <div class="grid2" hidden><select id="c-type"><option>observation</option><option>montage</option><option>contrôle</option><option>anomalie</option></select><select id="c-status"><option>ouvert</option><option>traité</option></select></div>
+      <input id="c-author" placeholder="Auteur" hidden>
       <textarea id="c-text" rows="3" placeholder="Commentaire en français"></textarea>
       <button class="btn wide primary" id="c-add">Ajouter le commentaire</button>
       <div id="c-list" class="list"></div>

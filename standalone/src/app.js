@@ -28,7 +28,7 @@ THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
 THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
 THREE.Mesh.prototype.raycast = acceleratedRaycast;
 
-const APP_VERSION = '1.7.0';
+const APP_VERSION = '1.7.1';
 const $ = id => document.getElementById(id);
 const el = (tag, props = {}, ...kids) => { const e = document.createElement(tag); for (const [k, v] of Object.entries(props)) { if (k === 'class') e.className = v; else if (k === 'style') e.style.cssText = v; else if (k.startsWith('on')) e[k] = v; else if (v !== undefined && v !== null) e.setAttribute(k, v); } for (const k of kids.flat()) if (k !== null && k !== undefined && k !== false) e.append(k instanceof Node ? k : document.createTextNode(String(k))); return e; };
 const fmt = (x, d = 1) => (Number.isFinite(x) ? (Math.abs(x) < 0.5 * 10 ** -d ? 0 : x).toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d }) : '—');
@@ -880,9 +880,7 @@ function renderCard() {
       el('dt', {}, 'Statut'), el('dd', {}, note.statut ?? row.statut)),
     row.notes.length ? el('p', { class: 'hint' }, row.notes.join(' · ')) : null,
     refInput,
-    el('div', { class: 'grid2' },
-      el('button', { class: 'btn', onclick: () => { S.rowNotes[row.repere] = { ...note, reference: refInput.value.trim() || undefined }; refreshAll(); toast('Référence enregistrée.'); } }, 'Enregistrer la réf.'),
-      el('button', { class: 'btn', onclick: () => { S.rowNotes[row.repere] = { ...note, statut: note.statut === 'validé' ? undefined : 'validé' }; refreshAll(); } }, note.statut === 'validé' ? 'Annuler validation' : 'Valider le repère')),
+    el('button', { class: 'btn wide', onclick: () => { S.rowNotes[row.repere] = { ...note, reference: refInput.value.trim() || undefined }; refreshAll(); toast('Référence enregistrée.'); } }, 'Enregistrer la réf.'), // « Valider le repère » retiré de l'interface (décision 1.12) : reste disponible par commande JSON
     holes.length ? el('button', { class: 'btn wide', onclick: () => { setMode('percages'); const n = S.drill.netOfFeature.get(holes[0].id); S.filters[n.kind] = true; $('f-' + ({ circuit: 'circuit', alignement: 'align', 'isolé': 'iso', 'alésage': 'bore' }[n.kind])).checked = true; selectNet(n.id); } }, 'Voir les perçages de la pièce') : null,
   ].filter(Boolean));
 }
