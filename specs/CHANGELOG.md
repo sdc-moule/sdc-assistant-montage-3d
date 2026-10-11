@@ -1,5 +1,9 @@
 # Historique du cahier des charges
 
+## 1.7 — 11 octobre 2026 (Claude Code, demande de Christophe)
+- Nouvelles exigences **DES-01 à DES-04** : renommer un repère par double clic dans la nomenclature (fiche, Reste à faire) ; nom enregistré dans le projet, nom d'origine du STEP conservé et visible ; commande `repere_renommer` (confirmée). DES-04 (renommer dans l'arborescence) à faire.
+- Application autonome 1.3.0 → **1.4.0**. La v1.6 passe en archive figée.
+
 ## 1.6 — 11 octobre 2026 (Claude Code, demande de Christophe)
 - Nouveau domaine **AVANCEMENT** (AVA-01 à AVA-05) : onglet « Reste à faire », coche « fini » par repère (barre de sélection, nomenclature, fiche), pièces **achetées** (vis, écrous, rondelles, joints, bagues, colonnes) détectées d'office d'après la désignation (« proposé », corrigeable) et exclues du reste à faire.
 - Décision : coche par **repère** (toutes les occurrences) ; coche par occurrence = AVA-05 à faire. Application autonome 1.2.0 → **1.3.0**. La v1.5 passe en archive figée.

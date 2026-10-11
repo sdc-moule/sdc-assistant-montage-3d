@@ -19,6 +19,7 @@ import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { executer, contexteIA, modeEmploiIA, COMMANDES, VERSION_COMMANDES, ErreurCommande } from './geom/commande.js';
 import { analyserTypologie, correspond, validerCriteres, resumeCriteres, TYPES } from './geom/typologie.js';
+import { nomRepere, nomAffiche, ErreurNom } from './geom/noms.js';
 import { etatRepere, achatProbable, noteAvec, compter, LIBELLES as LIB_ETAT } from './geom/avancement.js';
 import { creerGroupe, trouverGroupe, ajouterAuGroupe, retirerDuGroupe, renommerGroupe, supprimerGroupe, groupesDe, reprendreGroupes, ErreurGroupe } from './geom/groupes.js';
 
@@ -26,7 +27,7 @@ THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
 THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
 THREE.Mesh.prototype.raycast = acceleratedRaycast;
 
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.4.0';
 const $ = id => document.getElementById(id);
 const el = (tag, props = {}, ...kids) => { const e = document.createElement(tag); for (const [k, v] of Object.entries(props)) { if (k === 'class') e.className = v; else if (k === 'style') e.style.cssText = v; else if (k.startsWith('on')) e[k] = v; else if (v !== undefined && v !== null) e.setAttribute(k, v); } for (const k of kids.flat()) if (k !== null && k !== undefined && k !== false) e.append(k instanceof Node ? k : document.createTextNode(String(k))); return e; };
 const fmt = (x, d = 1) => (Number.isFinite(x) ? (Math.abs(x) < 0.5 * 10 ** -d ? 0 : x).toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d }) : '—');
@@ -753,7 +754,7 @@ function matches(id, term) {
   if (!term) return true;
   const p = S.byId.get(id), row = S.rowOf.get(id), st = S.stats.get(id);
   if (/^\d+$/.test(term) && row.repere === +term) return true;
-  const hay = `${row.repere} ${p.name} ${p.path.join(' ')} ${row.reference ?? ''} ${S.rowNotes[row.repere]?.reference ?? ''} ${st.size.map(x => x.toFixed(1)).join(' ')} ${CATEGORIES.find(c => c.id === catOf(id)).label}`.toLocaleLowerCase('fr');
+  const hay = `${row.repere} ${p.name} ${S.rowNotes[row.repere]?.nom ?? ''} ${p.path.join(' ')} ${row.reference ?? ''} ${S.rowNotes[row.repere]?.reference ?? ''} ${st.size.map(x => x.toFixed(1)).join(' ')} ${CATEGORIES.find(c => c.id === catOf(id)).label}`.toLocaleLowerCase('fr');
   if (hay.includes(term)) return true;
   const dm = term.match(/^[øo⌀d]?\s*(\d+(?:[.,]\d+)?)$/i);
   if (dm && S.drill) { const d = parseFloat(dm[1].replace(',', '.')); return S.drill.features.some(f => f.partId === id && f.segments.some(s => Math.abs(s.diameter - d) < 0.11)); }
@@ -792,7 +793,7 @@ function renderBom() {
     const st = note.statut ?? row.statut;
     const tagCls = st === 'validé' ? 'ok' : /regroup/.test(st) ? 'warn' : '';
     body.append(el('tr', { class: row.ids.some(id => S.sel.has(id)) ? 'sel' : '', onclick: e => select(row.ids, e.ctrlKey || S.multi) },
-      el('td', {}, el('span', { class: 'badge' }, row.repere)), el('td', {}, row.designation, note.reference ? el('div', { class: 'hint' }, 'Réf. ' + note.reference) : null, row.notes.length ? el('div', { class: 'hint' }, row.notes.join(' · ')) : null),
+      el('td', {}, el('span', { class: 'badge' }, row.repere)), el('td', { class: 'nom', title: 'Double clic : renommer', onclick: ev => clicNom(ev, row) }, nomRow(row), note.nom ? el('div', { class: 'hint' }, 'STEP : ' + row.designation) : null, note.reference ? el('div', { class: 'hint' }, 'Réf. ' + note.reference) : null, row.notes.length ? el('div', { class: 'hint' }, row.notes.join(' · ')) : null),
       el('td', {}, row.quantite), el('td', { class: 'dims' }, row.dims.map(x => fmt(x, 1)).join('×')), el('td', {}, el('span', { class: `tag ${tagCls}` }, st)),
       el('td', { onclick: e => e.stopPropagation() }, etatRow(row).etat === 'achete' ? el('span', { class: 'tag achat', title: 'Pièce achetée (proposé) : pas à usiner' }, 'acheté') : coche(etatRow(row).fini, { title: 'Fini (usiné)', onchange: e => { marquerFini(row.ids, e.target.checked); } }))));
   }
@@ -816,7 +817,7 @@ function renderCard() {
   const byD = new Map(); for (const f of holes) { const k = f.segments.map(s => 'Ø' + fmt(s.diameter, 1)).join('/'); byD.set(k, (byD.get(k) ?? 0) + 1); }
   const refInput = el('input', { value: note.reference ?? '', placeholder: 'Référence (saisie atelier / BE)' });
   card.append(...[
-    el('h4', {}, el('span', { class: 'badge' }, row.repere), p.name),
+    el('h4', { title: 'Double clic : renommer', onclick: ev => clicNom(ev, row) }, el('span', { class: 'badge' }, row.repere), nomRow(row)),
     el('dl', {},
       el('dt', {}, 'Sous-ensemble'), el('dd', {}, p.path.join(' / ') || '—'),
       el('dt', {}, 'Quantité'), el('dd', {}, `${row.quantite} occurrence(s)`),
@@ -1047,9 +1048,9 @@ function applyProject(pr, silent = false) {
 
 // ---------------------------------------------------------------- exports
 function exportBom() {
-  const header = ['repere', 'designation', 'reference', 'quantite', 'sous_ensemble', 'X_mm', 'Y_mm', 'Z_mm', 'volume_cm3', 'famille', 'commentaire', 'origine_information', 'statut_validation', 'avancement'];
+  const header = ['repere', 'designation', 'reference', 'quantite', 'sous_ensemble', 'X_mm', 'Y_mm', 'Z_mm', 'volume_cm3', 'famille', 'commentaire', 'origine_information', 'statut_validation', 'avancement', 'designation_origine'];
   const rows = S.bom.map(r => { const n = S.rowNotes[r.repere] ?? {}; const com = S.comments.filter(c => c.reperes.includes(r.repere)).map(c => `[${c.type}] ${c.text}`).join(' | ');
-    return [r.repere, r.designation, n.reference ?? '', r.quantite, r.sousEnsemble, ...r.dims.map(x => x.toFixed(2).replace('.', ',')), (r.volume / 1000).toFixed(2).replace('.', ','), CATEGORIES.find(c => c.id === catOf(r.ids[0])).label, [com, ...r.notes].filter(Boolean).join(' | '), r.origine, n.statut ?? r.statut, LIB_ETAT[etatRow(r).etat] + (etatRow(r).achat === 'proposé' ? ' (proposé)' : '')]; });
+    return [r.repere, nomRow(r), n.reference ?? '', r.quantite, r.sousEnsemble, ...r.dims.map(x => x.toFixed(2).replace('.', ',')), (r.volume / 1000).toFixed(2).replace('.', ','), CATEGORIES.find(c => c.id === catOf(r.ids[0])).label, [com, ...r.notes].filter(Boolean).join(' | '), r.origine, n.statut ?? r.statut, LIB_ETAT[etatRow(r).etat] + (etatRow(r).achat === 'proposé' ? ' (proposé)' : ''), n.nom ? r.designation : '']; });
   download(`${baseName()}_nomenclature.csv`, toCsv(header, rows), 'text/csv;charset=utf-8');
 }
 function exportDrill() {
@@ -1103,7 +1104,7 @@ function printReport() {
     el('p', {}, 'Document de consultation : dimensions d\'encombrement et perçages issus du maillage d\'affichage, valeurs indicatives. Aucune vérification de collision, jeu, tolérance ou serrage.'),
     el('img', { src: img }), el('h2', {}, 'Nomenclature'));
   const t = el('table', {}, el('tr', {}, ['Rep.', 'Désignation', 'Réf.', 'Qté', 'X × Y × Z (mm)', 'Statut'].map(h => el('th', {}, h))));
-  for (const r of S.bom) { const n = S.rowNotes[r.repere] ?? {}; t.append(el('tr', {}, el('td', {}, r.repere), el('td', {}, r.designation), el('td', {}, n.reference ?? ''), el('td', {}, r.quantite), el('td', {}, r.dims.map(x => fmt(x, 1)).join(' × ')), el('td', {}, n.statut ?? r.statut))); }
+  for (const r of S.bom) { const n = S.rowNotes[r.repere] ?? {}; t.append(el('tr', {}, el('td', {}, r.repere), el('td', {}, nomRow(r)), el('td', {}, n.reference ?? ''), el('td', {}, r.quantite), el('td', {}, r.dims.map(x => fmt(x, 1)).join(' × ')), el('td', {}, n.statut ?? r.statut))); }
   rep.append(t);
   if (S.drill) {
     rep.append(el('h2', {}, 'Circuits et réseaux de perçages'));
@@ -1390,6 +1391,34 @@ function setupGroupes() {
 }
 
 // ---------------------------------------------------------------- reste à faire (avancement par repère)
+const nomRow = row => nomAffiche(S.rowNotes[row.repere], row.designation);
+// Le premier clic sélectionne et redessine la liste : un « dblclick » natif tomberait sur un élément remplacé.
+// On détecte donc nous-mêmes deux clics rapprochés sur le même repère (souris ou doigt).
+let dernierClicNom = { repere: null, t: 0 };
+function clicNom(ev, row) {
+  const maintenant = Date.now();
+  if (dernierClicNom.repere === row.repere && maintenant - dernierClicNom.t < 500) { dernierClicNom = { repere: null, t: 0 }; ev.stopPropagation(); editerNom(ev.currentTarget, row); }
+  else dernierClicNom = { repere: row.repere, t: maintenant };
+}
+/** Double clic sur un nom : saisie à la place du texte ; Entrée ou clic ailleurs valide, Échap annule, vide = nom du STEP. */
+function editerNom(cellule, row) {
+  if (cellule.querySelector('input.nom-edit')) return;
+  const note = S.rowNotes[row.repere] ?? {};
+  const input = el('input', { class: 'nom-edit', maxlength: 80, value: nomRow(row), placeholder: row.designation, title: 'Entrée : valider · Échap : annuler · vide : nom du STEP' });
+  let fini = false;
+  const valider = () => {
+    if (fini) return; fini = true;
+    try {
+      const n = nomRepere(input.value, { origine: row.designation });
+      if ((n ?? undefined) === note.nom) return refreshAll();
+      const nouvelle = { ...note }; if (n) nouvelle.nom = n; else delete nouvelle.nom;
+      S.rowNotes[row.repere] = nouvelle; refreshAll(); toast(n ? `Repère ${row.repere} renommé « ${n} ».` : `Repère ${row.repere} : nom du STEP rétabli.`);
+    } catch (e) { if (e instanceof ErreurNom) { toast('Nom : ' + e.message, 5000); refreshAll(); } else throw e; }
+  };
+  input.onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') valider(); else if (e.key === 'Escape') { fini = true; refreshAll(); } };
+  input.onblur = valider; input.onclick = e => e.stopPropagation(); input.ondblclick = e => e.stopPropagation();
+  cellule.replaceChildren(input); input.focus(); input.select();
+}
 const etatRow = row => etatRepere(S.rowNotes[row.repere], row.designation);
 const etatId = id => etatRow(S.rowOf.get(id)).etat;
 const rowsOf = ids => [...new Set(ids.map(id => S.rowOf.get(id)))];
@@ -1419,7 +1448,7 @@ function renderReste() {
     const e = etatRow(row), cls = e.etat === 'fini' ? 'fini' : e.etat === 'achete' ? 'achat' : 'afaire';
     box.append(el('div', { class: `row${row.ids.every(id => S.sel.has(id)) ? ' sel' : ''}`, onclick: ev => select(row.ids, ev.ctrlKey || ev.metaKey || ev.shiftKey || S.multi) },
       e.etat === 'achete' ? el('span', { class: 'fini' }) : coche(e.fini, { title: 'Fini', onclick: ev => ev.stopPropagation(), onchange: ev => marquerFini(row.ids, ev.target.checked) }),
-      el('span', { class: 'badge' }, row.repere), el('span', { class: 'name', title: row.designation }, row.designation + (row.quantite > 1 ? ` ×${row.quantite}` : '')),
+      el('span', { class: 'badge' }, row.repere), el('span', { class: 'name', title: nomRow(row), onclick: ev => clicNom(ev, row) }, nomRow(row) + (row.quantite > 1 ? ` ×${row.quantite}` : '')),
       el('span', { class: `tag ${cls}`, title: e.achat === 'proposé' ? 'Détecté d\'après la désignation : à confirmer' : '' }, LIB_ETAT[e.etat] + (e.achat === 'proposé' ? ' ?' : '')),
       el('button', { class: 'btn sm', title: e.etat === 'achete' ? 'Cette pièce est à usiner' : 'Cette pièce est achetée', onclick: ev => { ev.stopPropagation(); basculerAchat(row); } }, e.etat === 'achete' ? 'À usiner' : 'Acheté')));
   }
@@ -1453,7 +1482,7 @@ function apiCtx() {
     pieces: enregistrementsPieces,
     recherche: (id, term) => matches(id, String(term).toLocaleLowerCase('fr')),
     reperesDe,
-    nomenclature: () => S.bom.map(r => { const n = S.rowNotes[r.repere] ?? {}; return { repere: r.repere, designation: r.designation, reference: n.reference ?? '', quantite: r.quantite, famille: fam(r.ids[0]).label, sous_ensemble: r.sousEnsemble, dims_mm: r.dims.map(x => +x.toFixed(1)), type_usinage: S.typo.get(r.ids[0])?.type ?? null, diametre_mm: S.typo.get(r.ids[0])?.diametre_mm ?? null, longueur_mm: S.typo.get(r.ids[0])?.longueur_mm ?? null, brut_mm: S.typo.get(r.ids[0])?.brut_mm ?? null, groupes: groupesDe(S.groups, r.ids[0]).map(g => g.nom), avancement: etatRow(r).etat, achat: etatRow(r).achat, statut: n.statut ?? r.statut }; }),
+    nomenclature: () => S.bom.map(r => { const n = S.rowNotes[r.repere] ?? {}; return { repere: r.repere, designation: nomRow(r), designation_origine: n.nom ? r.designation : undefined, reference: n.reference ?? '', quantite: r.quantite, famille: fam(r.ids[0]).label, sous_ensemble: r.sousEnsemble, dims_mm: r.dims.map(x => +x.toFixed(1)), type_usinage: S.typo.get(r.ids[0])?.type ?? null, diametre_mm: S.typo.get(r.ids[0])?.diametre_mm ?? null, longueur_mm: S.typo.get(r.ids[0])?.longueur_mm ?? null, brut_mm: S.typo.get(r.ids[0])?.brut_mm ?? null, groupes: groupesDe(S.groups, r.ids[0]).map(g => g.nom), avancement: etatRow(r).etat, achat: etatRow(r).achat, statut: n.statut ?? r.statut }; }),
     reseaux: () => (S.drill ? S.drill.networks.map(n => ({ id: n.id, type: n.kind, classement: netLabel(n), valide: netValidated(n), proposition: n.suggestion, nb_percages: n.features.length, diametres_mm: n.diameters.map(d => +d.toFixed(2)), longueur_totale_mm: +n.totalLength.toFixed(1), reperes: reperesDe(n.partIds) })) : []),
     percages(reseauId, ids) {
       if (!S.drill) return [];
@@ -1537,8 +1566,9 @@ function apiCtx() {
     diametreMaxi: mm => { S.maxDrill = Math.max(1, mm); $('f-maxdrill').value = S.maxDrill; S.selNet = null; S.selFeature = null; S.netClass = {}; rebuildNetworks(); refreshAll(); },
     commentaire: ({ ids, texte, type, statut, auteur }) => { S.comments.push({ ids, reperes: reperesDe(ids), type, status: statut, author: auteur ?? ($('c-author').value.trim() || ''), text: texte, date: new Date().toISOString() }); refreshAll(); },
     repereValider: (repere, valide) => { const n = S.rowNotes[repere] ?? {}; S.rowNotes[repere] = { ...n, statut: valide ? 'validé' : undefined }; refreshAll(); },
+    repereRenommer: (repere, nom) => { const r = S.bom.find(x => x.repere === repere); S.rowNotes[repere] = { ...(S.rowNotes[repere] ?? {}), nom: nomRepere(nom, { origine: r.designation }) ?? undefined }; if (S.rowNotes[repere].nom === undefined) delete S.rowNotes[repere].nom; refreshAll(); return r.designation; },
     repereReference: (repere, reference) => { const n = S.rowNotes[repere] ?? {}; S.rowNotes[repere] = { ...n, reference }; refreshAll(); },
-    resteAFaire: () => ({ totaux: compter(S.bom.map(r => ({ etat: etatRow(r).etat, quantite: r.quantite }))), a_faire: S.bom.filter(r => etatRow(r).etat === 'a_faire').map(r => ({ repere: r.repere, designation: r.designation, quantite: r.quantite, type_usinage: S.typo.get(r.ids[0])?.type ?? null, brut_mm: S.typo.get(r.ids[0])?.brut_mm ?? null })), achetes_proposes: S.bom.filter(r => etatRow(r).achat === 'proposé').map(r => ({ repere: r.repere, designation: r.designation })) }),
+    resteAFaire: () => ({ totaux: compter(S.bom.map(r => ({ etat: etatRow(r).etat, quantite: r.quantite }))), a_faire: S.bom.filter(r => etatRow(r).etat === 'a_faire').map(r => ({ repere: r.repere, designation: nomRow(r), quantite: r.quantite, type_usinage: S.typo.get(r.ids[0])?.type ?? null, brut_mm: S.typo.get(r.ids[0])?.brut_mm ?? null })), achetes_proposes: S.bom.filter(r => etatRow(r).achat === 'proposé').map(r => ({ repere: r.repere, designation: nomRow(r) })) }),
     marquerFini, marquerAchete: (ids, v) => marquerAchete(ids, v),
     groupeCreer: (nom, ids) => { try { const g = creerGroupe(S.groups, nom, ids, { origine: 'commande JSON' }); refreshAll(); return g.nom; } catch (e) { throw e instanceof ErreurGroupe ? new ErreurCommande(e.message) : e; } },
     groupeAjouter: (nom, ids) => { const g = trouverGroupe(S.groups, nom); if (!g) throw new ErreurCommande(`groupe « ${nom} » inconnu. Groupes : ${S.groups.map(x => x.nom).join(', ') || 'aucun'}.`); const n = ajouterAuGroupe(g, ids); refreshAll(); return n; },

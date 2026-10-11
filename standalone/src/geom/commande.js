@@ -230,6 +230,8 @@ export const COMMANDES = {
     run(ctx, q) { const ids = resoudre(ctx, q.cible, 'selection'); ctx.commentaire({ ids, texte: q.texte, type: q.type ?? 'observation', statut: q.statut ?? 'ouvert', auteur: q.auteur }); return res(`Commentaire ajouté sur ${nb(ids.length, 'pièce')}.`); } },
   repere_valider: { confirme: true, doc: 'ÉCRITURE : valide (ou dévalide) un repère de nomenclature.', params: { repere: p('entier', { req: true, min: 1 }), valide: p('booleen', { def: true }) },
     run(ctx, q) { resoudre(ctx, [q.repere]); ctx.repereValider(q.repere, q.valide !== false); return res(`Repère ${q.repere} ${q.valide !== false ? 'validé' : 'dévalidé'}.`); } },
+  repere_renommer: { confirme: true, doc: 'ÉCRITURE : renomme un repère (nom affiché, exporté ; le STEP n\'est pas modifié) ; "retablir":true rend le nom d\'origine.', params: { repere: p('entier', { req: true, min: 1 }), nom: p('texte'), retablir: p('booleen', { def: false }) },
+    run(ctx, q) { resoudre(ctx, [q.repere]); if (q.retablir !== true && !q.nom) throw erreur('« nom » requis (ou "retablir":true).'); const o = ctx.repereRenommer(q.repere, q.retablir === true ? '' : q.nom); return res(q.retablir === true ? `Repère ${q.repere} : nom d'origine « ${o} » rétabli.` : `Repère ${q.repere} renommé « ${q.nom} » (STEP : « ${o} »).`); } },
   repere_reference: { confirme: true, doc: 'ÉCRITURE : saisit la référence d\'un repère.', params: { repere: p('entier', { req: true, min: 1 }), reference: p('texte', { req: true }) },
     run(ctx, q) { resoudre(ctx, [q.repere]); ctx.repereReference(q.repere, q.reference); return res(`Référence du repère ${q.repere} : ${q.reference}.`); } },
   scene_sauver: { doc: 'Mémorise la vue actuelle comme scène.', params: { nom: p('texte') }, run: (ctx, q) => res(`Scène « ${ctx.sceneSauver(q.nom)} » mémorisée.`) },
@@ -295,6 +297,7 @@ function descrire(ctx, { nom, params: q }) {
   switch (nom) {
     case 'commentaire_ajouter': return `Ajouter un commentaire « ${q.type ?? 'observation'} » sur ${cible()} : « ${q.texte} »`;
     case 'repere_valider': return `${q.valide !== false ? 'Valider' : 'Dévalider'} le repère ${q.repere}`;
+    case 'repere_renommer': return q.retablir === true ? `Rétablir le nom d'origine du repère ${q.repere}` : `Renommer le repère ${q.repere} en « ${q.nom} »`;
     case 'repere_reference': return `Enregistrer la référence « ${q.reference} » pour le repère ${q.repere}`;
     case 'classer_circuit': return `Valider le réseau ${q.reseau} comme « ${q.classement} »`;
     case 'groupe_retirer': return `Retirer ${cible()} du groupe « ${q.nom} »`;

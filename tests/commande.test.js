@@ -39,6 +39,7 @@ function fauxCtx() {
   ctx.resteAFaire = () => ({ totaux: { reperes: { a_faire: 2, fini: 0, achete: 1 } }, a_faire: [{ repere: 1 }, { repere: 3 }], achetes_proposes: [{ repere: 2 }] });
   ctx.marquerFini = (ids, fini) => { appels.push(['marquerFini', ids, fini]); return { reperes: ids.length, achetes: 0 }; };
   ctx.marquerAchete = (ids, v) => { appels.push(['marquerAchete', ids, v]); return ids.length; };
+  ctx.repereRenommer = (repere, nom) => { appels.push(['repereRenommer', repere, nom]); return 'PLAQUE_PORTE_EMPREINTE'; };
   ctx.circuits = q => { appels.push(['circuits', q]); return { message: 'ok' }; };
   ctx.sauverAvant = () => appels.push(['sauverAvant']);
   ctx.sceneSauver = n => { appels.push(['sceneSauver', n]); return n ?? 'Scène 1'; };
@@ -268,4 +269,15 @@ test('reste à faire : cible « avancement », lecture et écritures confirmées
   assert.deepEqual(c.appels.find(a => a[0] === 'marquerFini').slice(1), [['O001'], true]); assert.deepEqual(c.appels.find(a => a[0] === 'marquerAchete').slice(1), [['O004'], false]);
   r = await run(c, { cmd: 'marquer_achete', cible: [2], auto: true }, { confirmer: () => true }); assert.equal(r.ok, true);
   assert.equal(c.appels.at(-1)[2], null, 'auto = retour à la détection');
+});
+
+test('renommer un repère : écriture confirmée, nom ou retablir obligatoire', async () => {
+  const c = fauxCtx();
+  const lot = { commandes: [{ cmd: 'repere_renommer', repere: 1, nom: 'Semelle inférieure' }] };
+  let r = await run(c, lot); assert.equal(r.ok, false); assert.ok(!c.appels.some(a => a[0] === 'repereRenommer'), 'refusé sans confirmation');
+  let vu; r = await run(c, lot, { confirmer: l => { vu = l; return true; } });
+  assert.equal(r.ok, true, JSON.stringify(r)); assert.match(vu[0], /Renommer le repère 1 en « Semelle inférieure »/); assert.deepEqual(c.appels.at(-1), ['repereRenommer', 1, 'Semelle inférieure']);
+  r = await run(c, { cmd: 'repere_renommer', repere: 1, retablir: true }, { confirmer: () => true }); assert.equal(r.ok, true); assert.equal(c.appels.at(-1)[2], '');
+  r = await run(c, { cmd: 'repere_renommer', repere: 1 }, { confirmer: () => true }); assert.equal(r.ok, false); assert.match(r.resultats[0].erreur, /nom/);
+  r = await run(c, { cmd: 'repere_renommer', repere: 99, nom: 'x' }, { confirmer: () => true }); assert.equal(r.ok, false);
 });

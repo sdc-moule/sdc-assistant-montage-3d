@@ -44,3 +44,12 @@ test('totaux : repères et pièces, pièces achetées exclues du pourcentage', (
   assert.deepEqual(t.usiner, { reperes: 3, pieces: 5 }); assert.equal(t.pct_fini, 40);
   assert.equal(compter([{ etat: 'achete', quantite: 4 }]).pct_fini, null);
 });
+
+import { nomRepere, nomAffiche, ErreurNom, MAX_NOM_REPERE } from '../standalone/src/geom/noms.js';
+test('renommer un repère : nettoyage, retour au nom d\'origine, longueur maximale', () => {
+  assert.equal(nomRepere('  Plaque   porte-empreinte  '), 'Plaque porte-empreinte');
+  assert.equal(nomRepere('   '), null); assert.equal(nomRepere(''), null); assert.equal(nomRepere(undefined), null);
+  assert.equal(nomRepere('PLAQUE_X', { origine: 'PLAQUE_X' }), null, 'identique à l\'origine : rien à stocker');
+  assert.throws(() => nomRepere('x'.repeat(MAX_NOM_REPERE + 1)), ErreurNom);
+  assert.equal(nomAffiche({ nom: 'Semelle' }, 'PLAQUE_X'), 'Semelle'); assert.equal(nomAffiche({}, 'PLAQUE_X'), 'PLAQUE_X'); assert.equal(nomAffiche(undefined, 'P'), 'P');
+});

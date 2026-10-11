@@ -215,3 +215,6 @@ table.bom td.dims { white-space: nowrap; font-variant-numeric: tabular-nums; fon
 .row .fini { width: 22px; height: 22px; flex: none; }
 .tag.achat { background: #e6e9ed; color: #4a525a; } .tag.fini { background: #e1f3e8; color: var(--ok); } .tag.afaire { background: #fde9d4; color: #a14d06; }
 table.bom td .fini { width: 20px; height: 20px; }
+
+/* renommer un repère (double clic) */
+td.nom { cursor: text; } input.nom-edit { width: 100%; min-height: 32px; font: inherit; padding: 2px 6px; border: 2px solid var(--steel-d, #2f5d7c); border-radius: 6px; box-sizing: border-box; }

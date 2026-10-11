@@ -136,6 +136,10 @@ Les pièces dont la désignation évoque vis, écrou, rondelle, joint, bague ou 
 ```json
 {"sdc": 1, "commandes": [{"cmd": "commentaire_ajouter", "cible": [9], "type": "anomalie", "texte": "Longueur de vis à contrôler avant montage", "auteur": "Atelier"}]}
 ```
+**« Renomme le repère 1 en Semelle inférieure. »** (écriture : confirmation demandée ; le STEP n'est pas modifié, le nom d'origine reste visible)
+```json
+{"sdc": 1, "commandes": [{"cmd": "repere_renommer", "repere": 1, "nom": "Semelle inférieure"}]}
+```
 **« Je me suis trompé, reviens en arrière. »**
 ```json
 {"sdc": 1, "commandes": [{"cmd": "retour_avant_commande"}]}
