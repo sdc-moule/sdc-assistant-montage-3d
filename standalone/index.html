@@ -12,36 +12,38 @@
     <div class="brand"><span class="logo">SDC</span><div><b>Montage 3D</b><small id="file-label">Aucun assemblage ouvert</small></div></div>
     <div class="top-actions">
       <label class="btn primary big" title="Ouvrir un fichier STEP, STP, IGES"><svg viewBox="0 0 24 24"><path d="M4 20h16M12 4v12m0-12-5 5m5-5 5 5"/></svg><span>Ouvrir un STEP</span><input id="file" type="file" accept=".step,.stp,.iges,.igs,.brep,.zip" hidden></label>
-      <button class="btn" id="demo" title="Assemblage d'essai synthétique (BCR + plaque refroidie)">Démo</button>
-      <select id="quality" title="Finesse du maillage d'affichage (n'affecte pas le fichier)"><option value="rapide">Affichage rapide</option><option value="normale" selected>Affichage normal</option><option value="fine">Affichage fin</option></select>
-      <button class="btn toggle" id="tactile-toggle" title="Mode tactile : grands boutons, appui long sur une pièce = menu contextuel">Tactile</button>
-      <button class="btn" id="ech-minus" hidden title="Interface plus petite">A−</button><button class="btn" id="ech-plus" hidden title="Interface plus grande">A+</button>
-      <span class="sep"></span>
-      <button class="btn" id="save-project" title="Enregistrer commentaires, vues, classements (fichier projet JSON)">Enregistrer projet</button>
-      <label class="btn" title="Recharger un projet JSON ou une scène PNG">Charger projet / scène<input id="load-project" type="file" accept=".json,.png" hidden></label>
-      <div class="menu"><button class="btn" id="export-btn">Exporter ▾</button>
+      <button class="btn" id="save-project" title="Enregistrer commentaires, vues, cotes, pièces finies (fichier projet JSON)"><svg viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5zM8 4v5h7V4M8 20v-6h8v6"/></svg><span>Enregistrer</span></button>
+      <div class="menu"><button class="btn" id="export-btn" title="Nomenclature, perçages, capture, rapport">Exporter ▾</button>
         <div class="menu-list" id="export-menu" hidden>
           <button data-export="bom">Nomenclature (CSV Excel)</button>
           <button data-export="drill">Fiche des perçages (CSV Excel)</button>
           <button data-export="png">Capture annotée (PNG)</button>
           <button data-export="print">Rapport à imprimer / PDF</button>
         </div></div>
+      <div class="menu"><button class="btn" id="settings-btn" title="Finesse d'affichage, mode tactile, projet">Réglages ▾</button>
+        <div class="menu-list menu-settings" id="settings-menu" hidden>
+          <label class="mi">Finesse d'affichage<select id="quality" title="Finesse du maillage d'affichage (n'affecte pas le fichier)"><option value="rapide">Rapide</option><option value="normale" selected>Normale</option><option value="fine">Fine</option></select></label>
+          <div class="mi">Écran tactile<span class="mi-btns"><button class="btn toggle" id="tactile-toggle" title="Mode tactile : grands boutons, appui long sur une pièce = menu contextuel">Tactile</button><button class="btn" id="ech-minus" hidden title="Interface plus petite">A−</button><button class="btn" id="ech-plus" hidden title="Interface plus grande">A+</button></span></div>
+          <label class="mi mi-file" title="Recharger un projet JSON ou une scène PNG">Ouvrir un projet / une scène…<input id="load-project" type="file" accept=".json,.png" hidden></label>
+        </div></div>
       <button class="btn icon" id="help-btn" title="Aide">?</button>
     </div>
   </header>
 
-  <nav class="rail" id="rail">
-    <button data-mode="explorer" class="on"><svg viewBox="0 0 24 24"><path d="M12 3 3 8l9 5 9-5-9-5zM3 8v8l9 5 9-5V8"/></svg>Explorer</button>
-    <button data-mode="groupes" title="Filtrer les pièces (tournage, fraisage, dimensions) et créer des groupes nommés"><svg viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4-2v-4z"/></svg>Filtres<br>groupes</button>
-    <button data-mode="reste" title="Reste à faire : pièces finies, pièces à usiner, pièces achetées"><svg viewBox="0 0 24 24"><path d="M5 12l4 4 10-10M4 20h16"/></svg>Reste<br>à faire</button>
-    <button data-mode="eclate"><svg viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 14h6v6h-6zM10 10l4 4M14 4h6v6M4 14v6h6"/></svg>Démonter</button>
-    <button data-mode="coupe"><svg viewBox="0 0 24 24"><path d="M3 12h18M6 5h12v14H6z" /></svg>Couper</button>
-    <button data-mode="percages"><svg viewBox="0 0 24 24"><path d="M3 7h12M15 7v10M15 17h6M9 7v6M9 13H3"/><circle cx="15" cy="7" r="1.6"/><circle cx="9" cy="13" r="1.6"/></svg>Perçages<br>circuits</button>
-    <button data-mode="notes"><svg viewBox="0 0 24 24"><path d="M5 4h14v12H9l-4 4z"/></svg>Notes<br>vues</button>
-    <button data-mode="commande" title="Piloter l'application par commandes JSON (assistant IA)"><svg viewBox="0 0 24 24"><path d="M4 6l5 5-5 5M12 18h8"/></svg>Commande</button>
+  <nav class="rail" id="rail" aria-label="Étapes de travail">
+    <button data-mode="explorer" class="on" title="1 · Voir l'assemblage, sélectionner, masquer, isoler"><i class="step">1</i><svg viewBox="0 0 24 24"><path d="M12 3 3 8l9 5 9-5-9-5zM3 8v8l9 5 9-5V8"/></svg>Voir</button>
+    <button data-mode="groupes" title="2 · Trouver des pièces (tournage, fraisage, dimensions) et créer des groupes nommés"><i class="step">2</i><svg viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4-2v-4z"/></svg>Trouver</button>
+    <button data-mode="eclate" title="3 · Démonter, éclater, ouvrir le moule"><i class="step">3</i><svg viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 14h6v6h-6zM10 10l4 4M14 4h6v6M4 14v6h6"/></svg>Démonter</button>
+    <button data-mode="coupe" title="4 · Couper pour voir l'intérieur"><i class="step">4</i><svg viewBox="0 0 24 24"><path d="M3 12h18M6 5h12v14H6z" /></svg>Couper</button>
+    <button data-mode="percages" title="5 · Perçages et circuits de refroidissement"><i class="step">5</i><svg viewBox="0 0 24 24"><path d="M3 7h12M15 7v10M15 17h6M9 7v6M9 13H3"/><circle cx="15" cy="7" r="1.6"/><circle cx="9" cy="13" r="1.6"/></svg>Perçages</button>
+    <button data-mode="reste" title="6 · Suivi : pièces finies, à usiner, achetées"><i class="step">6</i><svg viewBox="0 0 24 24"><path d="M5 12l4 4 10-10M4 20h16"/></svg>Suivi</button>
+    <button data-mode="notes" title="7 · Commentaires, cotes et vues mémorisées"><i class="step">7</i><svg viewBox="0 0 24 24"><path d="M5 4h14v12H9l-4 4z"/></svg>Notes</button>
+    <span class="rail-sep"></span>
+    <button data-mode="commande" class="adv" title="Avancé : piloter l'application par commandes JSON (assistant IA)"><svg viewBox="0 0 24 24"><path d="M4 6l5 5-5 5M12 18h8"/></svg>Avancé</button>
   </nav>
 
   <aside class="panel left" id="panel-left">
+    <div id="guide" class="guide" role="status" aria-live="polite"></div>
     <section data-panel="explorer">
       <h2>Explorer l'assemblage</h2>
       <p class="hint">Touchez une pièce pour la sélectionner. <b>Ctrl</b> ou le bouton <b>Multi</b> pour en prendre plusieurs.</p>
@@ -225,8 +227,9 @@
   </main>
 
   <aside class="panel right" id="panel-right">
-    <div class="tabs"><button data-tab="tree" class="on">Arborescence</button><button data-tab="bom">Nomenclature</button></div>
+    <div class="tabs"><button data-tab="tree" class="on">Pièces</button><button data-tab="bom">Tableau</button></div>
     <input id="search" type="search" placeholder="Chercher : repère, nom, Ø, dimension…">
+    <label class="groupby" id="groupby-box">Classer par <select id="tree-group"><option value="ss">sous-ensemble</option><option value="rep">repère (nomenclature)</option></select><span class="legend"><i class="lg lg-fini"></i>fini <i class="lg lg-afaire"></i>à faire <i class="lg lg-achete"></i>acheté</span></label>
     <div id="tab-tree" class="list tree"></div>
     <div id="tab-bom" class="list" hidden><table class="bom"><thead><tr><th>Rep.</th><th>Désignation</th><th>Qté</th><th>X×Y×Z mm</th><th>Statut</th><th title="Fini (usiné)">Fini</th></tr></thead><tbody id="bom-body"></tbody></table></div>
     <div id="part-card" class="card" hidden></div>
@@ -244,6 +247,7 @@
     <li>Aucun calcul de collision, de jeu, de tolérance ou de serrage n'est réalisé. Le fichier STEP n'est jamais modifié.</li>
   </ul>
   <p class="hint" id="version-info"></p>
+  <div class="help-demo"><button class="btn sm" id="demo" title="Remplace le fichier ouvert par un assemblage d'essai">Charger l'assemblage de démonstration</button><small>Remplace le fichier ouvert (confirmation demandée).</small></div>
   <button class="btn primary" id="help-close">Fermer</button>
 </div></div>
 

@@ -20,6 +20,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { executer, contexteIA, modeEmploiIA, COMMANDES, VERSION_COMMANDES, ErreurCommande } from './geom/commande.js';
 import { analyserTypologie, correspond, validerCriteres, resumeCriteres, TYPES } from './geom/typologie.js';
 import { nomRepere, nomAffiche, ErreurNom } from './geom/noms.js';
+import { guide } from './geom/guide.js';
 import { etatRepere, achatProbable, noteAvec, compter, LIBELLES as LIB_ETAT } from './geom/avancement.js';
 import { creerGroupe, trouverGroupe, ajouterAuGroupe, retirerDuGroupe, renommerGroupe, supprimerGroupe, groupesDe, reprendreGroupes, ErreurGroupe } from './geom/groupes.js';
 
@@ -27,7 +28,7 @@ THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
 THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
 THREE.Mesh.prototype.raycast = acceleratedRaycast;
 
-const APP_VERSION = '1.6.0';
+const APP_VERSION = '1.7.0';
 const $ = id => document.getElementById(id);
 const el = (tag, props = {}, ...kids) => { const e = document.createElement(tag); for (const [k, v] of Object.entries(props)) { if (k === 'class') e.className = v; else if (k === 'style') e.style.cssText = v; else if (k.startsWith('on')) e[k] = v; else if (v !== undefined && v !== null) e.setAttribute(k, v); } for (const k of kids.flat()) if (k !== null && k !== undefined && k !== false) e.append(k instanceof Node ? k : document.createTextNode(String(k))); return e; };
 const fmt = (x, d = 1) => (Number.isFinite(x) ? (Math.abs(x) < 0.5 * 10 ** -d ? 0 : x).toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d }) : '—');
@@ -583,9 +584,15 @@ function pick(ev) {
 }
 renderer.domElement.addEventListener('pointerdown', ev => {
   down = { x: ev.clientX, y: ev.clientY, t: performance.now() };
+  const k = coteAt(ev); if (k) { dragCote = { c: k.c, x: ev.clientX, y: ev.clientY, moved: false }; controls.enabled = false; return; }
   const b = bubbleAt(ev); if (b) { dragBubble = { b, x: ev.clientX, y: ev.clientY, moved: false }; controls.enabled = false; }
 });
 renderer.domElement.addEventListener('pointermove', ev => {
+  if (dragCote) {
+    const dx = ev.clientX - dragCote.x, dy = ev.clientY - dragCote.y;
+    if (Math.hypot(dx, dy) > 3 || dragCote.moved) { dragCote.moved = true; const o = dragCote.c.off ?? [0, 0]; dragCote.c.off = [o[0] + dx, o[1] + dy]; dragCote.x = ev.clientX; dragCote.y = ev.clientY; }
+    return;
+  }
   if (!dragBubble) return;
   const dx = ev.clientX - dragBubble.x, dy = ev.clientY - dragBubble.y;
   if (Math.hypot(dx, dy) > 4) dragBubble.moved = true;
@@ -593,7 +600,8 @@ renderer.domElement.addEventListener('pointermove', ev => {
 });
 renderer.domElement.addEventListener('pointerup', ev => {
   controls.enabled = true;
-  if (appuiLongFait) { appuiLongFait = false; return; }
+  if (appuiLongFait) { appuiLongFait = false; dragCote = null; return; }
+  if (dragCote) { const d = dragCote; dragCote = null; if (d.moved) { saveLocal(); renderCotes(); } else toast('Cote : faire glisser le texte pour le déplacer ; double clic pour le remettre en place.', 4500); return; }
   if (dragBubble) { const d = dragBubble; dragBubble = null; if (!d.moved) select(S.bom.find(r => r.repere === d.b.repere).ids, ev.ctrlKey || ev.shiftKey || S.multi); else saveLocal(); return; }
   if (!down || Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > 6 || !S.loaded) return;
   if ((S.boxMode || ev.shiftKey) && !S.pickAxis && !S.faceMode && !S.measure.on) { const h0 = pick(ev); if (h0) select([h0.object.userData.id], true); return; }
@@ -613,7 +621,7 @@ renderer.domElement.addEventListener('pointerup', ev => {
   if (h) select([h.object.userData.id], ev.ctrlKey || ev.metaKey || ev.shiftKey || S.multi);
   else if (!S.multi) clearSel();
 });
-renderer.domElement.addEventListener('dblclick', () => fitSelection());
+renderer.domElement.addEventListener('dblclick', ev => { const k = coteAt(ev); if (k) { delete k.c.off; saveLocal(); renderCotes(); return; } fitSelection(); });
 function pickFeature(ev) {
   ray.setFromCamera(ndc(ev), camera);
   const tubes = S.skelItems.filter(i => i.tube?.visible).map(i => i.tube);
@@ -656,27 +664,36 @@ function drawCotes() {
     const ang = Math.atan2(b.y - a.y, b.x - a.x);
     const arrow = (x, y, t) => { octx.beginPath(); octx.moveTo(x, y); octx.lineTo(x - 9 * Math.cos(t - 0.32), y - 9 * Math.sin(t - 0.32)); octx.lineTo(x - 9 * Math.cos(t + 0.32), y - 9 * Math.sin(t + 0.32)); octx.closePath(); octx.fill(); };
     if (c.kind !== 'angle') { arrow(b.x, b.y, ang); if (c.kind !== 'rayon') arrow(a.x, a.y, ang + Math.PI); }
-    label((a.x + b.x) / 2, (a.y + b.y) / 2 - 12, c.text, col);
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2 - 12, off = c.off ?? [0, 0], moved = off[0] !== 0 || off[1] !== 0;
+    if (moved) { octx.save(); octx.setLineDash([4, 3]); octx.lineWidth = 1; octx.beginPath(); octx.moveTo(mx, my + 12); octx.lineTo(mx + off[0], my + off[1]); octx.stroke(); octx.restore(); }
+    const r = label(mx + off[0], my + off[1], c.text, col, dragCote?.c === c ? 'rgba(255,241,228,.98)' : 'rgba(255,255,255,.92)');
+    coteCache.push({ c, ...r });
   }
+}
+function coteAt(ev) {
+  if (!S.cotesVisible || !coteCache.length) return null;
+  const r = overlay.getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top, m = 4;
+  return [...coteCache].reverse().find(k => x >= k.x - m && x <= k.x + k.w + m && y >= k.y - m && y <= k.y + k.h + m) ?? null;
 }
 function renderCotes() {
   const box = $('cote-list'); if (!box) return; box.replaceChildren();
   for (const c of S.cotes) box.append(el('div', { class: `row${c.visible ? '' : ' hidden-part'}` },
     el('button', { class: 'eye', title: c.visible ? 'Masquer' : 'Afficher', onclick: () => { c.visible = !c.visible; refreshAll(); } }, eyeSvg(c.visible)),
     el('span', { class: 'name' }, `${c.text} mm`.replace('° mm', '°').replace(/(°[^m]*) mm$/, '$1'), el('span', { class: 'hint' }, ` · rep. ${[...new Set([S.rowOf.get(c.a)?.repere, S.rowOf.get(c.b)?.repere])].join(' / ')}`)),
+    c.off ? el('button', { class: 'eye', title: 'Remettre le texte en place', onclick: () => { delete c.off; refreshAll(); } }, '↺') : null,
     el('button', { class: 'eye', title: 'Supprimer', onclick: () => { S.cotes = S.cotes.filter(x => x !== c); refreshAll(); } }, '✕')));
   if (!S.cotes.length) box.append(el('p', { class: 'hint' }, 'Aucune cote.'));
 }
 
 
 // ---------------------------------------------------------------- calque 2D : bulles, étiquettes, mesure
-let bubbleCache = [];
+let bubbleCache = [], coteCache = [], dragCote = null;
 function project(v) { const p = v.clone().project(camera); const r = overlay.getBoundingClientRect(); return { x: (p.x + 1) / 2 * r.width, y: (1 - p.y) / 2 * r.height, z: p.z }; }
 function bubbleAt(ev) { if (!S.bubbles) return null; const r = overlay.getBoundingClientRect(); const x = ev.clientX - r.left, y = ev.clientY - r.top; return bubbleCache.find(b => Math.hypot(b.bx - x, b.by - y) <= b.rad + 2) ?? null; }
 function drawOverlay() {
   const r = overlay.getBoundingClientRect();
   octx.clearRect(0, 0, r.width, r.height);
-  bubbleCache = [];
+  bubbleCache = []; coteCache = [];
   if (!S.loaded) return;
   if (S.bubbles) drawBubbles(r);
   if (S.skelShow && S.drill) drawNetLabels();
@@ -688,6 +705,7 @@ function label(x, y, text, color = '#18232e', bg = 'rgba(255,255,255,.92)') {
   octx.fillStyle = bg; octx.strokeStyle = color; octx.lineWidth = 1.5;
   octx.beginPath(); octx.roundRect(x - w / 2, y - 11, w, 22, 6); octx.fill(); octx.stroke();
   octx.fillStyle = color; octx.textAlign = 'center'; octx.textBaseline = 'middle'; octx.fillText(text, x, y + 0.5);
+  return { x: x - w / 2, y: y - 11, w, h: 22 };
 }
 function drawBubbles(r) {
   const rows = S.bubbleScope === 'selection' ? S.bom.filter(row => row.ids.some(id => S.sel.has(id))) : S.bom;
@@ -753,7 +771,7 @@ function loop() {
 }
 
 // ---------------------------------------------------------------- panneaux
-function refreshAll() { applyDisplay(); renderTree(); renderBom(); renderCard(); renderSelbar(); renderCategories(); renderGroups(); if (S.mode === 'groupes') renderFiltre(); if (S.mode === 'reste') renderReste(); if (S.mode === 'percages') renderNets(); if (S.mode === 'notes') { renderComments(); renderViews(); renderCotes(); } if (S.mode === 'eclate') renderMoves(); if (S.mode === 'coupe') renderPlanes(); saveLocal(); }
+function refreshAll() { applyDisplay(); renderTree(); renderBom(); renderCard(); renderSelbar(); renderGuide(); renderCategories(); renderGroups(); if (S.mode === 'groupes') renderFiltre(); if (S.mode === 'reste') renderReste(); if (S.mode === 'percages') renderNets(); if (S.mode === 'notes') { renderComments(); renderViews(); renderCotes(); } if (S.mode === 'eclate') renderMoves(); if (S.mode === 'coupe') renderPlanes(); saveLocal(); }
 
 function matches(id, term) {
   if (!term) return true;
@@ -766,26 +784,51 @@ function matches(id, term) {
   return false;
 }
 const eyeSvg = on => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.innerHTML = on ? '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>' : '<path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6 0 10 7 10 7a17 17 0 0 1-3.2 3.9M6.2 6.2C3.6 8 2 12 2 12s4 7 10 7a9.7 9.7 0 0 0 4.2-.9"/>'; return s; };
+const classeEtat = e => (e.etat === 'fini' ? ' fini' : e.etat === 'achete' ? ' achete' : '');
+const caseFini = (row, e) => (e.etat === 'achete'
+  ? el('span', { class: 'fini-vide', title: 'Pièce achetée : pas à usiner' }, '·')
+  : coche(e.fini, { title: e.fini ? 'Fini — décocher pour remettre à faire' : 'Cocher quand la pièce est usinée', onclick: ev => ev.stopPropagation(), onchange: ev => marquerFini(row.ids, ev.target.checked) }));
 function partRow(id) {
-  const p = S.byId.get(id), row = S.rowOf.get(id), it = S.items[id];
-  const eye = el('button', { class: 'eye', title: it.visible ? 'Masquer' : 'Afficher', onclick: e => { e.stopPropagation(); pushHistory(); it.visible = !it.visible; refreshAll(); } }, eyeSvg(it.visible));
-  const cat = CATEGORIES.find(c => c.id === catOf(id));
-  return el('div', { class: `row${S.sel.has(id) ? ' sel' : ''}${it.visible ? '' : ' hidden-part'}`, onclick: e => select([id], e.ctrlKey || e.metaKey || e.shiftKey || S.multi) },
-    eye, el('span', { class: 'badge' }, row.repere), el('span', { class: 'name', title: p.name }, p.name), el('span', { class: 'tag', style: `border-left:4px solid ${cat.color}` }, cat.label.split(' ')[0]));
+  const p = S.byId.get(id), row = S.rowOf.get(id), it = S.items[id], e = etatRow(row);
+  const eye = el('button', { class: 'eye', title: it.visible ? 'Masquer' : 'Afficher', onclick: ev => { ev.stopPropagation(); pushHistory(); it.visible = !it.visible; refreshAll(); } }, eyeSvg(it.visible));
+  const cat = CATEGORIES.find(c => c.id === catOf(id)), dims = S.stats.get(id).size;
+  return el('div', { class: `row part${S.sel.has(id) ? ' sel' : ''}${it.visible ? '' : ' hidden-part'}${classeEtat(e)}`, onclick: ev => select([id], ev.ctrlKey || ev.metaKey || ev.shiftKey || S.multi) },
+    eye, caseFini(row, e), el('span', { class: 'badge' }, row.repere),
+    el('span', { class: 'name', title: `${nomRow(row)} — double clic : renommer`, onclick: ev => clicNom(ev, row) }, nomRow(row)),
+    row.quantite > 1 ? el('span', { class: 'qte', title: `${row.quantite} occurrences` }, `×${row.quantite}`) : null,
+    el('span', { class: 'dims', title: 'Encombrement (mm)' }, dims.map(x => fmt(x, 0)).join('×')),
+    el('i', { class: 'cdot', style: `background:${cat.color}`, title: cat.label }));
+}
+function repereRow(row) {
+  const e = etatRow(row), cat = CATEGORIES.find(c => c.id === catOf(row.ids[0])), ok = row.ids.every(id => S.items[id].visible);
+  const eye = el('button', { class: 'eye', title: ok ? 'Masquer' : 'Afficher', onclick: ev => { ev.stopPropagation(); pushHistory(); for (const id of row.ids) S.items[id].visible = !ok; refreshAll(); } }, eyeSvg(ok));
+  return el('div', { class: `row part${row.ids.every(id => S.sel.has(id)) ? ' sel' : ''}${ok ? '' : ' hidden-part'}${classeEtat(e)}`, onclick: ev => select(row.ids, ev.ctrlKey || ev.metaKey || ev.shiftKey || S.multi) },
+    eye, caseFini(row, e), el('span', { class: 'badge' }, row.repere),
+    el('span', { class: 'name', title: `${nomRow(row)} — double clic : renommer`, onclick: ev => clicNom(ev, row) }, nomRow(row)),
+    row.quantite > 1 ? el('span', { class: 'qte', title: `${row.quantite} occurrences` }, `×${row.quantite}`) : null,
+    el('span', { class: 'dims', title: 'Encombrement (mm)' }, row.dims.map(x => fmt(x, 0)).join('×')),
+    el('i', { class: 'cdot', style: `background:${cat.color}`, title: cat.label }));
 }
 function renderTree() {
   const box = $('tab-tree'); box.replaceChildren();
   if (!S.loaded) return;
   const term = $('search').value.trim().toLocaleLowerCase('fr');
+  if ($('tree-group').value === 'rep') {
+    const rows = S.bom.filter(r => r.ids.some(id => matches(id, term)));
+    for (const r of rows) box.append(repereRow(r));
+    if (!rows.length) box.append(el('p', { class: 'hint' }, 'Aucun résultat.'));
+    return;
+  }
   const groups = new Map();
   for (const p of S.parts) { if (!matches(p.id, term)) continue; const k = p.path.join(' / ') || 'Assemblage'; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(p.id); }
   for (const [name, ids] of groups) {
     const allVis = ids.every(id => S.items[id].visible);
-    const head = el('div', { class: 'row', onclick: e => select(ids, e.ctrlKey || S.multi) },
+    const usiner = ids.filter(id => etatId(id) !== 'achete'), nFini = usiner.filter(id => etatId(id) === 'fini').length, tout = usiner.length > 0 && nFini === usiner.length;
+    const head = el('div', { class: `row${tout ? ' fini' : ''}`, onclick: e => select(ids, e.ctrlKey || S.multi) },
       el('button', { class: 'eye', title: 'Masquer / afficher le sous-ensemble', onclick: e => { e.stopPropagation(); pushHistory(); for (const id of ids) S.items[id].visible = !allVis; refreshAll(); } }, eyeSvg(allVis)),
-      el('span', { class: 'name' }, `▦ ${name}`), el('span', { class: 'tag' }, ids.length),
+      el('span', { class: 'name' }, `▦ ${name}`), el('span', { class: `tag${tout ? ' fini' : ''}`, title: usiner.length ? `${nFini} fini(s) sur ${usiner.length} à usiner` : 'Rien à usiner (pièces achetées)' }, usiner.length ? `${nFini}/${usiner.length}` : ids.length),
       el('button', { class: 'eye', title: 'Isoler ce sous-ensemble', onclick: e => { e.stopPropagation(); S.sel = new Set(ids); isolateSel(); } }, '◎'));
-    box.append(el('div', { class: 'group' }, head, el('div', { class: 'children' }, ids.map(partRow))));
+    box.append(el('div', { class: `group${tout ? ' fini' : ''}` }, head, el('div', { class: 'children' }, ids.map(partRow))));
   }
   if (!groups.size) box.append(el('p', { class: 'hint' }, 'Aucun résultat.'));
 }
@@ -797,7 +840,7 @@ function renderBom() {
     const note = S.rowNotes[row.repere] ?? {};
     const st = note.statut ?? row.statut;
     const tagCls = st === 'validé' ? 'ok' : /regroup/.test(st) ? 'warn' : '';
-    body.append(el('tr', { class: row.ids.some(id => S.sel.has(id)) ? 'sel' : '', onclick: e => select(row.ids, e.ctrlKey || S.multi) },
+    body.append(el('tr', { class: `${row.ids.some(id => S.sel.has(id)) ? 'sel' : ''}${classeEtat(etatRow(row))}`.trim(), onclick: e => select(row.ids, e.ctrlKey || S.multi) },
       el('td', {}, el('span', { class: 'badge' }, row.repere)), el('td', { class: 'nom', title: 'Double clic : renommer', onclick: ev => clicNom(ev, row) }, nomRow(row), note.nom ? el('div', { class: 'hint' }, 'STEP : ' + row.designation) : null, note.reference ? el('div', { class: 'hint' }, 'Réf. ' + note.reference) : null, row.notes.length ? el('div', { class: 'hint' }, row.notes.join(' · ')) : null),
       el('td', {}, row.quantite), el('td', { class: 'dims' }, row.dims.map(x => fmt(x, 1)).join('×')), el('td', {}, el('span', { class: `tag ${tagCls}` }, st)),
       el('td', { onclick: e => e.stopPropagation() }, etatRow(row).etat === 'achete' ? el('span', { class: 'tag achat', title: 'Pièce achetée (proposé) : pas à usiner' }, 'acheté') : coche(etatRow(row).fini, { title: 'Fini (usiné)', onchange: e => { marquerFini(row.ids, e.target.checked); } }))));
@@ -1013,7 +1056,7 @@ function syncToggles() {
   $('op-amount').value = Math.round(S.open * 100); $('op-val').textContent = `${Math.round(S.open * 100)} %`;
   $('op-pick').classList.toggle('on', S.pickAxis); $('cotes-vis').classList.toggle('on', S.cotesVisible); $('measure').classList.toggle('on', S.measure.on); $('boxsel').classList.toggle('on', S.boxMode);
   $('faces-btn').classList.toggle('on', S.faceMode); $('labels-toggle').classList.toggle('on', S.drillLabels); $('fill-toggle').classList.toggle('on', S.fill.on);
-  $('caps-toggle').classList.toggle('on', S.caps); $('planevis-toggle').classList.toggle('on', S.planeVis);
+  $('caps-toggle').classList.toggle('on', S.caps); $('planevis-toggle').classList.toggle('on', S.planeVis); renderGuide();
 }
 
 // ---------------------------------------------------------------- persistance locale et projet
@@ -1136,12 +1179,13 @@ function wire() {
   for (const b of document.querySelectorAll('#rail button')) b.onclick = () => setMode(b.dataset.mode);
   for (const id of ['file', 'file2']) $(id).onchange = e => { openFile(e.target.files[0]); e.target.value = ''; };
   const demo = () => { const b64 = window.__SDC_DEMO_STEP_GZ_B64__; if (!b64) return toast('Démonstration absente de cette version.'); busy('Préparation de la démonstration…'); gunzip(b64).then(bytes => loadBytes(bytes.buffer, 'demo_BCR_synthetique.step')).catch(err => { busy(''); toast('Démonstration impossible : ' + err.message); }); };
-  $('demo').onclick = demo; $('demo2').onclick = demo;
+  $('demo').onclick = () => { if (S.loaded && !confirm('La démonstration remplace le fichier ouvert (les pièces finies et notes déjà enregistrées pour ce fichier restent sur ce poste). Continuer ?')) return; $('help').hidden = true; demo(); }; $('demo2').onclick = demo;
   const stage = document.querySelector('.stage');
   stage.addEventListener('dragover', e => { e.preventDefault(); $('drop').hidden = false; });
   stage.addEventListener('dragleave', e => { if (e.target === stage || e.target.id === 'drop') $('drop').hidden = true; });
   stage.addEventListener('drop', e => { e.preventDefault(); $('drop').hidden = true; openFile(e.dataTransfer.files[0]); });
-  for (const t of document.querySelectorAll('.tabs button')) t.onclick = () => { for (const x of document.querySelectorAll('.tabs button')) x.classList.toggle('on', x === t); $('tab-tree').hidden = t.dataset.tab !== 'tree'; $('tab-bom').hidden = t.dataset.tab !== 'bom'; };
+  for (const t of document.querySelectorAll('#panel-right .tabs button')) t.onclick = () => { for (const x of document.querySelectorAll('#panel-right .tabs button')) x.classList.toggle('on', x === t); $('tab-tree').hidden = t.dataset.tab !== 'tree'; $('tab-bom').hidden = t.dataset.tab !== 'bom'; $('groupby-box').hidden = t.dataset.tab !== 'tree'; };
+  $('tree-group').onchange = () => renderTree();
   $('search').oninput = () => { renderTree(); renderBom(); };
   $('search').onkeydown = e => { if (e.key === 'Enter') { const term = $('search').value.trim().toLocaleLowerCase('fr'); const ids = S.parts.filter(p => matches(p.id, term)).map(p => p.id); if (ids.length) { select(ids); fitSelection(); } } };
   for (const b of document.querySelectorAll('[data-view]')) b.onclick = () => setView(b.dataset.view);
@@ -1227,8 +1271,10 @@ function wire() {
   // projet / export
   $('save-project').onclick = () => { if (!S.loaded) return toast('Ouvrir d\'abord un assemblage.'); download(`${baseName()}_projet-sdc.json`, JSON.stringify(projectData(), null, 1), 'application/json'); };
   $('load-project').onchange = async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; if (!S.loaded) return toast('Ouvrir d\'abord l\'assemblage STEP correspondant.'); try { if (/\.png$/i.test(f.name)) await loadScenePng(f); else { applyProject(JSON.parse(await f.text())); refreshAll(); } } catch (err) { toast('Fichier illisible : ' + err.message); } };
-  $('export-btn').onclick = e => { e.stopPropagation(); $('export-menu').hidden = !$('export-menu').hidden; };
-  document.addEventListener('click', () => { $('export-menu').hidden = true; });
+  $('export-btn').onclick = e => { e.stopPropagation(); $('settings-menu').hidden = true; $('export-menu').hidden = !$('export-menu').hidden; };
+  $('settings-btn').onclick = e => { e.stopPropagation(); $('export-menu').hidden = true; $('settings-menu').hidden = !$('settings-menu').hidden; };
+  $('settings-menu').onclick = e => e.stopPropagation();
+  document.addEventListener('click', () => { $('export-menu').hidden = true; $('settings-menu').hidden = true; });
   for (const b of document.querySelectorAll('[data-export]')) b.onclick = () => { if (!S.loaded) return toast('Ouvrir d\'abord un assemblage.'); ({ bom: exportBom, drill: exportDrill, png: exportPng, print: printReport })[b.dataset.export](); };
   $('help-btn').onclick = () => { $('help').hidden = false; }; $('help-close').onclick = () => { $('help').hidden = true; };
   $('version-info').textContent = `SDC Montage 3D ${APP_VERSION} · lecture CAO : OpenCascade (occt-import-js, LGPL) · affichage : Three.js (MIT).`;
@@ -1439,6 +1485,43 @@ function marquerFini(ids, fini) {
 }
 function marquerAchete(ids, v) { const rows = rowsOf(ids); for (const row of rows) S.rowNotes[row.repere] = noteAvec(S.rowNotes[row.repere], { achete: v }); refreshAll(); return rows.length; }
 function basculerAchat(row) { const veut = etatRow(row).etat !== 'achete'; marquerAchete(row.ids, veut === achatProbable(row.designation) ? null : veut); } // retour à « automatique » si la correction rejoint la détection
+// ---------------------------------------------------------------- guide « Que faire maintenant ? »
+function prochainePiece() {
+  const aFaire = S.bom.filter(r => etatRow(r).etat === 'a_faire').sort((a, b) => a.repere - b.repere);
+  if (!aFaire.length) return toast('Toutes les pièces à usiner sont faites.');
+  const cur = rowsOf([...S.sel])[0]?.repere ?? -Infinity, r = aFaire.find(x => x.repere > cur) ?? aFaire[0];
+  select(r.ids); fitSelection();
+}
+function contexteGuide() {
+  const c = { charge: S.loaded, mode: S.mode, nbSel: S.sel.size, cotation: S.measure.on, faces: S.faceMode };
+  if (!S.loaded) return c;
+  c.restants = compter(S.bom.map(r => ({ etat: etatRow(r).etat, quantite: r.quantite }))).reperes.a_faire;
+  c.nbMasquees = S.parts.filter(p => S.items[p.id]?.visible === false).length;
+  const rows = rowsOf([...S.sel]);
+  if (rows.length === 1) {
+    const r = rows[0], e = etatRow(r), id = [...S.sel][0];
+    c.nbSel = 1;
+    c.row = { repere: r.repere, nom: S.rowNotes[r.repere]?.nom, etat: e.etat, achat: e.achat, typologie: S.typo.get(id)?.type, percages: S.drill ? S.drill.features.filter(f => f.partId === id).length : 0 };
+  }
+  return c;
+}
+const ACTIONS_GUIDE_UI = {
+  tout_afficher: () => showAll(), eclate_zero: () => $('ex-close').click(), coupes_retirer: () => $('cut-reset').click(), circuits_seuls: () => $('skel-only').click(),
+  cotation_stop: () => { S.measure.on = false; S.cote.pending = null; syncToggles(); }, faces_stop: () => { S.faceMode = false; syncToggles(); },
+  masquer: () => hideSel(), isoler: () => isolateSel(), cadrer: () => fitSelection(), coter: () => $('measure').click(),
+  a_usiner: () => { for (const r of rowsOf([...S.sel])) if (etatRow(r).etat === 'achete') basculerAchat(r); },
+  fini: () => { const r = marquerFini([...S.sel], true); toast(r.reperes ? `${r.reperes} repère(s) marqué(s) fini.` : 'Pièce achetée : rien à marquer.'); },
+  remettre_afaire: () => marquerFini([...S.sel], false), suivante: () => prochainePiece(),
+  percages_piece: () => { const h = S.drill?.features.find(f => f.partId === [...S.sel][0]); if (!h) return; setMode('percages'); const n = S.drill.netOfFeature.get(h.id); S.filters[n.kind] = true; $('f-' + ({ circuit: 'circuit', alignement: 'align', 'isolé': 'iso', 'alésage': 'bore' }[n.kind])).checked = true; selectNet(n.id); },
+  groupe: () => { setMode('groupes'); $('grp-name').focus(); toast('Donner un nom au groupe, puis « Créer (sélection) ».'); },
+};
+function renderGuide() {
+  const box = $('guide'); if (!box) return;
+  const g = guide(contexteGuide());
+  box.className = `guide g-${g.cle}`; box.dataset.cle = g.cle;
+  box.replaceChildren(el('div', { class: 'g-titre' }, g.titre), el('p', { class: 'g-texte' }, g.texte),
+    g.actions.length ? el('div', { class: 'g-actions' }, g.actions.map(a => el('button', { class: `btn sm${a.primaire ? ' primary' : ''}`, onclick: () => ACTIONS_GUIDE_UI[a.id]?.() }, a.label))) : null);
+}
 const coche = (checked, props) => { const i = el('input', { type: 'checkbox', class: 'fini', ...props }); i.checked = !!checked; return i; }; // « checked » doit être une propriété, pas un attribut
 let resteFiltre = 'a_faire';
 function renderReste() {
@@ -1456,7 +1539,7 @@ function renderReste() {
   if (!rows.length) box.append(el('p', { class: 'hint' }, S.loaded ? 'Aucun repère dans cette liste.' : 'Ouvrir d\'abord un assemblage.'));
   for (const row of rows) {
     const e = etatRow(row), cls = e.etat === 'fini' ? 'fini' : e.etat === 'achete' ? 'achat' : 'afaire';
-    box.append(el('div', { class: `row${row.ids.every(id => S.sel.has(id)) ? ' sel' : ''}`, onclick: ev => select(row.ids, ev.ctrlKey || ev.metaKey || ev.shiftKey || S.multi) },
+    box.append(el('div', { class: `row${row.ids.every(id => S.sel.has(id)) ? ' sel' : ''}${classeEtat(e)}`, onclick: ev => select(row.ids, ev.ctrlKey || ev.metaKey || ev.shiftKey || S.multi) },
       e.etat === 'achete' ? el('span', { class: 'fini' }) : coche(e.fini, { title: 'Fini', onclick: ev => ev.stopPropagation(), onchange: ev => marquerFini(row.ids, ev.target.checked) }),
       el('span', { class: 'badge' }, row.repere), el('span', { class: 'name', title: nomRow(row), onclick: ev => clicNom(ev, row) }, nomRow(row) + (row.quantite > 1 ? ` ×${row.quantite}` : '')),
       el('span', { class: `tag ${cls}`, title: e.achat === 'proposé' ? 'Détecté d\'après la désignation : à confirmer' : '' }, LIB_ETAT[e.etat] + (e.achat === 'proposé' ? ' ?' : '')),
@@ -1694,5 +1777,5 @@ function setupCommande() {
 }
 
 // ---------------------------------------------------------------- démarrage
-wire(); setupPanels(); setupGroupes(); setupReste(); setupTactile(); setupCommande(); resize(); loop();
-window.__SDC__ = { S, loadBytes, setMode, select, selectNet, extractCylinders, buildNetworks, project, xf, partBox: id => { const b = partBox(id); return [...b.min.toArray(), ...b.max.toArray()]; }, fitBox, THREE }; // accès pour essais automatisés
+wire(); setupPanels(); setupGroupes(); setupReste(); setupTactile(); setupCommande(); renderGuide(); resize(); loop();
+window.__SDC__ = { S, loadBytes, setMode, select, selectNet, extractCylinders, buildNetworks, project, xf, partBox: id => { const b = partBox(id); return [...b.min.toArray(), ...b.max.toArray()]; }, fitBox, THREE, rectsCotes: () => coteCache.map(k => ({ id: k.c.id, x: k.x, y: k.y, w: k.w, h: k.h })) }; // accès pour essais automatisés

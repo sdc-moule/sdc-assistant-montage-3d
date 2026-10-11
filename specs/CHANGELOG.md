@@ -1,5 +1,10 @@
 # Historique du cahier des charges
 
+## 1.11 — 11 octobre 2026 (Claude Code, demande de Christophe : refonte pour le personnel d'atelier)
+- Nouveau domaine **ATELIER** (ATE-01 à ATE-06) et **NAV-09** : parcours en 7 étapes numérotées, guide contextuel « Que faire maintenant ? », liste unique des pièces (arborescence et nomenclature rassemblées), vert = fini, démonstration retirée de la barre du haut, réglages rares regroupés, design sobre ; cotes dont le texte se déplace au glisser.
+- Les onglets « Arborescence » / « Nomenclature » deviennent « Pièces » / « Tableau » et le bouton « Reste à faire » devient l'étape « Suivi » : **aucune fonction supprimée**, identifiants et commandes JSON inchangés. ATE-06 (tri des fonctions discutables avec les monteurs) à faire : rien n'est retiré sans décision écrite ici.
+- Application autonome 1.6.0 → **1.7.0**. La v1.10 passe en archive figée.
+
 ## 1.10 — 11 octobre 2026 (Claude Code, demande de Christophe : écran tactile de présentation de 1 m)
 - Nouveau domaine **TACTILE** (TAC-01 à TAC-03) : mode tactile dans le même fichier (pas de version séparée, pour ne pas dupliquer le code) — interface agrandie à échelle réglable A− / A+, appui long sur une pièce = menu contextuel. TAC-03 (lasso au doigt, gestes multi-doigts, réception sur l'écran réel) à faire.
 - Application autonome 1.5.1 → **1.6.0**. La v1.9 passe en archive figée.
