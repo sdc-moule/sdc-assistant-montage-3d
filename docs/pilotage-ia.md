@@ -87,6 +87,30 @@ Liste complète des commandes : commande `aide`, ou le contexte copié. Console 
 {"sdc": 1, "commandes": [{"cmd": "circuits", "seuls": false, "reseau": "aucun"}, {"cmd": "tout_afficher"}, {"cmd": "coupes_retirer"}, {"cmd": "eclater", "pct": 0}, {"cmd": "ouverture", "pct": 0}]}
 ```
 
+### Type de pièce et groupes
+Type, Ø et brut sont **proposés** d'après le maillage (≈ 0,05 mm) : à vérifier sur plan. Types : `tournage` (pièces de révolution), `fraisage` (ou `prismatique`), `mixte`. Plages : `{"min": …, "max": …}` en mm.
+
+**« Montre-moi les pièces à tourner de Ø 12 maxi. »**
+```json
+{"sdc": 1, "commandes": [{"cmd": "isoler", "cible": {"type": "tournage", "diametre_mm": {"max": 12}}}, {"cmd": "lister_pieces", "cible": {"type": "tournage", "diametre_mm": {"max": 12}}}]}
+```
+**« Isole les pièces prismatiques (fraisage) de plus de 200 mm. »**
+```json
+{"sdc": 1, "commandes": [{"cmd": "isoler", "cible": {"type": "prismatique", "plus_grande_dim_mm": {"min": 200}}}]}
+```
+**« Crée le groupe « partie injection » avec les pièces tournées hors visserie. »**
+```json
+{"sdc": 1, "commandes": [{"cmd": "groupe_creer", "nom": "partie injection", "cible": {"type": "tournage", "sauf_famille": "visserie"}}, {"cmd": "isoler", "cible": {"groupe": "partie injection"}}]}
+```
+**« Descends le groupe « partie injection » de 100 mm selon Z. »**
+```json
+{"sdc": 1, "commandes": [{"cmd": "groupe_mobile", "type": "translation", "cible": {"groupe": "partie injection"}, "axe": "z", "sens": -1, "course_mm": 100}, {"cmd": "ouverture", "pct": 100}]}
+```
+**« Quels groupes existent ? »** (retirer des pièces ou supprimer un groupe demande ta confirmation)
+```json
+{"sdc": 1, "commandes": [{"cmd": "lister_groupes"}]}
+```
+
 ### Contrôle et notes
 **« Note une anomalie sur les vis du repère 9. »** (écriture : confirmation demandée)
 ```json

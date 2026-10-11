@@ -7,10 +7,10 @@ import { executer, preparer, resoudreCible, extraireJson, modeEmploiIA, contexte
 function fauxCtx() {
   const appels = [];
   const pieces = [
-    { id: 'O001', repere: 1, nom: 'PLAQUE_PORTE_EMPREINTE', sous_ensemble: 'BCR', famille: 'plaque', famille_label: 'Plaques', visible: true, opacite_pct: 100, selectionnee: false, dims_mm: [300, 200, 40], volume_cm3: 1200 },
-    { id: 'O002', repere: 2, nom: 'VIS_CHC_M10x40', sous_ensemble: 'BCR / visserie', famille: 'visserie', famille_label: 'Visserie / goupilles', visible: true, opacite_pct: 100, selectionnee: false, dims_mm: [10, 10, 40], volume_cm3: 3 },
-    { id: 'O003', repere: 2, nom: 'VIS_CHC_M10x40', sous_ensemble: 'BCR / visserie', famille: 'visserie', famille_label: 'Visserie / goupilles', visible: true, opacite_pct: 100, selectionnee: false, dims_mm: [10, 10, 40], volume_cm3: 3 },
-    { id: 'O004', repere: 3, nom: 'COLLECTEUR', sous_ensemble: 'BCR', famille: 'collecteur', famille_label: 'Collecteurs', visible: true, opacite_pct: 100, selectionnee: false, dims_mm: [120, 60, 50], volume_cm3: 200 },
+    { id: 'O001', repere: 1, nom: 'PLAQUE_PORTE_EMPREINTE', sous_ensemble: 'BCR', famille: 'plaque', famille_label: 'Plaques', visible: true, opacite_pct: 100, selectionnee: false, dims_mm: [300, 200, 40], volume_cm3: 1200, type_usinage: 'fraisage', revolution_pct: 12, diametre_mm: null, longueur_mm: null, dim_max_mm: 300, dim_min_mm: 40, brut_mm: [300, 200, 40] },
+    { id: 'O002', repere: 2, nom: 'VIS_CHC_M10x40', sous_ensemble: 'BCR / visserie', famille: 'visserie', famille_label: 'Visserie / goupilles', visible: true, opacite_pct: 100, selectionnee: false, dims_mm: [10, 10, 40], volume_cm3: 3, type_usinage: 'tournage', revolution_pct: 100, diametre_mm: 10, longueur_mm: 40, dim_max_mm: 40, dim_min_mm: 10, brut_mm: [40, 10, 10] },
+    { id: 'O003', repere: 2, nom: 'VIS_CHC_M10x40', sous_ensemble: 'BCR / visserie', famille: 'visserie', famille_label: 'Visserie / goupilles', visible: true, opacite_pct: 100, selectionnee: false, dims_mm: [10, 10, 40], volume_cm3: 3, type_usinage: 'tournage', revolution_pct: 100, diametre_mm: 10, longueur_mm: 40, dim_max_mm: 40, dim_min_mm: 10, brut_mm: [40, 10, 10] },
+    { id: 'O004', repere: 3, nom: 'COLLECTEUR', sous_ensemble: 'BCR', famille: 'collecteur', famille_label: 'Collecteurs', visible: true, opacite_pct: 100, selectionnee: false, dims_mm: [120, 60, 50], volume_cm3: 200, type_usinage: 'fraisage', revolution_pct: 30, diametre_mm: null, longueur_mm: null, dim_max_mm: 120, dim_min_mm: 50, brut_mm: [120, 60, 50] },
   ];
   const rec = nom => (...a) => { appels.push([nom, ...a]); };
   const ctx = {
@@ -27,6 +27,14 @@ function fauxCtx() {
     nbGroupes: () => 0, scenes: () => [], cotes: () => [], reseaux: () => [], percages: () => [],
   };
   for (const n of ['selectionner', 'deselectionner', 'masquer', 'afficher', 'isoler', 'toutAfficher', 'opacite', 'fantome', 'cadrer', 'vue', 'famille', 'classerFamille', 'bulles', 'couleurs', 'mode', 'coupesRetirer', 'coupeOptions', 'eclater', 'ouverture', 'groupeMobile', 'groupesSupprimer', 'classerCircuit', 'diametreMaxi', 'commentaire', 'repereValider', 'repereReference', 'exporter']) ctx[n] = rec(n);
+  const groupes = [];
+  ctx.groupes = () => groupes.map(g => ({ nom: g.nom, nb_pieces: g.ids.length }));
+  ctx.nomsGroupes = () => groupes.map(g => g.nom);
+  ctx.idsGroupe = ref => groupes.find(g => g.nom.toLowerCase() === String(ref).toLowerCase())?.ids ?? null;
+  ctx.groupeCreer = (nom, ids) => { if (groupes.some(g => g.nom === nom)) throw new ErreurCommande(`le groupe « ${nom} » existe déjà.`); groupes.push({ nom, ids: [...ids] }); appels.push(['groupeCreer', nom, ids]); return nom; };
+  ctx.groupeAjouter = (nom, ids) => { const g = groupes.find(x => x.nom === nom); if (!g) throw new ErreurCommande(`groupe « ${nom} » inconnu.`); const n = ids.filter(i => !g.ids.includes(i)); g.ids.push(...n); appels.push(['groupeAjouter', nom, ids]); return n.length; };
+  ctx.groupeRetirer = (nom, ids) => { const g = groupes.find(x => x.nom === nom); if (!g) throw new ErreurCommande(`groupe « ${nom} » inconnu.`); const av = g.ids.length; g.ids = g.ids.filter(i => !ids.includes(i)); appels.push(['groupeRetirer', nom, ids]); return av - g.ids.length; };
+  ctx.groupeSupprimer = nom => { const i = groupes.findIndex(x => x.nom === nom); if (i < 0) throw new ErreurCommande(`groupe « ${nom} » inconnu.`); groupes.splice(i, 1); appels.push(['groupeSupprimer', nom]); };
   ctx.circuits = q => { appels.push(['circuits', q]); return { message: 'ok' }; };
   ctx.sauverAvant = () => appels.push(['sauverAvant']);
   ctx.sceneSauver = n => { appels.push(['sceneSauver', n]); return n ?? 'Scène 1'; };
@@ -185,4 +193,59 @@ test('docs/pilotage-ia.md : chaque exemple JSON est valide (commandes, paramètr
   }
   // le premier exemple (format) est exécutable de bout en bout sur le faux ctx
   assert.equal((await executer(fauxCtx(), blocs[0].replace('[3, 4]', '[1, 2]'))).ok, true);
+});
+
+test('cibles par type d\'usinage et dimensions (même règle que la fenêtre de filtre)', () => {
+  const c = fauxCtx();
+  assert.deepEqual(resoudreCible(c, { type: 'tournage' }), ['O002', 'O003']);
+  assert.deepEqual(resoudreCible(c, { type: 'prismatique' }), ['O001', 'O004']);
+  assert.deepEqual(resoudreCible(c, { type: ['tournage', 'fraisage'], plus_grande_dim_mm: { max: 120 } }), ['O002', 'O003', 'O004']);
+  assert.deepEqual(resoudreCible(c, { type: 'tournage', diametre_mm: { max: 10 }, longueur_mm: { min: 30 } }), ['O002', 'O003']);
+  assert.deepEqual(resoudreCible(c, { plus_petite_dim_mm: { max: 40 } }), ['O001', 'O002', 'O003']);
+  assert.deepEqual(resoudreCible(c, { sauf_famille: 'visserie' }), ['O001', 'O004']);
+  assert.throws(() => resoudreCible(c, { diametre_mm: { max: 5 } }), /aucune pièce/);
+});
+
+test('cible mal formée refusée avec un message précis (type, plage, groupe)', async () => {
+  for (const [cible, motif] of [[{ type: 'turbo' }, /inconnu/], [{ diametre_mm: 40 }, /plage/], [{ diametre_mm: { min: 9, max: 3 } }, /supérieur au maxi/], [{ plus_grande_dim_mm: { max: -1 } }, /positif/], [{ groupe: '' }, /groupe/], [{ groupe: 'fantôme' }, /inconnu\. Groupes : aucun/]]) {
+    const r = await run(fauxCtx(), { commandes: [{ cmd: 'isoler', cible }] });
+    assert.equal(r.ok, false, JSON.stringify(cible));
+    assert.match(JSON.stringify(r), motif, JSON.stringify(cible));
+  }
+});
+
+test('groupes : créer, utiliser dans une cible, ajouter ; retirer et supprimer demandent confirmation', async () => {
+  const c = fauxCtx();
+  let r = await run(c, { commandes: [{ cmd: 'groupe_creer', nom: 'partie injection', cible: { type: 'tournage' } }, { cmd: 'isoler', cible: { groupe: 'Partie Injection' } }] });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.deepEqual(c.appels.find(a => a[0] === 'groupeCreer'), ['groupeCreer', 'partie injection', ['O002', 'O003']]);
+  assert.deepEqual(c.appels.find(a => a[0] === 'isoler')[1], ['O002', 'O003'], 'nom de groupe insensible à la casse');
+  r = await run(c, { cmd: 'groupe_ajouter', nom: 'partie injection', cible: [3] });
+  assert.equal(r.ok, true); assert.equal(r.resultats[0].message.startsWith('1 pièce'), true);
+  r = await run(c, { cmd: 'groupe_creer', nom: 'partie injection', cible: [1] });
+  assert.equal(r.ok, false); assert.match(r.resultats[0].erreur, /existe déjà/);
+  // retirer / supprimer : écritures confirmées
+  const lot = { commandes: [{ cmd: 'groupe_retirer', nom: 'partie injection', cible: [3] }, { cmd: 'groupe_supprimer', nom: 'partie injection' }] };
+  r = await run(c, lot); assert.equal(r.ok, false); assert.ok(!c.appels.some(a => ['groupeRetirer', 'groupeSupprimer'].includes(a[0])), 'refusé sans confirmation');
+  let vu; r = await run(c, lot, { confirmer: l => { vu = l; return true; } });
+  assert.equal(r.ok, true); assert.match(vu[0], /Retirer 1 pièce \(repères 3\) du groupe « partie injection »/); assert.match(vu[1], /Supprimer le groupe « partie injection »/);
+  assert.equal(c.groupes().length, 0);
+  r = await run(fauxCtx(), { cmd: 'groupe_ajouter', nom: 'inconnu', cible: [1] }); assert.equal(r.ok, false);
+  r = await run(c, { cmd: 'lister_groupes' }); assert.equal(r.ok, true);
+});
+
+test('groupe utilisé comme source d\'un groupe mobile', async () => {
+  const c = fauxCtx();
+  await run(c, { cmd: 'groupe_creer', nom: 'Injection', cible: [3] });
+  const r = await run(c, { cmd: 'groupe_mobile', type: 'translation', cible: { groupe: 'injection' }, axe: 'z', course_mm: 100 });
+  assert.equal(r.ok, true); assert.deepEqual(c.appels.find(a => a[0] === 'groupeMobile')[1].ids, ['O004']);
+});
+
+test('le contexte IA mentionne les types d\'usinage et rappelle qu\'ils sont proposés', () => {
+  const t = modeEmploiIA();
+  assert.match(t, /"type":"tournage"/); assert.match(t, /groupe_creer/); assert.match(t, /DÉDUITS de la forme du maillage/);
+  const c = fauxCtx(); c.nomenclature = () => [{ repere: 1, designation: 'VIS', quantite: 4, famille: 'Visserie', sous_ensemble: '', dims_mm: [10, 10, 40], type_usinage: 'tournage', diametre_mm: 10, longueur_mm: 40, brut_mm: [40, 10, 10], statut: 'à vérifier' }, { repere: 2, designation: 'PLAQUE', quantite: 1, famille: 'Plaques', sous_ensemble: '', dims_mm: [300, 200, 40], type_usinage: 'fraisage', diametre_mm: null, longueur_mm: null, brut_mm: [300, 200, 40], statut: 'à vérifier' }];
+  const ctxt = contexteIA(c);
+  assert.match(ctxt, /1 \| VIS \| 4 \| Visserie \| — \| 10×10×40 \| tournage \| Ø10×40 \| à vérifier/);
+  assert.match(ctxt, /2 \| PLAQUE \| 1 \| Plaques \| — \| 300×200×40 \| fraisage \| 300×200×40 \| à vérifier/);
 });

@@ -30,6 +30,7 @@
 
   <nav class="rail" id="rail">
     <button data-mode="explorer" class="on"><svg viewBox="0 0 24 24"><path d="M12 3 3 8l9 5 9-5-9-5zM3 8v8l9 5 9-5V8"/></svg>Explorer</button>
+    <button data-mode="groupes" title="Filtrer les pièces (tournage, fraisage, dimensions) et créer des groupes nommés"><svg viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4-2v-4z"/></svg>Filtres<br>groupes</button>
     <button data-mode="eclate"><svg viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 14h6v6h-6zM10 10l4 4M14 4h6v6M4 14v6h6"/></svg>Démonter</button>
     <button data-mode="coupe"><svg viewBox="0 0 24 24"><path d="M3 12h18M6 5h12v14H6z" /></svg>Couper</button>
     <button data-mode="percages"><svg viewBox="0 0 24 24"><path d="M3 7h12M15 7v10M15 17h6M9 7v6M9 13H3"/><circle cx="15" cy="7" r="1.6"/><circle cx="9" cy="13" r="1.6"/></svg>Perçages<br>circuits</button>
@@ -47,12 +48,40 @@
         <button class="btn toggle on" id="edges-toggle">Arêtes</button>
         <button class="btn toggle" id="bubbles-toggle">Repères (bulles)</button>
       </div>
-      <label class="field">Couleurs<select id="color-mode"><option value="step">Couleurs du fichier</option><option value="repere">Une couleur par repère</option><option value="categorie">Par famille de pièce</option></select></label>
+      <label class="field">Couleurs<select id="color-mode"><option value="step">Couleurs du fichier</option><option value="repere">Une couleur par repère</option><option value="categorie">Par famille de pièce</option><option value="groupe">Par groupe</option></select></label>
       <label class="field">Bulles<select id="bubble-scope"><option value="all">Tous les repères visibles</option><option value="selection">Sélection seulement</option></select></label>
       <h3>Familles de pièces <small>(mode BCR)</small></h3>
       <p class="hint">Classement proposé d'après les noms du fichier. Corriger avec « Classer la sélection ».</p>
       <div id="categories" class="chips"></div>
       <label class="field">Classer la sélection comme<select id="classify"><option value="">—</option></select></label>
+    </section>
+
+    <section data-panel="groupes" hidden>
+      <h2>Filtres &amp; groupes</h2>
+      <h3>Trouver des pièces</h3>
+      <p class="hint">Type d'usinage, Ø et dimensions sont <b>proposés</b> d'après la forme du maillage (≈ 0,05 mm) : à vérifier sur plan. Les critères se cumulent ; laisser vide = sans critère.</p>
+      <div class="chips" id="flt-types">
+        <label class="chip" title="Pièces de révolution (arbres, bagues, vis, busettes…)"><input type="checkbox" class="flt" value="tournage" checked> Tournage</label>
+        <label class="chip" title="Révolution + usinages (méplats, perçages transversaux) : à examiner"><input type="checkbox" class="flt" value="mixte" checked> Mixte</label>
+        <label class="chip" title="Pièces prismatiques (plaques, blocs)"><input type="checkbox" class="flt" value="fraisage" checked> Fraisage</label>
+      </div>
+      <div class="flt-grid">
+        <span></span><small>mini (mm)</small><small>maxi (mm)</small>
+        <span title="Diamètre maxi d'une pièce de révolution">Ø (pièces rondes)</span><input class="flt" id="flt-d-min" inputmode="decimal"><input class="flt" id="flt-d-max" inputmode="decimal">
+        <span title="Longueur le long de l'axe, pièces de révolution">Longueur (rondes)</span><input class="flt" id="flt-l-min" inputmode="decimal"><input class="flt" id="flt-l-max" inputmode="decimal">
+        <span title="Plus grande dimension du brut">Plus grande dim.</span><input class="flt" id="flt-g-min" inputmode="decimal"><input class="flt" id="flt-g-max" inputmode="decimal">
+        <span title="Plus petite dimension du brut (épaisseur)">Plus petite dim.</span><input class="flt" id="flt-p-min" inputmode="decimal"><input class="flt" id="flt-p-max" inputmode="decimal">
+      </div>
+      <div class="grid2"><label class="field">Famille<select class="flt" id="flt-fam"><option value="">Toutes</option></select></label><label class="field">Nom contient<input class="flt" id="flt-nom" placeholder="ex. plaque"></label></div>
+      <div class="filters"><label><input type="checkbox" class="flt" id="flt-novis"> Sans visserie / goupilles</label></div>
+      <p class="hint" id="flt-count"></p>
+      <div class="grid3"><button class="btn" id="flt-sel">Sélectionner</button><button class="btn" id="flt-iso">Isoler</button><button class="btn" id="flt-reset" title="Effacer tous les critères">Réinitialiser</button></div>
+      <div id="flt-list" class="list"></div>
+      <h3>Groupes de sélection</h3>
+      <p class="hint">Un groupe garde des pièces sous un nom (ex. « partie injection »). Cliquer un groupe le sélectionne ; il sert à isoler, masquer, éclater (« Sélection seulement ») ou déplacer (« Déplacer » → onglet Démonter). Enregistré avec le projet.</p>
+      <div class="grid2"><input id="grp-name" placeholder="Nom du groupe" maxlength="60"><button class="btn primary" id="grp-add" title="Créer un groupe avec les pièces sélectionnées">Créer (sélection)</button></div>
+      <button class="btn wide" id="flt-mk" title="Créer un groupe avec toutes les pièces trouvées par le filtre (nom ci-dessus)">Créer un groupe avec les pièces trouvées</button>
+      <div id="grp-list" class="list"></div>
     </section>
 
     <section data-panel="eclate" hidden>
@@ -70,7 +99,8 @@
         <p class="hint" id="op-axis-info">Aucun axe choisi.</p>
         <div class="grid2"><label class="field">Angle (°)<input id="op-angle" type="number" value="90" step="5"></label><label class="field">Sens<select id="op-rsign"><option value="1">+</option><option value="-1">−</option></select></label></div>
       </div>
-      <button class="btn wide" id="op-add">Créer un groupe mobile avec la sélection</button>
+      <label class="field">Pièces mobiles<select id="op-source"><option value="sel">Sélection actuelle</option></select></label>
+      <button class="btn wide" id="op-add">Créer un groupe mobile</button>
       <div id="op-list" class="list"></div>
       <label class="slider">Fermé → ouvert <output id="op-val">0 %</output><input id="op-amount" type="range" min="0" max="100" value="0"></label>
       <div class="grid2"><button class="btn" id="op-close">⏮ Fermé</button><button class="btn" id="op-open">⏭ Ouvert</button></div>

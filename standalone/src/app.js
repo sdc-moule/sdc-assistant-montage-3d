@@ -18,12 +18,14 @@ import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeome
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { executer, contexteIA, modeEmploiIA, COMMANDES, VERSION_COMMANDES, ErreurCommande } from './geom/commande.js';
+import { analyserTypologie, correspond, validerCriteres, resumeCriteres, TYPES } from './geom/typologie.js';
+import { creerGroupe, trouverGroupe, ajouterAuGroupe, retirerDuGroupe, renommerGroupe, supprimerGroupe, groupesDe, reprendreGroupes, ErreurGroupe } from './geom/groupes.js';
 
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
 THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
 THREE.Mesh.prototype.raycast = acceleratedRaycast;
 
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.2.0';
 const $ = id => document.getElementById(id);
 const el = (tag, props = {}, ...kids) => { const e = document.createElement(tag); for (const [k, v] of Object.entries(props)) { if (k === 'class') e.className = v; else if (k === 'style') e.style.cssText = v; else if (k.startsWith('on')) e[k] = v; else if (v !== undefined && v !== null) e.setAttribute(k, v); } for (const k of kids.flat()) if (k !== null && k !== undefined && k !== false) e.append(k instanceof Node ? k : document.createTextNode(String(k))); return e; };
 const fmt = (x, d = 1) => (Number.isFinite(x) ? (Math.abs(x) < 0.5 * 10 ** -d ? 0 : x).toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d }) : '—');
@@ -73,7 +75,7 @@ const S = {
   ex: { amount: 0, dir: 'z', scope: 'all', ids: null }, exVec: new Map(), moves: [], open: 0, opType: 'translation', pickAxis: false, hinge: null, boxMode: false,
   cuts: { x: { on: false, pos: 0, flip: false }, y: { on: false, pos: 0, flip: false }, z: { on: false, pos: 0, flip: false } }, caps: true, planeVis: false, hiddenFaces: {}, faceMode: false, drillLabels: false, fill: { on: true, min: 3, max: 20 },
   drill: null, netClass: {}, skelOnly: false, skelShow: false, selNet: null, selFeature: null, filters: { circuit: true, alignement: false, 'isolé': false, 'alésage': false, dmin: 0, dmax: 999 }, maxDrill: 32, cyl: null,
-  comments: [], views: [], rowNotes: {}, bubbleOff: {},
+  comments: [], views: [], rowNotes: {}, bubbleOff: {}, groups: [], typo: new Map(),
   bounds: new THREE.Box3(), measure: { on: false, pts: [] }, cote: { pending: null }, cotes: [], cotesVisible: true, skelItems: [], skelGroups: new Map(),
   undo: [], redo: [],
 };
@@ -164,7 +166,7 @@ function install(res, name, hash) {
   const { parts } = partsFromOcct(res);
   const kept = parts.filter(p => p.index.length >= 3);
   if (!kept.length) throw new Error('aucun solide trouvé dans le fichier.');
-  Object.assign(S, { loaded: true, fileName: name, hash, parts: kept, byId: new Map(kept.map(p => [p.id, p])), items: {}, sel: new Set(), comments: [], views: [], rowNotes: {}, bubbleOff: {}, netClass: {}, catOverride: {}, catOff: new Set(), hiddenFaces: {}, moves: [], open: 0, hinge: null, cotes: [], undo: [], redo: [], selNet: null, selFeature: null });
+  Object.assign(S, { loaded: true, fileName: name, hash, parts: kept, byId: new Map(kept.map(p => [p.id, p])), items: {}, sel: new Set(), comments: [], views: [], rowNotes: {}, bubbleOff: {}, groups: [], typo: new Map(), netClass: {}, catOverride: {}, catOff: new Set(), hiddenFaces: {}, moves: [], open: 0, hinge: null, cotes: [], undo: [], redo: [], selNet: null, selFeature: null });
   S.ex = { amount: 0, dir: 'z', scope: 'all', ids: null };
   S.stats = new Map(kept.map(p => [p.id, meshStats(p.positions, p.index)]));
   S.bom = buildBom(kept, S.stats);
@@ -230,6 +232,9 @@ function analyseDrilling() {
   const cyl = new Map();
   for (const p of S.parts) { try { cyl.set(p.id, extractCylinders(p)); } catch (e) { console.warn('analyse', p.name, e); cyl.set(p.id, { holes: [], bosses: [] }); } }
   S.cyl = cyl;
+  // Typologie tournage / fraisage et brut : déduits du maillage, PROPOSÉS (jamais validés).
+  S.typo = new Map();
+  for (const p of S.parts) { try { S.typo.set(p.id, analyserTypologie(p, cyl.get(p.id))); } catch (e) { console.warn('typologie', p.name, e); } }
   rebuildNetworks();
 }
 function rebuildNetworks() {
@@ -356,6 +361,7 @@ function baseColor(id) {
   const o = S.objs.get(id), row = S.rowOf.get(id);
   if (S.colorMode === 'repere') return new THREE.Color(PALETTE[(row.repere - 1) % PALETTE.length]);
   if (S.colorMode === 'categorie') return new THREE.Color(CATEGORIES.find(c => c.id === catOf(id)).color);
+  if (S.colorMode === 'groupe') return new THREE.Color(groupesDe(S.groups, id)[0]?.couleur ?? '#c9d0d6'); // pièces hors groupe : gris clair
   return o.stepColor ? o.stepColor.clone() : new THREE.Color(PALETTE[(row.repere - 1) % PALETTE.length]);
 }
 const catOf = id => S.catOverride[id] ?? S.catOf[id];
@@ -739,7 +745,7 @@ function loop() {
 }
 
 // ---------------------------------------------------------------- panneaux
-function refreshAll() { applyDisplay(); renderTree(); renderBom(); renderCard(); renderSelbar(); renderCategories(); if (S.mode === 'percages') renderNets(); if (S.mode === 'notes') { renderComments(); renderViews(); renderCotes(); } if (S.mode === 'eclate') renderMoves(); if (S.mode === 'coupe') renderPlanes(); saveLocal(); }
+function refreshAll() { applyDisplay(); renderTree(); renderBom(); renderCard(); renderSelbar(); renderCategories(); renderGroups(); if (S.mode === 'groupes') renderFiltre(); if (S.mode === 'percages') renderNets(); if (S.mode === 'notes') { renderComments(); renderViews(); renderCotes(); } if (S.mode === 'eclate') renderMoves(); if (S.mode === 'coupe') renderPlanes(); saveLocal(); }
 
 function matches(id, term) {
   if (!term) return true;
@@ -812,6 +818,8 @@ function renderCard() {
       el('dt', {}, ''), el('dd', { class: 'hint' }, 'boîte dans le repère assemblage — pas une cote fonctionnelle'),
       el('dt', {}, 'Volume'), el('dd', {}, `${fmt(st.volume / 1000, 1)} cm³ (maillage)`),
       el('dt', {}, 'Famille'), el('dd', {}, CATEGORIES.find(c => c.id === catOf(id)).label + (S.catOverride[id] ? ' ✔' : ' (proposé)')),
+      S.typo.get(id) ? [el('dt', {}, 'Usinage'), el('dd', {}, texteTypo(S.typo.get(id)))] : null,
+      groupesDe(S.groups, id).length ? [el('dt', {}, 'Groupes'), el('dd', {}, groupesDe(S.groups, id).map(g => g.nom).join(', '))] : null,
       el('dt', {}, 'Perçages'), el('dd', {}, holes.length ? [...byD].map(([k, n]) => `${n}× ${k}`).join(', ') : 'aucun détecté'),
       el('dt', {}, 'Statut'), el('dd', {}, note.statut ?? row.statut)),
     row.notes.length ? el('p', { class: 'hint' }, row.notes.join(' · ')) : null,
@@ -837,7 +845,7 @@ function renderMoves() {
   const box = $('op-list'); box.replaceChildren();
   S.moves.forEach((m, i) => box.append(el('div', { class: 'row' },
     el('span', { class: 'badge' }, i + 1),
-    el('span', { class: 'name', title: m.axisLabel ?? '' }, m.type === 'rotation' ? `⟳ ${m.sign * m.angle}° autour de ${m.axisLabel}` : `↕ ${m.sign > 0 ? '+' : '−'}${m.axis.toUpperCase()} ${m.course} mm`, el('span', { class: 'hint' }, ` · ${m.ids.length} pièce(s)`)),
+    el('span', { class: 'name', title: m.axisLabel ?? '' }, m.type === 'rotation' ? `⟳ ${m.sign * m.angle}° autour de ${m.axisLabel}` : `↕ ${m.sign > 0 ? '+' : '−'}${m.axis.toUpperCase()} ${m.course} mm`, el('span', { class: 'hint' }, ` · ${m.ids.length} pièce(s)${m.groupe ? ` · groupe « ${m.groupe} »` : ''}`)),
     el('button', { class: 'eye', title: 'Sélectionner les pièces du groupe', onclick: () => select(m.ids) }, '◎'),
     el('button', { class: 'eye', title: 'Supprimer', onclick: () => { S.moves = S.moves.filter(x => x !== m); refreshAll(); } }, '✕'))));
   if (!S.moves.length) box.append(el('p', { class: 'hint' }, 'Aucun groupe mobile défini.'));
@@ -1001,7 +1009,7 @@ let saveTimer;
 function projectData() {
   return { application: 'SDC Montage 3D', version: APP_VERSION, schema: 'sdc-montage3d-projet/2', fichier: S.fileName, empreinte_sha256: S.hash, date: new Date().toISOString(),
     occurrences: S.parts.map(p => ({ id: p.id, nom: p.name, signature: signature(p, S.stats.get(p.id)), repere: S.rowOf.get(p.id).repere })),
-    maxDrill: S.maxDrill, comments: S.comments, views: S.views, netClass: S.netClass, moves: S.moves, cotes: S.cotes, rowNotes: S.rowNotes, catOverride: S.catOverride, bubbleOff: S.bubbleOff, display: viewState() };
+    maxDrill: S.maxDrill, comments: S.comments, views: S.views, netClass: S.netClass, moves: S.moves, cotes: S.cotes, rowNotes: S.rowNotes, catOverride: S.catOverride, bubbleOff: S.bubbleOff, groupes: S.groups, display: viewState() };
 }
 function saveLocal() { if (!S.loaded) return; clearTimeout(saveTimer); saveTimer = setTimeout(() => { try { localStorage.setItem(LS(), JSON.stringify(projectData())); } catch { /* stockage indisponible : le fichier projet reste possible */ } }, 400); }
 function restoreLocal() { try { const raw = localStorage.getItem(LS()); if (raw) { applyProject(JSON.parse(raw), true); toast('Annotations et vues de ce fichier restaurées.'); } } catch { /* rien */ } }
@@ -1024,6 +1032,7 @@ function applyProject(pr, silent = false) {
   S.rowNotes = pr.empreinte_sha256 === S.hash ? (pr.rowNotes ?? {}) : {};
   S.catOverride = Object.fromEntries(Object.entries(pr.catOverride ?? {}).map(([k, v]) => [map(k), v]).filter(([k]) => k));
   S.bubbleOff = pr.empreinte_sha256 === S.hash ? (pr.bubbleOff ?? {}) : {};
+  S.groups = reprendreGroupes(pr.groupes, map, new Set(S.objs.keys())).groupes;
   if (!silent) toast('Projet chargé.');
 }
 
@@ -1172,11 +1181,15 @@ function wire() {
   for (const b of document.querySelectorAll('#op-type button')) b.onclick = () => { S.opType = b.dataset.op; for (const x of document.querySelectorAll('#op-type button')) x.classList.toggle('on', x === b); $('op-tr').hidden = S.opType !== 'translation'; $('op-rot').hidden = S.opType !== 'rotation'; if (S.opType !== 'rotation') { S.pickAxis = false; syncToggles(); } };
   $('op-pick').onclick = () => { S.pickAxis = !S.pickAxis; if (S.pickAxis) { S.faceMode = false; S.measure.on = false; $('measure').classList.remove('on'); toast('Toucher un cylindre (axe, goupille, alésage) ou une arête droite qui sert de charnière.', 6000); } syncToggles(); };
   $('op-add').onclick = () => {
-    if (!S.sel.size) return toast('Sélectionner d\'abord les pièces mobiles.');
+    // Pièces mobiles : la sélection actuelle, ou un groupe nommé (copie des pièces au moment de la création).
+    const g = $('op-source').value === 'sel' ? null : S.groups.find(x => x.id === $('op-source').value);
+    const ids = g ? g.ids.filter(id => S.objs.has(id)) : [...S.sel];
+    if (!ids.length) return toast(g ? `Le groupe « ${g.nom} » est vide.` : 'Sélectionner d\'abord les pièces mobiles.');
+    const nom = g ? { groupe: g.nom } : {};
     if (S.opType === 'rotation') {
       if (!S.hinge) return toast('Choisir d\'abord l\'axe de rotation (🎯).');
-      S.moves.push({ type: 'rotation', ids: [...S.sel], origin: S.hinge.origin, dir: S.hinge.dir, axisLabel: `${S.hinge.label} (${S.hinge.part})`, angle: Math.abs(+$('op-angle').value || 0), sign: +$('op-rsign').value });
-    } else S.moves.push({ type: 'translation', ids: [...S.sel], axis: $('op-axis').value, sign: +$('op-sign').value, course: Math.abs(+$('op-course').value || 0) });
+      S.moves.push({ type: 'rotation', ids, ...nom, origin: S.hinge.origin, dir: S.hinge.dir, axisLabel: `${S.hinge.label} (${S.hinge.part})`, angle: Math.abs(+$('op-angle').value || 0), sign: +$('op-rsign').value });
+    } else S.moves.push({ type: 'translation', ids, ...nom, axis: $('op-axis').value, sign: +$('op-sign').value, course: Math.abs(+$('op-course').value || 0) });
     if (!S.open) S.open = 1;
     refreshAll(); syncToggles(); toast('Groupe mobile créé ; curseur « Fermé → ouvert » pour le régler.');
   };
@@ -1264,6 +1277,109 @@ function setupPanels() {
   applyLayout();
 }
 
+// ---------------------------------------------------------------- filtre de pièces (type d'usinage, dimensions) et groupes nommés
+// Type, Ø, longueur et brut sont DÉDUITS du maillage (geom/typologie.js) : toujours présentés comme « proposés ».
+const dimsCourtes = t => (!t ? '—' : t.type === 'fraisage' ? t.brut_mm.map(v => fmt(v, 0)).join('×') : `Ø${fmt(t.diametre_mm, 1)}×${fmt(t.longueur_mm, 0)}`);
+function texteTypo(t) {
+  const base = `${t.type} (proposé · ${fmt(t.revolution_pct, 0)} % de révolution)`;
+  if (t.type === 'fraisage') return `${base} · brut ${t.brut_mm.map(v => fmt(v, 1)).join(' × ')} mm`;
+  return `${base} · Ø ${fmt(t.diametre_mm, 1)} × L ${fmt(t.longueur_mm, 1)} mm${t.type === 'mixte' ? ` · enveloppe ${t.brut_mm.map(v => fmt(v, 1)).join(' × ')} mm` : ''}`;
+}
+function enregistrementsPieces() {
+  return S.parts.map(p => {
+    const st = S.stats.get(p.id), it = S.items[p.id], c = CATEGORIES.find(k => k.id === catOf(p.id)), t = S.typo.get(p.id);
+    return { id: p.id, repere: S.rowOf.get(p.id).repere, nom: p.name, sous_ensemble: p.path.join(' / '), famille: c.id, famille_label: c.label, visible: it.visible && !S.catOff.has(c.id), opacite_pct: Math.round(it.opacity * 100), selectionnee: S.sel.has(p.id), dims_mm: st.size.map(x => +x.toFixed(2)), volume_cm3: +(st.volume / 1000).toFixed(1),
+      type_usinage: t?.type ?? null, revolution_pct: t?.revolution_pct ?? null, diametre_mm: t?.diametre_mm ?? null, longueur_mm: t?.longueur_mm ?? null, dim_max_mm: t?.dim_max_mm ?? null, dim_min_mm: t?.dim_min_mm ?? null, brut_mm: t?.brut_mm ?? null,
+      groupes: groupesDe(S.groups, p.id).map(g => g.nom) };
+  });
+}
+const idsPresents = ids => ids.filter(id => S.objs.has(id));
+function isolateIds(ids, cadrer = true) {
+  if (!ids.length) return;
+  pushHistory(); const s = new Set(ids); for (const id of S.objs.keys()) S.items[id].visible = s.has(id); refreshAll();
+  if (cadrer) { const b = new THREE.Box3(); for (const id of ids) b.union(partBox(id)); fitBox(b); }
+}
+function setVisible(ids, visible) { pushHistory(); for (const id of ids) { S.items[id].visible = visible; if (!visible) S.sel.delete(id); } refreshAll(); }
+
+const numFr = v => { const x = parseFloat(String(v).replace(',', '.')); return Number.isFinite(x) ? x : null; };
+function criteresFiltre() {
+  const c = {}, types = [...document.querySelectorAll('#flt-types input:checked')].map(i => i.value);
+  if (types.length && types.length < TYPES.length) c.type = types;
+  for (const [cle, a, b] of [['diametre_mm', 'flt-d-min', 'flt-d-max'], ['longueur_mm', 'flt-l-min', 'flt-l-max'], ['plus_grande_dim_mm', 'flt-g-min', 'flt-g-max'], ['plus_petite_dim_mm', 'flt-p-min', 'flt-p-max']]) {
+    const lo = numFr($(a).value), hi = numFr($(b).value);
+    if (lo !== null || hi !== null) c[cle] = { ...(lo !== null ? { min: lo } : {}), ...(hi !== null ? { max: hi } : {}) };
+  }
+  if ($('flt-fam').value) c.famille = $('flt-fam').value;
+  if ($('flt-novis').checked) c.sauf_famille = 'visserie';
+  if ($('flt-nom').value.trim()) c.nom = $('flt-nom').value.trim();
+  return c;
+}
+let fltIds = [];
+function renderFiltre() {
+  const box = $('flt-list'), info = $('flt-count'); box.replaceChildren(); fltIds = [];
+  const verdict = ok => { for (const id of ['flt-sel', 'flt-iso', 'flt-mk']) $(id).disabled = !ok; };
+  if (!S.loaded) { info.textContent = 'Ouvrir d\'abord un assemblage.'; info.classList.remove('bad'); verdict(false); return; }
+  const c = criteresFiltre(), err = validerCriteres(c);
+  info.classList.toggle('bad', !!err);
+  if (err) { info.textContent = err; verdict(false); return; }
+  const recs = enregistrementsPieces().filter(r => correspond(r, c)), reps = new Map();
+  fltIds = recs.map(r => r.id);
+  for (const r of recs) { if (!reps.has(r.repere)) reps.set(r.repere, []); reps.get(r.repere).push(r); }
+  info.textContent = `${recs.length} pièce(s) sur ${S.parts.length} (${reps.size} repère(s)). Type et dimensions proposés d'après le maillage (±0,05 mm) : à vérifier.`;
+  verdict(recs.length > 0);
+  for (const [rep, l] of [...reps].sort((a, b) => a[0] - b[0]).slice(0, 200)) {
+    const r = l[0];
+    box.append(el('div', { class: `row${l.every(x => S.sel.has(x.id)) ? ' sel' : ''}`, title: S.typo.get(r.id) ? texteTypo(S.typo.get(r.id)) : '', onclick: e => select(l.map(x => x.id), e.ctrlKey || e.metaKey || e.shiftKey || S.multi) },
+      el('span', { class: 'badge' }, rep), el('span', { class: 'name', title: r.nom }, r.nom + (l.length > 1 ? ` ×${l.length}` : '')),
+      el('span', { class: `tag typ-${r.type_usinage}` }, r.type_usinage ?? '—'), el('span', { class: 'dims' }, dimsCourtes(S.typo.get(r.id)))));
+  }
+  if (reps.size > 200) box.append(el('p', { class: 'hint' }, `… ${reps.size - 200} repères de plus : affiner le filtre.`));
+}
+function nouveauGroupe(ids, origine) {
+  try {
+    const g = creerGroupe(S.groups, $('grp-name').value, ids, origine ? { origine } : {});
+    $('grp-name').value = ''; refreshAll(); toast(`Groupe « ${g.nom} » créé : ${g.ids.length} pièce(s).`); return g;
+  } catch (e) { if (e instanceof ErreurGroupe) { toast('Groupe : ' + e.message, 5000); return null; } throw e; }
+}
+function renderGroups() {
+  const src = $('op-source');
+  if (src) { // source des pièces mobiles (onglet Démonter) : sélection actuelle ou groupe nommé
+    const garde = src.value;
+    src.replaceChildren(el('option', { value: 'sel' }, 'Sélection actuelle'), ...S.groups.map(g => el('option', { value: g.id }, `Groupe : ${g.nom} (${g.ids.length})`)));
+    src.value = [...src.options].some(o => o.value === garde) ? garde : 'sel';
+  }
+  const box = $('grp-list'); if (!box) return;
+  box.replaceChildren();
+  if (!S.loaded) return;
+  if (!S.groups.length) { box.append(el('p', { class: 'hint' }, 'Aucun groupe. Sélectionner des pièces (ou filtrer), écrire un nom, puis « Créer ».')); return; }
+  const btn = (txt, fn, title) => el('button', { class: 'btn sm', title, onclick: e => { e.stopPropagation(); fn(); } }, txt);
+  for (const g of S.groups) {
+    const ids = idsPresents(g.ids), tousVisibles = ids.length > 0 && ids.every(id => S.items[id].visible), selectionne = ids.length > 0 && ids.length === S.sel.size && ids.every(id => S.sel.has(id));
+    box.append(el('div', { class: 'grp' },
+      el('div', { class: `row${selectionne ? ' sel' : ''}`, title: g.origine ?? '', onclick: e => select(ids, e.ctrlKey || e.metaKey || e.shiftKey || S.multi) },
+        el('i', { class: 'gdot', style: `background:${g.couleur}` }), el('span', { class: 'name' }, g.nom), el('span', { class: 'tag' }, ids.length)),
+      el('div', { class: 'grid3' },
+        btn('Isoler', () => isolateIds(ids), 'N\'afficher que ce groupe'),
+        btn(tousVisibles ? 'Masquer' : 'Afficher', () => setVisible(ids, !tousVisibles)),
+        btn('Déplacer', () => { setMode('eclate'); $('op-source').value = g.id; toast(`Pièces mobiles : groupe « ${g.nom} ». Choisir le mouvement puis « Créer un groupe mobile ».`, 6000); }, 'Définir un déplacement (axe, course) ou une rotation pour ce groupe'),
+        btn('+ Sélection', () => { if (!S.sel.size) return toast('Sélectionner d\'abord des pièces.'); const n = ajouterAuGroupe(g, [...S.sel]); refreshAll(); toast(`${n} pièce(s) ajoutée(s) à « ${g.nom} ».`); }, 'Ajouter la sélection au groupe'),
+        btn('− Sélection', () => { if (!S.sel.size) return toast('Sélectionner d\'abord des pièces.'); const n = retirerDuGroupe(g, [...S.sel]); refreshAll(); toast(`${n} pièce(s) retirée(s) de « ${g.nom} ».`); }, 'Retirer la sélection du groupe'),
+        btn('Renommer', () => { const n = prompt('Nouveau nom du groupe', g.nom); if (n === null) return; try { renommerGroupe(S.groups, g, n); refreshAll(); } catch (e) { if (e instanceof ErreurGroupe) toast('Groupe : ' + e.message, 5000); else throw e; } })),
+      el('button', { class: 'btn sm wide danger', onclick: () => { if (confirm(`Supprimer le groupe « ${g.nom} » ? Les pièces ne sont pas touchées.`)) { supprimerGroupe(S.groups, g); refreshAll(); } } }, 'Supprimer le groupe')));
+  }
+}
+function setupGroupes() {
+  $('flt-fam').append(...CATEGORIES.map(c => el('option', { value: c.id }, c.label)));
+  for (const i of document.querySelectorAll('.flt')) { i.oninput = renderFiltre; i.onchange = renderFiltre; }
+  $('flt-reset').onclick = () => { for (const i of document.querySelectorAll('.flt')) { if (i.type === 'checkbox') i.checked = i.closest('#flt-types') !== null; else i.value = ''; } renderFiltre(); };
+  $('flt-sel').onclick = () => { if (!fltIds.length) return; select(fltIds); toast(`${fltIds.length} pièce(s) sélectionnée(s).`); };
+  $('flt-iso').onclick = () => { if (!fltIds.length) return; isolateIds(fltIds); toast(`${fltIds.length} pièce(s) isolée(s).`); };
+  $('flt-mk').onclick = () => { if (fltIds.length) nouveauGroupe(fltIds, resumeCriteres(criteresFiltre())); };
+  $('grp-add').onclick = () => { if (!S.loaded) return; if (!S.sel.size) return toast('Sélectionner d\'abord les pièces du groupe.'); nouveauGroupe([...S.sel], 'Sélection manuelle'); };
+  $('grp-name').onkeydown = e => { if (e.key === 'Enter') $('grp-add').click(); };
+  renderFiltre(); renderGroups();
+}
+
 // ---------------------------------------------------------------- pilotage par commandes JSON (onglet « Commande », window.SDC)
 // Le jeu de commandes, la validation et l'exécution sont dans geom/commande.js (pur). Ici : le « ctx » qui agit sur l'état.
 const nrm = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
@@ -1278,10 +1394,10 @@ function apiCtx() {
   const kindOn = n => { if (S.filters[n.kind]) return false; S.filters[n.kind] = true; const c = $(KIND_BOX[n.kind]); if (c) c.checked = true; return true; };
   return {
     charge: () => S.loaded,
-    pieces: () => S.parts.map(p => { const st = S.stats.get(p.id), it = S.items[p.id], c = fam(p.id); return { id: p.id, repere: S.rowOf.get(p.id).repere, nom: p.name, sous_ensemble: p.path.join(' / '), famille: c.id, famille_label: c.label, visible: it.visible && !S.catOff.has(c.id), opacite_pct: Math.round(it.opacity * 100), selectionnee: S.sel.has(p.id), dims_mm: st.size.map(x => +x.toFixed(2)), volume_cm3: +(st.volume / 1000).toFixed(1) }; }),
+    pieces: enregistrementsPieces,
     recherche: (id, term) => matches(id, String(term).toLocaleLowerCase('fr')),
     reperesDe,
-    nomenclature: () => S.bom.map(r => { const n = S.rowNotes[r.repere] ?? {}; return { repere: r.repere, designation: r.designation, reference: n.reference ?? '', quantite: r.quantite, famille: fam(r.ids[0]).label, sous_ensemble: r.sousEnsemble, dims_mm: r.dims.map(x => +x.toFixed(1)), statut: n.statut ?? r.statut }; }),
+    nomenclature: () => S.bom.map(r => { const n = S.rowNotes[r.repere] ?? {}; return { repere: r.repere, designation: r.designation, reference: n.reference ?? '', quantite: r.quantite, famille: fam(r.ids[0]).label, sous_ensemble: r.sousEnsemble, dims_mm: r.dims.map(x => +x.toFixed(1)), type_usinage: S.typo.get(r.ids[0])?.type ?? null, diametre_mm: S.typo.get(r.ids[0])?.diametre_mm ?? null, longueur_mm: S.typo.get(r.ids[0])?.longueur_mm ?? null, brut_mm: S.typo.get(r.ids[0])?.brut_mm ?? null, groupes: groupesDe(S.groups, r.ids[0]).map(g => g.nom), statut: n.statut ?? r.statut }; }),
     reseaux: () => (S.drill ? S.drill.networks.map(n => ({ id: n.id, type: n.kind, classement: netLabel(n), valide: netValidated(n), proposition: n.suggestion, nb_percages: n.features.length, diametres_mm: n.diameters.map(d => +d.toFixed(2)), longueur_totale_mm: +n.totalLength.toFixed(1), reperes: reperesDe(n.partIds) })) : []),
     percages(reseauId, ids) {
       if (!S.drill) return [];
@@ -1302,11 +1418,14 @@ function apiCtx() {
       selection: { nombre: S.sel.size, reperes: reperesDe([...S.sel]) }, masquees: S.parts.filter(p => !S.items[p.id].visible).length, familles_masquees: [...S.catOff],
       coupes: Object.fromEntries(Object.entries({ XZ: 'y', YZ: 'x', XY: 'z' }).map(([n, k]) => [n, { actif: S.cuts[k].on, position_mm: +S.cuts[k].pos.toFixed(1), inverse: S.cuts[k].flip }])),
       eclate: { pct: Math.round(S.ex.amount), direction: S.ex.dir, portee: S.ex.scope }, ouverture_pct: Math.round(S.open * 100), groupes_mobiles: S.moves.length,
-      circuits: { affiches: S.skelShow, seuls: S.skelOnly, reseau_focus: S.selNet, nb_reseaux: S.drill?.networks.length ?? 0 }, scenes: S.views.map(v => v.name), cotes: S.cotes.length, fantome: S.ghost, bulles: S.bubbles,
+      circuits: { affiches: S.skelShow, seuls: S.skelOnly, reseau_focus: S.selNet, nb_reseaux: S.drill?.networks.length ?? 0 }, scenes: S.views.map(v => v.name), groupes: S.groups.map(g => `${g.nom} (${g.ids.length})`), cotes: S.cotes.length, fantome: S.ghost, bulles: S.bubbles,
       bornes_mm: { X: [S.bounds.min.x, S.bounds.max.x].map(x => +x.toFixed(1)), Y: [S.bounds.min.y, S.bounds.max.y].map(x => +x.toFixed(1)), Z: [S.bounds.min.z, S.bounds.max.z].map(x => +x.toFixed(1)) }, unite: 'mm', avertissement: 'Valeurs du maillage d\'affichage, indicatives.' }),
     cylindres: id => { const c = S.cyl?.get(id); return c ? [...c.holes.map(h => ({ type: 'perçage', diametre: h.diameter, origine: h.start, direction: h.axis, longueur: h.length })), ...c.bosses.map(h => ({ type: 'arbre', diametre: h.diameter, origine: h.start, direction: h.axis, longueur: h.length }))] : []; },
     familles: () => CATEGORIES.map(c => ({ id: c.id, label: c.label })),
     familleId: nom => { const t = nrm(nom); return (CATEGORIES.find(c => nrm(c.id) === t) ?? CATEGORIES.find(c => nrm(c.label).startsWith(t)) ?? CATEGORIES.find(c => t.length > 2 && nrm(c.label).includes(t)))?.id ?? null; },
+    groupes: () => S.groups.map(g => ({ id: g.id, nom: g.nom, nb_pieces: idsPresents(g.ids).length, reperes: reperesDe(idsPresents(g.ids)), couleur: g.couleur, origine: g.origine ?? '' })),
+    nomsGroupes: () => S.groups.map(g => g.nom),
+    idsGroupe: ref => { const g = trouverGroupe(S.groups, ref); return g ? idsPresents(g.ids) : null; },
     // ---- actions
     selectionner: (ids, ajouter) => { if (!ajouter) S.sel.clear(); for (const id of ids) S.sel.add(id); refreshAll(); },
     deselectionner: () => clearSel(),
@@ -1363,6 +1482,10 @@ function apiCtx() {
     commentaire: ({ ids, texte, type, statut, auteur }) => { S.comments.push({ ids, reperes: reperesDe(ids), type, status: statut, author: auteur ?? ($('c-author').value.trim() || ''), text: texte, date: new Date().toISOString() }); refreshAll(); },
     repereValider: (repere, valide) => { const n = S.rowNotes[repere] ?? {}; S.rowNotes[repere] = { ...n, statut: valide ? 'validé' : undefined }; refreshAll(); },
     repereReference: (repere, reference) => { const n = S.rowNotes[repere] ?? {}; S.rowNotes[repere] = { ...n, reference }; refreshAll(); },
+    groupeCreer: (nom, ids) => { try { const g = creerGroupe(S.groups, nom, ids, { origine: 'commande JSON' }); refreshAll(); return g.nom; } catch (e) { throw e instanceof ErreurGroupe ? new ErreurCommande(e.message) : e; } },
+    groupeAjouter: (nom, ids) => { const g = trouverGroupe(S.groups, nom); if (!g) throw new ErreurCommande(`groupe « ${nom} » inconnu. Groupes : ${S.groups.map(x => x.nom).join(', ') || 'aucun'}.`); const n = ajouterAuGroupe(g, ids); refreshAll(); return n; },
+    groupeRetirer: (nom, ids) => { const g = trouverGroupe(S.groups, nom); if (!g) throw new ErreurCommande(`groupe « ${nom} » inconnu. Groupes : ${S.groups.map(x => x.nom).join(', ') || 'aucun'}.`); const n = retirerDuGroupe(g, ids); refreshAll(); return n; },
+    groupeSupprimer: nom => { const g = trouverGroupe(S.groups, nom); if (!g) throw new ErreurCommande(`groupe « ${nom} » inconnu. Groupes : ${S.groups.map(x => x.nom).join(', ') || 'aucun'}.`); supprimerGroupe(S.groups, g); refreshAll(); },
     sceneSauver: nom => saveScene(nom).name,
     sceneCharger: nom => { const v = S.views.find(x => nrm(x.name) === nrm(nom)); if (!v) return false; applyViewState(v.state); return true; },
     exporter: quoi => ({ nomenclature: exportBom, percages: exportDrill, capture: exportPng, rapport: printReport })[quoi](),
@@ -1407,5 +1530,5 @@ function setupCommande() {
 }
 
 // ---------------------------------------------------------------- démarrage
-wire(); setupPanels(); setupCommande(); resize(); loop();
+wire(); setupPanels(); setupGroupes(); setupCommande(); resize(); loop();
 window.__SDC__ = { S, loadBytes, setMode, select, selectNet, extractCylinders, buildNetworks, project, xf, partBox: id => { const b = partBox(id); return [...b.min.toArray(), ...b.max.toArray()]; }, fitBox, THREE }; // accès pour essais automatisés

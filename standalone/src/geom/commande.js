@@ -3,11 +3,13 @@
 // Principes : liste blanche de commandes, validation complète AVANT toute exécution, aucune évaluation de code,
 // écritures (commentaire, validation, classement) soumises à confirmation de l'opérateur, retour « avant commande ».
 
+import { correspond, validerCriteres, CLES_CRITERES } from './typologie.js';
+
 export const VERSION_COMMANDES = 1;
 const MAX_COMMANDES = 200;
 const PLANS = { XZ: 'y', YZ: 'x', XY: 'z' };
 const VUES = ['iso', 'dessus', 'face', 'droite', 'tout'];
-const MODES = ['explorer', 'eclate', 'coupe', 'percages', 'notes', 'commande'];
+const MODES = ['explorer', 'groupes', 'eclate', 'coupe', 'percages', 'notes', 'commande'];
 const TYPES_RESEAU = ['circuit', 'alignement', 'isolé', 'alésage'];
 export const CLASSEMENTS = ['non classé', 'refroidissement', 'distribution matière', 'fixation', 'hydraulique / air', 'éjection', 'autre'];
 const TYPES_COMMENTAIRE = ['observation', 'montage', 'contrôle', 'anomalie'];
@@ -20,7 +22,7 @@ const f1 = x => (Math.round(x * 10) / 10).toLocaleString('fr-FR');
 const nb = (n, mot, fem = false) => `${n} ${mot}${n > 1 ? 's' : ''}`;
 
 // ------------------------------------------------------------------ cibles (quelles pièces ?)
-const CLES_CIBLE = ['reperes', 'ids', 'nom', 'recherche', 'famille', 'sous_ensemble', 'selection', 'tout', 'visibles', 'masquees'];
+const CLES_CIBLE = ['reperes', 'ids', 'recherche', 'sous_ensemble', 'selection', 'tout', 'visibles', 'masquees', 'groupe', ...CLES_CRITERES];
 export function validerCible(c) {
   if (c === 'selection' || c === 'tout' || Number.isInteger(c)) return;
   if (Array.isArray(c)) { if (!c.length || !c.every(Number.isInteger)) throw erreur('« cible » : liste de numéros de repère attendue, par exemple [3, 4].'); return; }
@@ -34,7 +36,10 @@ export function validerCible(c) {
     if ((k === 'ids') && !(Array.isArray(v) && v.length && v.every(x => typeof x === 'string'))) throw erreur('« cible.ids » : liste d\'identifiants (texte) attendue.');
     if (['nom', 'recherche', 'famille', 'sous_ensemble'].includes(k) && !(typeof v === 'string' && v.trim())) throw erreur(`« cible.${k} » : texte non vide attendu.`);
     if (['selection', 'tout', 'visibles', 'masquees'].includes(k) && typeof v !== 'boolean') throw erreur(`« cible.${k} » : true ou false attendu.`);
+    if (k === 'groupe' && !(typeof v === 'string' && v.trim())) throw erreur('« cible.groupe » : nom de groupe (texte) attendu.');
   }
+  const e = validerCriteres(c);
+  if (e) throw erreur('« cible » : ' + e);
 }
 // Tous les critères donnés doivent être vrais (ET). Un repère ou un nom inexistant est une erreur : jamais de cible approximative.
 export function resoudreCible(ctx, c, defaut) {
@@ -51,9 +56,13 @@ export function resoudreCible(ctx, c, defaut) {
     liste = liste.filter(p => c.reperes.includes(p.repere));
   }
   if (c.ids) liste = liste.filter(p => c.ids.includes(p.id));
-  if (c.nom) { const t = norm(c.nom); liste = liste.filter(p => norm(p.nom).includes(t)); }
+  if (c.groupe) {
+    const g = ctx.idsGroupe(c.groupe);
+    if (!g) throw erreur(`groupe « ${c.groupe} » inconnu. Groupes : ${ctx.nomsGroupes().join(', ') || 'aucun'}.`);
+    liste = liste.filter(p => g.includes(p.id));
+  }
+  liste = liste.filter(p => correspond(p, c)); // type, Ø, longueur, dimensions, nom, famille, sauf_famille (même règle que la fenêtre de filtre)
   if (c.recherche) liste = liste.filter(p => ctx.recherche(p.id, c.recherche));
-  if (c.famille) { const t = norm(c.famille); liste = liste.filter(p => norm(p.famille) === t || norm(p.famille_label).startsWith(t) || norm(p.famille_label).includes(t)); }
   if (c.sous_ensemble) { const t = norm(c.sous_ensemble); liste = liste.filter(p => norm(p.sous_ensemble).includes(t)); }
   if (c.selection) liste = liste.filter(p => p.selectionnee);
   if (c.visibles) liste = liste.filter(p => p.visible);
@@ -197,6 +206,17 @@ export const COMMANDES = {
   diametre_maxi_forage: { confirme: true, doc: 'ÉCRITURE : Ø maxi d\'un forage (défaut 32). Recalcule les réseaux ; les classements validés repassent à « proposé ».', params: { mm: p('nombre', { req: true, min: 1, max: 500 }) },
     run(ctx, q) { ctx.diametreMaxi(q.mm); return res(`Ø maxi de forage : ${q.mm} mm ; réseaux recalculés, classements remis à « proposé ».`); } },
 
+  // ---- groupes nommés (ex. « partie injection »), utilisables dans toute cible : {"groupe":"partie injection"}
+  lister_groupes: { lecture: true, doc: 'Groupes nommés (nom, nombre de pièces, repères, couleur, origine).', params: {}, run: ctx => { const l = ctx.groupes(); return res(`${nb(l.length, 'groupe')}.`, l); } },
+  groupe_creer: { doc: 'Crée un groupe nommé avec les pièces ciblées (le nom doit être nouveau). Ensuite : {"groupe":"nom"} dans n\'importe quelle cible (isoler, masquer, groupe_mobile, eclater…).', params: { nom: p('texte', { req: true }), cible: CIBLE({ req: true }) },
+    run(ctx, q) { const ids = resoudre(ctx, q.cible), n = ctx.groupeCreer(q.nom, ids); return res(`Groupe « ${n} » créé avec ${nb(ids.length, 'pièce')}.`, { reperes: ctx.reperesDe(ids) }); } },
+  groupe_ajouter: { doc: 'Ajoute des pièces à un groupe existant.', params: { nom: p('texte', { req: true }), cible: CIBLE({ req: true }) },
+    run(ctx, q) { const ids = resoudre(ctx, q.cible), n = ctx.groupeAjouter(q.nom, ids); return res(`${nb(n, 'pièce')} ajoutée(s) au groupe « ${q.nom} ».`); } },
+  groupe_retirer: { confirme: true, doc: 'ÉCRITURE : retire des pièces d\'un groupe (les pièces elles-mêmes ne sont pas touchées).', params: { nom: p('texte', { req: true }), cible: CIBLE({ req: true }) },
+    run(ctx, q) { const ids = resoudre(ctx, q.cible), n = ctx.groupeRetirer(q.nom, ids); return res(`${nb(n, 'pièce')} retirée(s) du groupe « ${q.nom} ».`); } },
+  groupe_supprimer: { confirme: true, doc: 'ÉCRITURE : supprime un groupe (les pièces ne sont pas touchées).', params: { nom: p('texte', { req: true }) },
+    run(ctx, q) { ctx.groupeSupprimer(q.nom); return res(`Groupe « ${q.nom} » supprimé.`); } },
+
   // ---- annotations (écritures soumises à confirmation)
   commentaire_ajouter: { confirme: true, doc: 'ÉCRITURE : commentaire en français sur des pièces (défaut : la sélection).', params: { cible: CIBLE(), texte: p('texte', { req: true }), type: p('choix', { valeurs: TYPES_COMMENTAIRE, def: 'observation' }), statut: p('choix', { valeurs: ['ouvert', 'traité'] }), auteur: p('texte') },
     run(ctx, q) { const ids = resoudre(ctx, q.cible, 'selection'); ctx.commentaire({ ids, texte: q.texte, type: q.type ?? 'observation', statut: q.statut ?? 'ouvert', auteur: q.auteur }); return res(`Commentaire ajouté sur ${nb(ids.length, 'pièce')}.`); } },
@@ -213,7 +233,7 @@ export const COMMANDES = {
   retablir: { sansSauvegarde: true, doc: 'Rétablit l\'action annulée.', params: {}, run: ctx => (ctx.retablir() ? res('Rétabli.') : res('Rien à rétablir.')) },
   retour_avant_commande: { sansSauvegarde: true, doc: 'Restaure l\'affichage tel qu\'il était avant la dernière série de commandes (caméra, visibilité, coupes, éclaté, ouverture, circuits).', params: {}, run: ctx => { if (!ctx.retourAvant()) throw erreur('aucun état « avant commande » mémorisé.'); return res('Affichage restauré à l\'état d\'avant la dernière série de commandes.'); } },
 };
-const ALIAS = { selection: 'selectionner', select: 'selectionner', hide: 'masquer', isolate: 'isoler', show: 'afficher', transparence: 'opacite', coupes: 'coupe', eclate: 'eclater', ouvrir: 'ouverture', retour: 'retour_avant_commande', perçages: 'fiche_percages', percages: 'fiche_percages', circuit: 'circuits', reseaux: 'lister_reseaux', undo: 'annuler', redo: 'retablir' };
+const ALIAS = { groupes: 'lister_groupes', selection: 'selectionner', select: 'selectionner', hide: 'masquer', isolate: 'isoler', show: 'afficher', transparence: 'opacite', coupes: 'coupe', eclate: 'eclater', ouvrir: 'ouverture', retour: 'retour_avant_commande', perçages: 'fiche_percages', percages: 'fiche_percages', circuit: 'circuits', reseaux: 'lister_reseaux', undo: 'annuler', redo: 'retablir' };
 
 function decrireParam(s) {
   const base = { texte: 'texte', nombre: 'nombre', entier: 'entier', booleen: 'true|false', sens: '1|-1', cible: 'cible (voir format)', vec3: '[x,y,z]', objet: 'objet' }[s.t];
@@ -269,6 +289,8 @@ function descrire(ctx, { nom, params: q }) {
     case 'repere_valider': return `${q.valide !== false ? 'Valider' : 'Dévalider'} le repère ${q.repere}`;
     case 'repere_reference': return `Enregistrer la référence « ${q.reference} » pour le repère ${q.repere}`;
     case 'classer_circuit': return `Valider le réseau ${q.reseau} comme « ${q.classement} »`;
+    case 'groupe_retirer': return `Retirer ${cible()} du groupe « ${q.nom} »`;
+    case 'groupe_supprimer': return `Supprimer le groupe « ${q.nom} » (les pièces ne sont pas touchées)`;
     case 'classer_famille': return `Classer ${cible()} dans la famille « ${q.famille} »`;
     case 'diametre_maxi_forage': return `Fixer le Ø maxi de forage à ${q.mm} mm (les classements validés repassent à « proposé »)`;
     default: return nom;
@@ -310,11 +332,14 @@ Pour agir sur l'application, produis UN SEUL bloc JSON que l'opérateur colle da
 Les commandes s'exécutent dans l'ordre ; l'exécution s'arrête à la première erreur. Tout est validé avant exécution.
 
 ## Cible (quelles pièces)
-"selection" | "tout" | 3 | [3,4] | {"reperes":[3,4], "nom":"vis", "famille":"busettes", "sous_ensemble":"…", "recherche":"Ø8", "visibles":true}. Les critères se cumulent (ET). Un repère inexistant est une erreur.
+"selection" | "tout" | 3 | [3,4] | {"reperes":[3,4], "nom":"vis", "famille":"busettes", "sous_ensemble":"…", "recherche":"Ø8", "visibles":true, "groupe":"partie injection", "type":"tournage", "diametre_mm":{"max":40}, "longueur_mm":{"min":10,"max":150}, "plus_grande_dim_mm":{"max":100}, "plus_petite_dim_mm":{"max":20}, "sauf_famille":"visserie"}. Les critères se cumulent (ET). Un repère ou un groupe inexistant est une erreur.
+- type = "tournage" (pièce de révolution), "fraisage" (alias "prismatique") ou "mixte" (révolution + usinages), seul ou en liste ["tournage","mixte"]. Plages {"min":…,"max":…} en mm (tolérance maillage 0,05 mm). diametre_mm et longueur_mm n'existent que pour les pièces rondes (tournage, mixte). plus_grande_dim_mm / plus_petite_dim_mm = brut de la pièce (Ø ou L × l × e).
+- Groupes : « groupe_creer » nomme un ensemble de pièces, puis {"groupe":"nom"} s'utilise dans toute cible (isoler, masquer, groupe_mobile, eclater).
 
 ## Règles impératives
 - N'invente jamais un repère, une dimension, un Ø : lis d'abord (« nomenclature », « chercher », « lister_reseaux », « fiche_percages ») ou demande à l'opérateur de coller le résultat.
 - Les valeurs viennent du maillage d'affichage (≈ 0,05 mm) : indicatives, jamais des cotes de fabrication validées.
+- Type d'usinage (tournage / fraisage / mixte), Ø, longueur et dimensions de brut sont DÉDUITS de la forme du maillage : présente-les comme « proposés », à vérifier sur plan. Jamais de gamme d'usinage, de choix de machine ni de temps de cycle.
 - Classements de circuits et familles : « proposés ». Ne les présente jamais comme certains ; les valider = commande d'ÉCRITURE soumise à l'accord de l'opérateur.
 - Ne déduis ni ordre de montage, ni faisabilité mécanique, ni collision, jeu, tolérance, serrage : hors périmètre. Une ouverture ou un éclaté n'est qu'un déplacement paramétré.
 - Les coupes sont visuelles (pas des sections B-Rep exactes). Éclaté 0 % et ouverture 0 % = position exacte du STEP.
@@ -326,12 +351,13 @@ ${lignes.join('\n')}
 }
 export function contexteIA(ctx) {
   const noms = ctx.charge() ? ctx.nomenclature() : [];
-  const tab = noms.slice(0, LIMITE_LISTE).map(r => `${r.repere} | ${r.designation} | ${r.quantite} | ${r.famille} | ${r.sous_ensemble || '—'} | ${r.dims_mm.map(x => f1(x)).join('×')} | ${r.statut}`);
+  const brut = r => (r.type_usinage === 'fraisage' && r.brut_mm ? r.brut_mm.map(x => f1(x)).join('×') : r.diametre_mm != null ? `Ø${f1(r.diametre_mm)}×${f1(r.longueur_mm)}` : '—');
+  const tab = noms.slice(0, LIMITE_LISTE).map(r => `${r.repere} | ${r.designation} | ${r.quantite} | ${r.famille} | ${r.sous_ensemble || '—'} | ${r.dims_mm.map(x => f1(x)).join('×')} | ${r.type_usinage ?? '—'} | ${brut(r)} | ${r.statut}`);
   return `${modeEmploiIA()}
 ## Assemblage ouvert
 ${ctx.charge() ? JSON.stringify(ctx.etat()) : 'Aucun assemblage ouvert.'}
 
-## Nomenclature (repère | désignation | qté | famille proposée | sous-ensemble | X×Y×Z mm indicatif | statut)${noms.length > LIMITE_LISTE ? `\n(${noms.length} repères, ${LIMITE_LISTE} premiers)` : ''}
+## Nomenclature (repère | désignation | qté | famille proposée | sous-ensemble | X×Y×Z mm indicatif | usinage proposé | brut proposé mm | statut)${noms.length > LIMITE_LISTE ? `\n(${noms.length} repères, ${LIMITE_LISTE} premiers)` : ''}
 ${tab.join('\n') || '—'}
 `;
 }

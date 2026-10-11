@@ -1,5 +1,10 @@
 # Historique du cahier des charges
 
+## 1.5 — 11 octobre 2026 (Claude Code, demande de Christophe)
+- Nouveaux domaines **TYPOLOGIE** (TYP-01 à TYP-04) et **GROUPES** (GRP-01 à GRP-03) : fenêtre de filtre par type de pièce (tournage / fraisage / mixte, Ø, longueur, dimensions) et groupes de sélection nommés (« partie injection »…), utilisables pour sélectionner, isoler, masquer, colorer et déplacer selon un axe.
+- Type, Ø et brut sont **proposés** d'après le maillage (≈ 0,05 mm) ; aucune gamme d'usinage ni choix de machine. TYP-04 (réception sur pièces réelles, correction manuelle du type) reste à faire.
+- Commandes JSON étendues (cibles type / dimensions / groupe ; `groupe_*`). Application autonome 1.1.0 → **1.2.0**. La v1.4 passe en archive figée.
+
 ## 1.4 — 10 octobre 2026, nuit (Claude Code, demande de Christophe)
 - Nouveau domaine **PILOTAGE** (PIL-01 à PIL-06) : l'application se pilote par commandes JSON collées depuis un assistant IA (onglet Commande, `window.SDC`), sans MCP ni installation. Écritures soumises à confirmation de l'opérateur ; collisions, jeux, tolérances, serrages, simulation refusés.
 - Décision : étape 1 = commandes JSON collées (hors ligne, tablette d'atelier possible) ; étape 2 = serveur MCP local (PIL-05), à décider selon l'usage au bureau d'études.
