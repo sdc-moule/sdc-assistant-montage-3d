@@ -181,3 +181,72 @@ table.bom td.dims { white-space: nowrap; font-variant-numeric: tabular-nums; fon
 .vb-grip span { font-size: 18px; line-height: 1; }
 .vb-fold { border: 0; background: transparent; cursor: pointer; font-size: 14px; color: var(--muted); }
 .viewbar.folded > :not(.vb-grip) { display: none; }
+
+/* Onglet Commande (pilotage JSON) */
+#cmd-input { font: 12px/1.4 Consolas, "Cascadia Mono", ui-monospace, monospace; min-height: 150px; white-space: pre; tab-size: 2; }
+.cmd-line { border: 1px solid var(--line); border-left-width: 4px; border-radius: 8px; padding: 6px 8px; font-size: 13px; background: #fff; line-height: 1.35; }
+.cmd-line.ok { border-left-color: var(--ok); }
+.cmd-line.ko { border-left-color: var(--bad); background: #fdf1ef; }
+.cmd-line .warn { color: var(--warn); }
+.cmd-line pre { max-height: 180px; overflow: auto; margin: 4px 0 0; font-size: 11px; background: #f1f4f7; padding: 6px; border-radius: 6px; white-space: pre-wrap; }
+
+/* Filtres & groupes */
+.panel input[type=checkbox] { width: auto; min-height: 0; }
+.chip input { margin: 0; }
+.flt-grid { display: grid; grid-template-columns: 1.25fr 1fr 1fr; gap: 6px; align-items: center; font-size: 13px; margin: 10px 0 4px; }
+.flt-grid small { color: var(--muted); }
+#flt-count.bad { color: var(--bad); font-weight: 600; }
+.btn.sm { min-height: 34px; padding: 0 6px; font-size: 13px; }
+.btn.danger { color: var(--bad); }
+.grp { border: 1px solid var(--line); border-radius: 10px; background: #fff; padding: 4px; }
+.grp .row { background: transparent; }
+.grp .grid3 { margin: 4px 0; }
+.grp .btn.wide { margin-top: 2px; }
+.gdot { width: 14px; height: 14px; border-radius: 50%; flex: none; border: 1px solid rgba(0,0,0,.25); }
+.tag.typ-tournage { background: #dbe8f3; color: var(--steel-d); } .tag.typ-fraisage { background: #fdf2dc; color: var(--warn); } .tag.typ-mixte { background: #ece4f6; color: #5b3a8c; }
+.row .dims { font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* reste à faire */
+.rst-total { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 8px 0 4px; text-align: center; }
+.rst-total div { background: #eef2f5; border-radius: 8px; padding: 6px 2px; font-size: 12px; color: var(--muted); }
+.rst-total b { display: block; font-size: 20px; color: var(--ink, #1d2b36); }
+.rst-total .af b { color: #c25e08; } .rst-total .fi b { color: var(--ok); }
+#rst-bar { width: 100%; height: 10px; margin-bottom: 8px; }
+.row .fini { width: 22px; height: 22px; flex: none; }
+.tag.achat { background: #e6e9ed; color: #4a525a; } .tag.fini { background: #e1f3e8; color: var(--ok); } .tag.afaire { background: #fde9d4; color: #a14d06; }
+table.bom td .fini { width: 20px; height: 20px; }
+
+/* renommer un repère (double clic) */
+td.nom { cursor: text; } input.nom-edit { width: 100%; min-height: 32px; font: inherit; padding: 2px 6px; border: 2px solid var(--steel-d, #2f5d7c); border-radius: 6px; box-sizing: border-box; }
+
+/* ---- mode tactile : écran de présentation / table tactile. Échelle --e réglable (A− / A+), mémorisée ---- */
+#ctxmenu { position: absolute; z-index: 30; display: flex; flex-direction: column; gap: 6px; padding: 8px; min-width: 230px; background: #fff; border: 2px solid var(--accent); border-radius: 14px; box-shadow: 0 8px 28px rgba(20,40,60,.3); }
+#ctxmenu .ctx-title { font-weight: 600; color: var(--steel-d); padding: 2px 6px 4px; max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ctxmenu .btn { justify-content: flex-start; min-height: 48px; font-size: 16px; }
+body.tactile { --ep: calc(1 + (var(--e) - 1) * 0.4); }
+body.tactile #app { grid-template: "top top top top" auto "rail left stage right" 1fr / calc(84px * var(--ep)) calc(var(--lw, 350px) * var(--ep)) 1fr calc(var(--rw, 350px) * var(--ep)); }
+body.tactile .top { min-height: calc(58px * var(--ep)); padding-block: 6px; flex-wrap: wrap; }
+body.tactile .top-actions { flex-wrap: wrap; justify-content: flex-end; }
+body.tactile svg { width: calc(22px * var(--e)); height: calc(22px * var(--e)); }
+body.tactile .btn, body.tactile .top select, body.tactile .panel input:not([type=checkbox]):not([type=range]), body.tactile .panel select { min-height: calc(40px * var(--e)); font-size: calc(14px * var(--e)); }
+body.tactile .btn { padding: 0 calc(12px * var(--e)); }
+body.tactile .btn.sm { min-height: calc(36px * var(--e)); font-size: calc(13px * var(--e)); padding: 0 calc(8px * var(--e)); }
+body.tactile .panel { font-size: calc(14px * var(--e)); }
+body.tactile .panel h2 { font-size: calc(19px * var(--e)); } body.tactile .panel h3 { font-size: calc(15px * var(--e)); }
+body.tactile .hint { font-size: calc(13px * var(--e)); }
+body.tactile .row { min-height: calc(42px * var(--e)); font-size: calc(14px * var(--e)); }
+body.tactile .chip { font-size: calc(13px * var(--e)); padding: calc(7px * var(--e)) calc(11px * var(--e)); }
+body.tactile .tag { font-size: calc(11px * var(--e)); }
+body.tactile table.bom { font-size: calc(13px * var(--e)); }
+body.tactile input[type=checkbox], body.tactile input.fini, body.tactile table.bom td .fini { width: calc(20px * var(--e)); height: calc(20px * var(--e)); }
+body.tactile input[type=range] { height: calc(34px * var(--e)); }
+body.tactile .rail button { font-size: calc(12px * var(--e)); padding: calc(10px * var(--e)) 2px; }
+body.tactile .rail button svg { width: calc(28px * var(--e)); height: calc(28px * var(--e)); }
+body.tactile .viewbar .btn { width: calc(92px * var(--e)); }
+body.tactile .selbar { top: auto; bottom: calc(18px * var(--ep)); font-size: calc(14px * var(--e)); }
+body.tactile .selbar .op { font-size: calc(13px * var(--e)); } body.tactile .selbar .op input[type=range] { width: calc(130px * var(--e)); }
+body.tactile .pchrome button { width: calc(32px * var(--e)); height: calc(28px * var(--e)); }
+body.tactile #toast { font-size: calc(15px * var(--e)); }
+body.tactile #ctxmenu { font-size: calc(16px * var(--e)); } body.tactile #ctxmenu .btn { min-height: calc(48px * var(--e)); font-size: calc(16px * var(--e)); }
+body.tactile .viewbar { top: 10px; transform: none; flex-direction: row; flex-wrap: wrap; align-content: flex-start; max-width: none; width: calc(2 * (92px * var(--e)) + 24px); max-height: calc(100% - 20px); overflow-y: auto; } /* barre d'outils sur deux colonnes */
+body.tactile .viewbar .sep { width: 100%; height: 1px; margin: 2px 0; }

@@ -4,6 +4,34 @@
     "1.2": {
       "SDC_Assistant_Montage_3D_v1_2_FR.json": "9eae213316336418961fe2b0af8b05e7806c59762ee9ef2a85ca2e5fe6969510",
       "SDC_Cahier_des_charges_Montage_3D_v1_2_FR.md": "902ab1da5c13a25ac85b0a9bed2c295494450c1f07bf657c42274daa3aa9d9de"
+    },
+    "1.3": {
+      "SDC_Assistant_Montage_3D_v1_3_FR.json": "3f46997aa5dfb21ebd1e219b294ee6b1a044623337259a9c7c8989b5b358ec30",
+      "SDC_Cahier_des_charges_Montage_3D_v1_3_FR.md": "77bba6f75eb10eb9b662d014c2ee9cbd281c05ab1d09f850e63987d245b435d4"
+    },
+    "1.4": {
+      "SDC_Assistant_Montage_3D_v1_4_FR.json": "9f5b25a1cb7057b862a1e786d8106d0fa01e51fceea61aa68235e5d6e012492d",
+      "SDC_Cahier_des_charges_Montage_3D_v1_4_FR.md": "764d25afffa9b13d7facd3901c5bdd314dd45cc30da0ef26c2fc2e1d1e8d696e"
+    },
+    "1.5": {
+      "SDC_Assistant_Montage_3D_v1_5_FR.json": "94ccd1833cd2bcf6ea0a1f9f68e0d4d9046d1806932d90a5e28ba88ca091f9cb",
+      "SDC_Cahier_des_charges_Montage_3D_v1_5_FR.md": "102c993fd0f1f626501abb640ae0f4ce55d8c50b67b4e4ab63a5c0eac3fa5fa8"
+    },
+    "1.6": {
+      "SDC_Assistant_Montage_3D_v1_6_FR.json": "d8f95a1d965836bfd181968dab225222a006971fa8f714187ca1287bacea7c82",
+      "SDC_Cahier_des_charges_Montage_3D_v1_6_FR.md": "3b963e47999d6efceacd2ea384fe48fa4af9ae43ce358ced6f47ec284c94914f"
+    },
+    "1.7": {
+      "SDC_Assistant_Montage_3D_v1_7_FR.json": "777ea05e166c0acee80a568ee2cb6f2d2cf32f9feefe157de35b7ce2954aa027",
+      "SDC_Cahier_des_charges_Montage_3D_v1_7_FR.md": "c9bb003ac11dbefc1b364e568c3ad47c0323e95cd1c77b83e31b386b7344e9e0"
+    },
+    "1.8": {
+      "SDC_Assistant_Montage_3D_v1_8_FR.json": "a3eaefcac336b11556a5bcaa93e20736cf94ae5523f483cbb61f90463694baef",
+      "SDC_Cahier_des_charges_Montage_3D_v1_8_FR.md": "8d94d3400dc14bbced59018bc2770705b657d782cdba6350b065f809be80f2a4"
+    },
+    "1.9": {
+      "SDC_Assistant_Montage_3D_v1_9_FR.json": "876a4e20f985bfcc48b8aafa47c7f5196eb5e36e804875cce8d6f6f417b3c68d",
+      "SDC_Cahier_des_charges_Montage_3D_v1_9_FR.md": "3fefde358e9453a4d450f7b1b46beed1db4d6dbef31d68a8932e8e97fa5208e1"
     }
   }
 }

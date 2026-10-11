@@ -14,6 +14,8 @@
       <label class="btn primary big" title="Ouvrir un fichier STEP, STP, IGES"><svg viewBox="0 0 24 24"><path d="M4 20h16M12 4v12m0-12-5 5m5-5 5 5"/></svg><span>Ouvrir un STEP</span><input id="file" type="file" accept=".step,.stp,.iges,.igs,.brep,.zip" hidden></label>
       <button class="btn" id="demo" title="Assemblage d'essai synthétique (BCR + plaque refroidie)">Démo</button>
       <select id="quality" title="Finesse du maillage d'affichage (n'affecte pas le fichier)"><option value="rapide">Affichage rapide</option><option value="normale" selected>Affichage normal</option><option value="fine">Affichage fin</option></select>
+      <button class="btn toggle" id="tactile-toggle" title="Mode tactile : grands boutons, appui long sur une pièce = menu contextuel">Tactile</button>
+      <button class="btn" id="ech-minus" hidden title="Interface plus petite">A−</button><button class="btn" id="ech-plus" hidden title="Interface plus grande">A+</button>
       <span class="sep"></span>
       <button class="btn" id="save-project" title="Enregistrer commentaires, vues, classements (fichier projet JSON)">Enregistrer projet</button>
       <label class="btn" title="Recharger un projet JSON ou une scène PNG">Charger projet / scène<input id="load-project" type="file" accept=".json,.png" hidden></label>
@@ -30,10 +32,13 @@
 
   <nav class="rail" id="rail">
     <button data-mode="explorer" class="on"><svg viewBox="0 0 24 24"><path d="M12 3 3 8l9 5 9-5-9-5zM3 8v8l9 5 9-5V8"/></svg>Explorer</button>
+    <button data-mode="groupes" title="Filtrer les pièces (tournage, fraisage, dimensions) et créer des groupes nommés"><svg viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4-2v-4z"/></svg>Filtres<br>groupes</button>
+    <button data-mode="reste" title="Reste à faire : pièces finies, pièces à usiner, pièces achetées"><svg viewBox="0 0 24 24"><path d="M5 12l4 4 10-10M4 20h16"/></svg>Reste<br>à faire</button>
     <button data-mode="eclate"><svg viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 14h6v6h-6zM10 10l4 4M14 4h6v6M4 14v6h6"/></svg>Démonter</button>
     <button data-mode="coupe"><svg viewBox="0 0 24 24"><path d="M3 12h18M6 5h12v14H6z" /></svg>Couper</button>
     <button data-mode="percages"><svg viewBox="0 0 24 24"><path d="M3 7h12M15 7v10M15 17h6M9 7v6M9 13H3"/><circle cx="15" cy="7" r="1.6"/><circle cx="9" cy="13" r="1.6"/></svg>Perçages<br>circuits</button>
     <button data-mode="notes"><svg viewBox="0 0 24 24"><path d="M5 4h14v12H9l-4 4z"/></svg>Notes<br>vues</button>
+    <button data-mode="commande" title="Piloter l'application par commandes JSON (assistant IA)"><svg viewBox="0 0 24 24"><path d="M4 6l5 5-5 5M12 18h8"/></svg>Commande</button>
   </nav>
 
   <aside class="panel left" id="panel-left">
@@ -46,7 +51,7 @@
         <button class="btn toggle on" id="edges-toggle">Arêtes</button>
         <button class="btn toggle" id="bubbles-toggle">Repères (bulles)</button>
       </div>
-      <label class="field">Couleurs<select id="color-mode"><option value="step">Couleurs du fichier</option><option value="repere">Une couleur par repère</option><option value="categorie">Par famille de pièce</option></select></label>
+      <label class="field">Couleurs<select id="color-mode"><option value="step">Couleurs du fichier</option><option value="repere">Une couleur par repère</option><option value="categorie">Par famille de pièce</option><option value="groupe">Par groupe</option><option value="avancement">Par avancement</option></select></label>
       <label class="field">Bulles<select id="bubble-scope"><option value="all">Tous les repères visibles</option><option value="selection">Sélection seulement</option></select></label>
       <h3>Familles de pièces <small>(mode BCR)</small></h3>
       <p class="hint">Classement proposé d'après les noms du fichier. Corriger avec « Classer la sélection ».</p>
@@ -54,6 +59,45 @@
       <label class="field">Classer la sélection comme<select id="classify"><option value="">—</option></select></label>
     </section>
 
+    <section data-panel="groupes" hidden>
+      <h2>Filtres &amp; groupes</h2>
+      <h3>Trouver des pièces</h3>
+      <p class="hint">Type d'usinage, Ø et dimensions sont <b>proposés</b> d'après la forme du maillage (≈ 0,05 mm) : à vérifier sur plan. Les critères se cumulent ; laisser vide = sans critère.</p>
+      <div class="chips" id="flt-types">
+        <label class="chip" title="Pièces de révolution (arbres, bagues, vis, busettes…)"><input type="checkbox" class="flt" value="tournage" checked> Tournage</label>
+        <label class="chip" title="Révolution + usinages (méplats, perçages transversaux) : à examiner"><input type="checkbox" class="flt" value="mixte" checked> Mixte</label>
+        <label class="chip" title="Pièces prismatiques (plaques, blocs)"><input type="checkbox" class="flt" value="fraisage" checked> Fraisage</label>
+      </div>
+      <div class="flt-grid">
+        <span></span><small>mini (mm)</small><small>maxi (mm)</small>
+        <span title="Diamètre maxi d'une pièce de révolution">Ø (pièces rondes)</span><input class="flt" id="flt-d-min" inputmode="decimal"><input class="flt" id="flt-d-max" inputmode="decimal">
+        <span title="Longueur le long de l'axe, pièces de révolution">Longueur (rondes)</span><input class="flt" id="flt-l-min" inputmode="decimal"><input class="flt" id="flt-l-max" inputmode="decimal">
+        <span title="Plus grande dimension du brut">Plus grande dim.</span><input class="flt" id="flt-g-min" inputmode="decimal"><input class="flt" id="flt-g-max" inputmode="decimal">
+        <span title="Plus petite dimension du brut (épaisseur)">Plus petite dim.</span><input class="flt" id="flt-p-min" inputmode="decimal"><input class="flt" id="flt-p-max" inputmode="decimal">
+      </div>
+      <div class="grid2"><label class="field">Famille<select class="flt" id="flt-fam"><option value="">Toutes</option></select></label><label class="field">Nom contient<input class="flt" id="flt-nom" placeholder="ex. plaque"></label></div>
+      <div class="filters"><label><input type="checkbox" class="flt" id="flt-novis"> Sans visserie / goupilles</label></div>
+      <p class="hint" id="flt-count"></p>
+      <div class="grid3"><button class="btn" id="flt-sel">Sélectionner</button><button class="btn" id="flt-iso">Isoler</button><button class="btn" id="flt-reset" title="Effacer tous les critères">Réinitialiser</button></div>
+      <div id="flt-list" class="list"></div>
+      <h3>Groupes de sélection</h3>
+      <p class="hint">Un groupe garde des pièces sous un nom (ex. « partie injection »). Cliquer un groupe le sélectionne ; il sert à isoler, masquer, éclater (« Sélection seulement ») ou déplacer (« Déplacer » → onglet Démonter). Enregistré avec le projet.</p>
+      <div class="grid2"><input id="grp-name" placeholder="Nom du groupe" maxlength="60"><button class="btn primary" id="grp-add" title="Créer un groupe avec les pièces sélectionnées">Créer (sélection)</button></div>
+      <button class="btn wide" id="flt-mk" title="Créer un groupe avec toutes les pièces trouvées par le filtre (nom ci-dessus)">Créer un groupe avec les pièces trouvées</button>
+      <div id="grp-list" class="list"></div>
+    </section>
+
+    <section data-panel="reste" hidden>
+      <h2>Reste à faire</h2>
+      <p class="hint">Cocher « fini » quand une pièce est usinée (par repère : toutes ses occurrences). Les <b>pièces achetées</b> (vis, écrous, rondelles, joints, bagues, colonnes) sont détectées d'après la désignation — <b>proposé</b>, corrigeable — et ne comptent pas dans le reste à faire.</p>
+      <div id="rst-total" class="rst-total"></div>
+      <progress id="rst-bar" max="100" value="0"></progress>
+      <div class="tabs" id="rst-tabs"><button data-f="a_faire" class="on">À faire</button><button data-f="fini">Faites</button><button data-f="achete">Achetées</button><button data-f="tout">Toutes</button></div>
+      <div class="grid2"><button class="btn" id="rst-sel">Sélectionner</button><button class="btn" id="rst-iso">Isoler</button></div>
+      <div class="grid2"><button class="btn" id="rst-fini" title="Cocher « fini » pour la sélection">✔ Sélection finie</button><button class="btn" id="rst-afaire" title="Décocher « fini » pour la sélection">↩ Sélection à refaire</button></div>
+      <button class="btn wide" id="rst-color" title="Colorer : à faire orange, fini vert, acheté gris">Colorer par avancement</button>
+      <div id="rst-list" class="list"></div>
+    </section>
     <section data-panel="eclate" hidden>
       <h2>Démonter / éclater</h2>
       <label class="field">Pièces concernées<select id="ex-scope"><option value="all">Tout l'assemblage</option><option value="selection">Sélection seulement</option></select></label>
@@ -69,7 +113,8 @@
         <p class="hint" id="op-axis-info">Aucun axe choisi.</p>
         <div class="grid2"><label class="field">Angle (°)<input id="op-angle" type="number" value="90" step="5"></label><label class="field">Sens<select id="op-rsign"><option value="1">+</option><option value="-1">−</option></select></label></div>
       </div>
-      <button class="btn wide" id="op-add">Créer un groupe mobile avec la sélection</button>
+      <label class="field">Pièces mobiles<select id="op-source"><option value="sel">Sélection actuelle</option></select></label>
+      <button class="btn wide" id="op-add">Créer un groupe mobile</button>
       <div id="op-list" class="list"></div>
       <label class="slider">Fermé → ouvert <output id="op-val">0 %</output><input id="op-amount" type="range" min="0" max="100" value="0"></label>
       <div class="grid2"><button class="btn" id="op-close">⏮ Fermé</button><button class="btn" id="op-open">⏭ Ouvert</button></div>
@@ -87,6 +132,7 @@
       <h2>Perçages &amp; circuits</h2>
       <p class="hint">Détection des forages cylindriques et de leurs croisements. Classements <b>proposés</b> : à confirmer.</p>
       <div class="grid2"><button class="btn toggle" id="skel-only">Circuits seuls</button><button class="btn toggle on" id="skel-show">Afficher les circuits</button></div>
+      <button class="btn toggle wide" id="skel-joints" title="Billes aux croisements et aux extrémités des perçages (masquées par défaut)">Marqueurs d'intersection</button>
       <div class="grid2"><button class="btn toggle on" id="fill-toggle" title="Forages représentés pleins (opaques) dans la plage de Ø">Forages pleins</button><button class="btn toggle" id="labels-toggle" title="Étiquettes P… Ø sur tous les perçages du réseau">Étiquettes Ø</button></div>
       <div class="grid2"><label class="field">Pleins de Ø<input id="fill-min" type="number" value="3" step="0.5"></label><label class="field">à Ø<input id="fill-max" type="number" value="20" step="0.5"></label></div>
       <div class="filters">
@@ -117,6 +163,17 @@
       <p class="hint">Une scène garde caméra, éclaté, coupes, masquages, transparences, faces retirées et circuits. Le PNG enregistré contient la scène : le recharger par « Charger projet / scène ».</p>
       <div class="grid2"><input id="v-name" placeholder="Nom de la scène"><button class="btn" id="v-save">Mémoriser</button></div>
       <div id="v-list" class="list"></div>
+    </section>
+
+    <section data-panel="commande" hidden>
+      <h2>Commande (assistant IA)</h2>
+      <p class="hint">Coller ici le bloc JSON fourni par l'assistant, puis <b>Exécuter</b> (ou Ctrl + Entrée). Rien n'est modifié dans le fichier STEP. Les écritures (commentaire, validation d'un repère ou d'un circuit) demandent votre accord.</p>
+      <textarea id="cmd-input" rows="9" spellcheck="false" placeholder='{"sdc":1,"commandes":[{"cmd":"isoler","cible":{"reperes":[3]}}]}'></textarea>
+      <div class="grid2"><button class="btn primary" id="cmd-run">▶ Exécuter</button><button class="btn" id="cmd-back" title="Restaure l'affichage d'avant la dernière série de commandes">↩ Avant la commande</button></div>
+      <div class="grid2"><button class="btn" id="cmd-copy-ctx" title="Mode d'emploi + état + nomenclature, à coller dans la conversation avec l'assistant">Copier le contexte pour l'IA</button><button class="btn" id="cmd-copy-res" title="Résultat de la dernière exécution, à coller dans la conversation">Copier le résultat</button></div>
+      <div class="grid2"><button class="btn" id="cmd-example">Exemple</button><button class="btn" id="cmd-clear">Effacer</button></div>
+      <div id="cmd-log" class="list"></div>
+      <p class="hint">Valeurs issues du maillage d'affichage, indicatives. L'assistant ne valide ni ordre de montage, ni jeu, ni collision, ni tolérance.</p>
     </section>
   </aside>
 
@@ -159,9 +216,11 @@
       <button class="btn" id="s-fit">Cadrer</button>
       <button class="btn" id="s-hide">Masquer</button>
       <button class="btn" id="s-isolate">Isoler</button>
+      <label class="op" id="s-fini-box" title="Fini : toutes les occurrences du repère"><input type="checkbox" id="s-fini"> Fini</label>
       <label class="op">Transparence<input id="s-opacity" type="range" min="0" max="100" value="100"></label>
       <button class="btn" id="s-clear">✕</button>
     </div>
+    <div id="ctxmenu" hidden></div>
     <div id="toast" hidden></div>
   </main>
 
@@ -169,7 +228,7 @@
     <div class="tabs"><button data-tab="tree" class="on">Arborescence</button><button data-tab="bom">Nomenclature</button></div>
     <input id="search" type="search" placeholder="Chercher : repère, nom, Ø, dimension…">
     <div id="tab-tree" class="list tree"></div>
-    <div id="tab-bom" class="list" hidden><table class="bom"><thead><tr><th>Rep.</th><th>Désignation</th><th>Qté</th><th>X×Y×Z mm</th><th>Statut</th></tr></thead><tbody id="bom-body"></tbody></table></div>
+    <div id="tab-bom" class="list" hidden><table class="bom"><thead><tr><th>Rep.</th><th>Désignation</th><th>Qté</th><th>X×Y×Z mm</th><th>Statut</th><th title="Fini (usiné)">Fini</th></tr></thead><tbody id="bom-body"></tbody></table></div>
     <div id="part-card" class="card" hidden></div>
   </aside>
 </div>
