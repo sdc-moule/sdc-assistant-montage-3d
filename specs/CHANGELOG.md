@@ -1,5 +1,9 @@
 # Historique du cahier des charges
 
+## 1.9 — 11 octobre 2026 (Claude Code, décision de Christophe)
+- **Décision écrite** : les marqueurs d'intersection et d'extrémité des circuits (billes) sont **annulés** à l'affichage. La fonction n'est pas supprimée : option « Marqueurs d'intersection » (désactivée par défaut), exigence **PER-08**.
+- Application autonome 1.5.0 → **1.5.1**. La v1.8 passe en archive figée.
+
 ## 1.8 — 11 octobre 2026 (Claude Code, signalement de Christophe)
 - Nouvelle exigence **IMP-07** : le sélecteur « Affichage rapide / normal / fin » ne s'appliquait qu'à l'ouverture d'un fichier ; il agit désormais à chaud sur le fichier ouvert (maillage recalculé ou relu du cache), avec conservation des annotations, groupes, coches, noms et de la vue.
 - Application autonome 1.4.0 → **1.5.0**. La v1.7 passe en archive figée.

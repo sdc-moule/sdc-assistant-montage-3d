@@ -372,6 +372,13 @@ with sync_playwright() as p:
         check(S("S.parts.length") == 15 and S("S.items['O006'].visible") is False and S("S.rowNotes[4]?.fini") is True and S("S.groups.length") >= 1,
               f"finesse {q} : visibilité, coche fini et groupes conservés")
     run({"cmd": "tout_afficher"})
+    # ---- marqueurs d'intersection masqués par défaut — PER-08
+    pg.click("#rail button[data-mode=percages]")
+    nj = S("S.skelItems.filter(i => i.joint).length")
+    check(nj > 0 and S("S.skelItems.filter(i => i.joint && i.joint.visible).length") == 0, f"circuits : {nj} billes d'intersection existent mais sont masquées par défaut")
+    pg.click("#skel-joints"); check(S("S.skelItems.filter(i => i.joint && i.joint.visible).length") > 0, "option « Marqueurs d'intersection » : billes réaffichées")
+    pg.click("#skel-joints"); check(S("S.skelItems.filter(i => i.joint && i.joint.visible).length") == 0, "option décochée : billes masquées")
+    pg.screenshot(path=str(OUT / "18_circuits_sans_marqueurs.png"))
     pg.click("#rail button[data-mode=explorer]")
     check(not errors, "aucune erreur JavaScript" + (f" : {errors[:3]}" if errors else ""))
     b.close()

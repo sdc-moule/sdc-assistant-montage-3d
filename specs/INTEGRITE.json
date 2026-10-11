@@ -24,6 +24,10 @@
     "1.7": {
       "SDC_Assistant_Montage_3D_v1_7_FR.json": "777ea05e166c0acee80a568ee2cb6f2d2cf32f9feefe157de35b7ce2954aa027",
       "SDC_Cahier_des_charges_Montage_3D_v1_7_FR.md": "c9bb003ac11dbefc1b364e568c3ad47c0323e95cd1c77b83e31b386b7344e9e0"
+    },
+    "1.8": {
+      "SDC_Assistant_Montage_3D_v1_8_FR.json": "a3eaefcac336b11556a5bcaa93e20736cf94ae5523f483cbb61f90463694baef",
+      "SDC_Cahier_des_charges_Montage_3D_v1_8_FR.md": "8d94d3400dc14bbced59018bc2770705b657d782cdba6350b065f809be80f2a4"
     }
   }
 }

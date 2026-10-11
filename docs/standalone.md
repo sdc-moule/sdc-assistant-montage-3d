@@ -1,4 +1,4 @@
-# Application autonome — SDC Montage 3D 1.5
+# Application autonome — SDC Montage 3D 1.5.1
 
 Deux variantes, même application :
 - `SDC_Montage_3D.html` (~4,6 Mo) : complète, **hors ligne**. Le moteur OpenCascade (3,9 Mo compressé) est embarqué.

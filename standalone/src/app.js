@@ -27,7 +27,7 @@ THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
 THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
 THREE.Mesh.prototype.raycast = acceleratedRaycast;
 
-const APP_VERSION = '1.5.0';
+const APP_VERSION = '1.5.1';
 const $ = id => document.getElementById(id);
 const el = (tag, props = {}, ...kids) => { const e = document.createElement(tag); for (const [k, v] of Object.entries(props)) { if (k === 'class') e.className = v; else if (k === 'style') e.style.cssText = v; else if (k.startsWith('on')) e[k] = v; else if (v !== undefined && v !== null) e.setAttribute(k, v); } for (const k of kids.flat()) if (k !== null && k !== undefined && k !== false) e.append(k instanceof Node ? k : document.createTextNode(String(k))); return e; };
 const fmt = (x, d = 1) => (Number.isFinite(x) ? (Math.abs(x) < 0.5 * 10 ** -d ? 0 : x).toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d }) : '—');
@@ -301,7 +301,7 @@ function styleSkeleton() {
     const focus = S.selNet ? S.selNet === it.net.id : true;
     const featFocus = S.selFeature && it.feature?.id === S.selFeature;
     for (const o of objs) {
-      o.visible = vis;
+      o.visible = vis && (o !== it.joint || S.skelJoints); // marqueurs d'intersection : masqués par défaut (option)
       if (o === it.tube) {
         // Forages pleins (Ø de S.fill.min à S.fill.max) : tube opaque, bien plus lisible que le volume translucide.
         const solid = S.fill.on && it.seg.diameter >= S.fill.min - 1e-6 && it.seg.diameter <= S.fill.max + 1e-6 && focus;
@@ -1007,7 +1007,7 @@ function renderViews() {
 }
 function syncToggles() {
   $('ghost-toggle').classList.toggle('on', S.ghost); $('bubbles-toggle').classList.toggle('on', S.bubbles); $('edges-toggle').classList.toggle('on', S.edges);
-  $('skel-show').classList.toggle('on', S.skelShow); $('skel-only').classList.toggle('on', S.skelOnly);
+  $('skel-show').classList.toggle('on', S.skelShow); $('skel-joints').classList.toggle('on', !!S.skelJoints); $('skel-only').classList.toggle('on', S.skelOnly);
   $('ex-amount').value = S.ex.amount; $('ex-val').textContent = `${Math.round(S.ex.amount)} %`; $('ex-dir').value = S.ex.dir; $('ex-scope').value = S.ex.scope;
   $('op-amount').value = Math.round(S.open * 100); $('op-val').textContent = `${Math.round(S.open * 100)} %`;
   $('op-pick').classList.toggle('on', S.pickAxis); $('cotes-vis').classList.toggle('on', S.cotesVisible); $('measure').classList.toggle('on', S.measure.on); $('boxsel').classList.toggle('on', S.boxMode);
@@ -1179,6 +1179,7 @@ function wire() {
   $('planevis-toggle').onclick = () => { S.planeVis = !S.planeVis; syncToggles(); applyDisplay(); };
   $('cut-reset').onclick = () => { for (const k of ['x', 'y', 'z']) S.cuts[k].on = false; refreshAll(); };
   // perçages
+  $('skel-joints').onclick = () => { S.skelJoints = !S.skelJoints; syncToggles(); applyDisplay(); };
   $('skel-show').onclick = () => { S.skelShow = !S.skelShow; S.skelShowTouched = true; if (!S.skelShow) S.skelOnly = false; syncToggles(); applyDisplay(); };
   $('skel-only').onclick = () => { S.skelOnly = !S.skelOnly; if (S.skelOnly) S.skelShow = true; syncToggles(); applyDisplay(); };
   $('f-maxdrill').onchange = () => { S.maxDrill = Math.max(1, +$('f-maxdrill').value || 32); S.selNet = null; S.selFeature = null; S.netClass = {}; rebuildNetworks(); refreshAll(); toast('Réseaux recalculés : les classements validés ont été remis à « proposé ».'); };

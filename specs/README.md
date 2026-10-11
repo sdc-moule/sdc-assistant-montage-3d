@@ -1,6 +1,6 @@
 # Cahiers des charges — règles de rangement
 
-**Version en vigueur : voir [`ACTUEL.json`](ACTUEL.json)** (aujourd'hui 1.8).
+**Version en vigueur : voir [`ACTUEL.json`](ACTUEL.json)** (aujourd'hui 1.9).
 
 ```
 specs/
@@ -13,7 +13,8 @@ specs/
   v1.5/              ← ARCHIVE figée (filtres par type, groupes nommés)
   v1.6/              ← ARCHIVE figée (reste à faire, pièces achetées)
   v1.7/              ← ARCHIVE figée (renommage des repères)
-  v1.8/              ← version en vigueur : .json (fait foi pour les ids/statuts) + .md (lecture)
+  v1.8/              ← ARCHIVE figée (finesse d'affichage à chaud)
+  v1.9/              ← version en vigueur : .json (fait foi pour les ids/statuts) + .md (lecture)
 ```
 
 ## Règles (humains, Codex, Claude Code)
