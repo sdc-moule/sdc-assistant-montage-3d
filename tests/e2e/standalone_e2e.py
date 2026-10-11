@@ -356,6 +356,22 @@ with sync_playwright() as p:
     pg.wait_for_function("window.__SDC__ && window.__SDC__.S.drill && document.getElementById('busy').hidden", timeout=120000)
     check(S("S.rowNotes[3].nom") == "Chambre A", "nom restauré après rechargement")
     pg.click("[data-tab=tree]")
+    # ---- finesse d'affichage à chaud (rapide / normal / fin) sur le fichier ouvert — AFF-01
+    tri = lambda: S("S.parts.reduce((n, p) => n + p.index.length / 3, 0)")
+    t_norm = tri()
+    pg.evaluate("() => window.__SDC__.select(['O006'])"); pg.click("#s-hide")
+    run({"cmd": "marquer_fini", "cible": [4]}, confirmer="operateur")
+    run({"cmd": "groupe_creer", "nom": "Essai finesse", "cible": [1]})
+    for q in ("rapide", "fine", "normale"):
+        pg.select_option("#quality", q)
+        pg.wait_for_function("document.getElementById('busy').hidden", timeout=180000); time.sleep(0.5)
+        t = tri()
+        if q == "rapide": check(t < t_norm, f"affichage rapide : moins de triangles ({t} < {t_norm})")
+        elif q == "fine": check(t > t_norm, f"affichage fin : plus de triangles ({t} > {t_norm})")
+        else: check(t == t_norm, f"retour à l'affichage normal : même maillage ({t})")
+        check(S("S.parts.length") == 15 and S("S.items['O006'].visible") is False and S("S.rowNotes[4]?.fini") is True and S("S.groups.length") >= 1,
+              f"finesse {q} : visibilité, coche fini et groupes conservés")
+    run({"cmd": "tout_afficher"})
     pg.click("#rail button[data-mode=explorer]")
     check(not errors, "aucune erreur JavaScript" + (f" : {errors[:3]}" if errors else ""))
     b.close()

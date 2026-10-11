@@ -1,5 +1,9 @@
 # Historique du cahier des charges
 
+## 1.8 — 11 octobre 2026 (Claude Code, signalement de Christophe)
+- Nouvelle exigence **IMP-07** : le sélecteur « Affichage rapide / normal / fin » ne s'appliquait qu'à l'ouverture d'un fichier ; il agit désormais à chaud sur le fichier ouvert (maillage recalculé ou relu du cache), avec conservation des annotations, groupes, coches, noms et de la vue.
+- Application autonome 1.4.0 → **1.5.0**. La v1.7 passe en archive figée.
+
 ## 1.7 — 11 octobre 2026 (Claude Code, demande de Christophe)
 - Nouvelles exigences **DES-01 à DES-04** : renommer un repère par double clic dans la nomenclature (fiche, Reste à faire) ; nom enregistré dans le projet, nom d'origine du STEP conservé et visible ; commande `repere_renommer` (confirmée). DES-04 (renommer dans l'arborescence) à faire.
 - Application autonome 1.3.0 → **1.4.0**. La v1.6 passe en archive figée.

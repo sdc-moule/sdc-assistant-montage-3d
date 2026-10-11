@@ -27,7 +27,7 @@ THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
 THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
 THREE.Mesh.prototype.raycast = acceleratedRaycast;
 
-const APP_VERSION = '1.4.0';
+const APP_VERSION = '1.5.0';
 const $ = id => document.getElementById(id);
 const el = (tag, props = {}, ...kids) => { const e = document.createElement(tag); for (const [k, v] of Object.entries(props)) { if (k === 'class') e.className = v; else if (k === 'style') e.style.cssText = v; else if (k.startsWith('on')) e[k] = v; else if (v !== undefined && v !== null) e.setAttribute(k, v); } for (const k of kids.flat()) if (k !== null && k !== undefined && k !== false) e.append(k instanceof Node ? k : document.createTextNode(String(k))); return e; };
 const fmt = (x, d = 1) => (Number.isFinite(x) ? (Math.abs(x) < 0.5 * 10 ** -d ? 0 : x).toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d }) : '—');
@@ -125,7 +125,8 @@ async function openFile(file) {
   await loadBytes(bytes, file.name);
 }
 
-async function loadBytes(bytes, name) {
+let fichierOuvert = null; // octets du fichier ouvert (en mémoire seulement) : permet de changer la finesse d'affichage à chaud
+async function loadBytes(bytes, name, garder = null) {
   busy('Calcul de l\'empreinte du fichier…');
   try {
     const hash = await sha256(bytes);
@@ -144,14 +145,17 @@ async function loadBytes(bytes, name) {
     }
     busy('Construction de la vue 3D…');
     await new Promise(r => setTimeout(r, 20));
-    install(res, name, hash);
+    fichierOuvert = { bytes, name }; install(res, name, hash);
     busy('Recherche des perçages et circuits…');
     await new Promise(r => setTimeout(r, 20));
     analyseDrilling();
-    restoreLocal();
-    refreshAll();
-    setView('iso');
-    toast(`${S.parts.length} occurrences, ${S.bom.length} repères. Identifications à vérifier.`, 5000);
+    if (garder) { // changement de finesse : annotations, groupes, coches et affichage (caméra, visibilité, coupes, éclaté…) conservés
+      applyProject(garder.projet, true); applyViewState(garder.vue);
+      toast(`Affichage ${$('quality').selectedOptions[0].textContent.replace('Affichage ', '')} : ${S.parts.length} occurrences, annotations et vue conservées.`, 5000);
+    } else {
+      restoreLocal(); refreshAll(); setView('iso');
+      toast(`${S.parts.length} occurrences, ${S.bom.length} repères. Identifications à vérifier.`, 5000);
+    }
   } catch (err) {
     console.error(err);
     toast('Ouverture impossible : ' + err.message, 8000);
@@ -1155,6 +1159,10 @@ function wire() {
   $('ghost-toggle').onclick = () => { S.ghost = !S.ghost; syncToggles(); applyDisplay(); };
   $('edges-toggle').onclick = () => { S.edges = !S.edges; syncToggles(); busy(S.edges ? 'Calcul des arêtes…' : ''); setTimeout(() => { applyDisplay(); busy(''); }, 20); };
   $('bubbles-toggle').onclick = () => { S.bubbles = !S.bubbles; syncToggles(); };
+  $('quality').onchange = () => {
+    if (!fichierOuvert) return toast('Finesse choisie : appliquée à la prochaine ouverture.');
+    loadBytes(fichierOuvert.bytes, fichierOuvert.name, { projet: projectData(), vue: viewState() });
+  };
   $('color-mode').onchange = () => { S.colorMode = $('color-mode').value; applyDisplay(); };
   $('bubble-scope').onchange = () => { S.bubbleScope = $('bubble-scope').value; };
   $('classify').append(...CATEGORIES.map(c => el('option', { value: c.id }, c.label)));

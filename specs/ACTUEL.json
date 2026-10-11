@@ -1,12 +1,13 @@
 {
-  "version_courante": "1.7",
-  "json": "specs/v1.7/SDC_Assistant_Montage_3D_v1_7_FR.json",
-  "md": "specs/v1.7/SDC_Cahier_des_charges_Montage_3D_v1_7_FR.md",
+  "version_courante": "1.8",
+  "json": "specs/v1.8/SDC_Assistant_Montage_3D_v1_8_FR.json",
+  "md": "specs/v1.8/SDC_Cahier_des_charges_Montage_3D_v1_8_FR.md",
   "archives": [
     "specs/v1.2/",
     "specs/v1.3/",
     "specs/v1.4/",
     "specs/v1.5/",
-    "specs/v1.6/"
+    "specs/v1.6/",
+    "specs/v1.7/"
   ]
 }
