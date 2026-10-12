@@ -897,6 +897,18 @@
         "Message d'aide de la vue 2D ; documenté dans docs/standalone.md"
       ],
       "note": ""
+    },
+    {
+      "id": "DXF-05",
+      "domaine": "dxf_2d",
+      "exigence": "Outil hors application tools/pdf_vers_dxf.py : conversion d'un plan PDF VECTORIEL en DXF 2D (traits et courbes → polylignes par calque couleur/pointillé, textes avec rotation, unité mm papier). Images et remplissages pleins non repris ; un PDF scanné n'est pas convertible. Cotes du DXF obtenu = cotes papier, à diviser par l'échelle de chaque vue.",
+      "statut": "fait",
+      "livrable": "autonome",
+      "reception_atelier": "à faire",
+      "preuve": [
+        "Plan MOU-101962-01 (A2) converti : 1767 polylignes, 1124 textes, cadre 594×420 mm, relu dans la vue 2D (capture)"
+      ],
+      "note": "Vérifier sur plan réel : échelle de chaque vue (4:1, 40:1)."
     }
   ],
   "module_percages_circuits": {

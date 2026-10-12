@@ -122,10 +122,10 @@ export function ouvrirDxf(dessin, nom, { toast = () => {} } = {}) {
     const cal = new Map(E.d.calques.map(c => [c.nom, c]));
     for (const o of E.d.items) {
       if (!visible(o)) continue;
-      const cl = cal.get(o.layer), col = ACI[cl?.couleur] ?? ACI[7];
+      const cl = cal.get(o.layer), col = cl?.rgb ?? ACI[cl?.couleur] ?? ACI[7];
       ctx.strokeStyle = o.pointille ? '#6b7b8c' : col; ctx.lineWidth = o.pointille ? 1 : 1.5;
       ctx.setLineDash(o.pointille ? [7, 4] : []);
-      if (o.kind === 'text') { const [X, Y] = px(o.pts[0][0], o.pts[0][1]); ctx.setLineDash([]); ctx.fillStyle = col; ctx.font = `${Math.max(9, o.h * E.vue.s)}px system-ui, sans-serif`; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.fillText(o.texte, X, Y); continue; }
+      if (o.kind === 'text') { const [X, Y] = px(o.pts[0][0], o.pts[0][1]); ctx.setLineDash([]); if (o.h * E.vue.s < 3) continue; ctx.fillStyle = col; ctx.font = `${o.h * E.vue.s}px system-ui, sans-serif`; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.save(); ctx.translate(X, Y); ctx.rotate(-(o.rot || 0)); ctx.fillText(o.texte, 0, 0); ctx.restore(); continue; }
       ctx.beginPath();
       o.pts.forEach((p, i) => { const [X, Y] = px(p[0], p[1]); if (i) ctx.lineTo(X, Y); else ctx.moveTo(X, Y); });
       ctx.stroke();

@@ -153,7 +153,8 @@ function convertir(e, m, ctx, prof) {
     }
     case 'TEXT': case 'MTEXT': {
       const t = str(g, 1).replace(/\\P/g, ' ').replace(/\{?\\[A-Za-z][^;]*;/g, '').replace(/[{}]/g, '');
-      if (t.trim()) { const p = T(num(g, 10), num(g, 20)); out.push({ kind: 'text', layer, texte: t, h: num(g, 40, 2.5) * (Math.sqrt(Math.abs(det(m))) || 1), pts: [p], snap: [] }); }
+      if (t.trim()) { const p = T(num(g, 10), num(g, 20)); const r0 = (num(g, 50) * Math.PI) / 180, v = apv(m, [Math.cos(r0), Math.sin(r0)]);
+      out.push({ kind: 'text', layer, texte: t, h: num(g, 40, 2.5) * (Math.sqrt(Math.abs(det(m))) || 1), rot: Math.atan2(v[1], v[0]), pts: [p], snap: [] }); }
       break;
     }
     case 'INSERT': {
@@ -195,9 +196,9 @@ export function lireDxf(source) {
 
   // Calques
   const calques = new Map();
-  const ajoutCalque = (nom, o = {}) => { if (!calques.has(nom)) calques.set(nom, { nom, couleur: o.couleur ?? 7, ltype: o.ltype ?? 'CONTINUOUS', gele: !!o.gele, nb: 0 }); };
+  const ajoutCalque = (nom, o = {}) => { if (!calques.has(nom)) calques.set(nom, { nom, rgb: o.rgb ?? null, couleur: o.couleur ?? 7, ltype: o.ltype ?? 'CONTINUOUS', gele: !!o.gele, nb: 0 }); };
   const tables = sec.TABLES ?? [];
-  for (const t of tables) if (t.type === 'LAYER') { const f = num(t.g, 70); ajoutCalque(str(t.g, 2), { couleur: Math.abs(num(t.g, 62, 7)), ltype: str(t.g, 6, 'CONTINUOUS'), gele: (f & 1) === 1 || num(t.g, 62, 7) < 0 }); }
+  for (const t of tables) if (t.type === 'LAYER') { const f = num(t.g, 70); ajoutCalque(str(t.g, 2), { rgb: (v => v == null ? null : '#' + (v & 0xffffff).toString(16).padStart(6, '0'))((() => { const c = t.g.find(([k]) => k === 420); return c ? parseInt(c[1], 10) : null; })()), couleur: Math.abs(num(t.g, 62, 7)), ltype: str(t.g, 6, 'CONTINUOUS'), gele: (f & 1) === 1 || num(t.g, 62, 7) < 0 }); }
 
   // Blocs
   const blocs = {}; let bc = null;
