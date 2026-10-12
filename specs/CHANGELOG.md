@@ -1,5 +1,11 @@
 # Historique du cahier des charges
 
+## 1.17 — 12 octobre 2026 (Claude Code, **décision écrite de Christophe** : limites du niveau 2)
+Texte de Christophe : « nous allons utiliser le niveau 2 uniquement pour la projection d'une pièce 3D en mise en plan 2D à l'échelle 1 avec les 3 vues orthogonales, et si c'est un diamètre, une coupe sur le plan ZX passant par l'axe du diamètre ; possibilité de faire une coupe par rapport à une vue choisie sur le plan XZ ou YZ par rapport à une sélection cliquable (centre de cercle, intersection ou milieu de droite) ; la cotation se fera par l'opérateur en cliquant sur les éléments, si cercle détecté mettre le signe Ø, faire les traits de cote et les lignes de rappel en trait fin, et l'endroit de la mise en place de la cotation est fait par l'opérateur en cliquant sur une zone hors pièce ».
+- **MEP-01** : bouton « Mise en plan » — trois vues 1:1 en projection européenne, arêtes cachées en pointillé, cercles/arcs reconnus. **MEP-02** : coupe A-A automatique suivant l'axe d'une pièce de révolution. **MEP-03** : coupe XZ ou YZ par un point cliqué. **MEP-04** : cotation par l'opérateur (H, V, alignée, Ø/R), Ø automatique, traits fins, placement par clic hors pièce. **MEP-05** : garde-fous.
+- Limites consignées (hors périmètre sauf nouvelle décision) : pas de cotation automatique sur la mise en plan, pas de vues auxiliaires/isométriques, pas de coupes décalées ou brisées, pas d'export DXF/PDF du plan, ellipses (cercles non parallèles aux axes) non reconnues. Plan généré = proposé, valeurs indicatives (maillage ≈ ±0,05 mm), aucune validation de fabrication.
+- Application autonome 1.11.0 → **1.12.0**. La v1.16 passe en archive figée.
+
 ## 1.16 — 12 octobre 2026 (Claude Code, **décision écrite de Christophe** : « Commençons avec le niveau 1 — pour le niveau 2, nous allons établir des limites »)
 - **DXF-09** (niveau 1) : cotation automatique proposée sur plan 2D — référence + zone, cotes ordonnées X/Y et Ø/R groupés, à valider/ignorer/supprimer, CSV avec statut.
 - **Niveau 2 (mise en plan automatique depuis une pièce 3D isolée) : NON commencé.** Christophe doit d'abord fixer les limites (vues, cotes, formats, ce qui reste hors périmètre) ; elles seront consignées ici avant tout code. Rappel : plan généré = proposé, non contractuel, aucune validation de fabrication.

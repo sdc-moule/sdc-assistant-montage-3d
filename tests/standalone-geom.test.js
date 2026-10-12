@@ -6,6 +6,7 @@ import { partsFromOcct } from '../standalone/src/geom/from-occt.js';
 import { extractCylinders, eigenSym3, fitCircle2D } from '../standalone/src/geom/holes.js';
 import { buildNetworks, closestSegments } from '../standalone/src/geom/circuits.js';
 import { meshStats, buildBom } from '../standalone/src/geom/bom.js';
+import { creerMiseEnPlan } from '../standalone/src/geom/mise-en-plan.js';
 
 const occ = await occt();
 const res = occ.ReadStepFile(new Uint8Array(fs.readFileSync(new URL('./fixtures/bcr_synthetique.step', import.meta.url))),
@@ -247,4 +248,79 @@ test('Cotation auto : plans PDF réels — traits forts = contours épais, plafo
   const d = await lirePdf(pdfjs, new Uint8Array(fs.readFileSync('/root/.claude/uploads/670a3e29-2440-50bb-803d-1d87f8fac8e4/e4883814-11193_01_Plaque_semelle_SUP_2D.pdf')));
   const t0 = Date.now(), r = proposerCotes(d, { origine: { x: 0, y: 0 }, zone: d.cadre });
   assert.ok(Date.now() - t0 < 20000 && r.xs.length <= 60 && r.ys.length <= 60 && r.dias.length > 0);
+});
+
+// ——— Mise en plan 2D : trois vues à l'échelle 1:1 et coupes (MEP-01 à MEP-05) ———
+const plaque = byName('PLAQUE_PORTE_EMPREINTE');
+const proche = (a, b, t = 0.01) => Math.abs(a - b) <= t;
+
+test('mise en plan : trois vues 1:1 en projection européenne (MEP-01)', () => {
+  const mp = creerMiseEnPlan(plaque);
+  const dim = id => { const e = mp.vues[id].emprise; return [e[2] - e[0], e[3] - e[1]]; };
+  assert.ok(dim('face').every((v, i) => proche(v, [300, 40][i], 0.01)), 'face 300 × 40');
+  assert.ok(dim('dessus').every((v, i) => proche(v, [300, 250][i], 0.01)), 'dessus 300 × 250');
+  assert.ok(dim('gauche').every((v, i) => proche(v, [250, 40][i], 0.01)), 'gauche 250 × 40');
+  const bx = id => { const v = mp.vues[id], e = v.emprise, o = v.off; return [e[0] + o[0], e[1] + o[1], e[2] + o[0], e[3] + o[1]]; };
+  const F = bx('face'), D = bx('dessus'), G = bx('gauche');
+  assert.ok(proche(D[0], F[0]) && proche(D[2], F[2]), 'dessus aligné sous la vue de face');
+  assert.ok(D[3] < F[1], 'dessus placé SOUS la vue de face');
+  assert.ok(proche(G[1], F[1]) && proche(G[3], F[3]), 'gauche alignée à droite de la vue de face');
+  assert.ok(G[0] > F[2], 'gauche placée à DROITE de la vue de face');
+  assert.equal(mp.axe, null, 'une plaque n’est pas une pièce de révolution : pas de coupe automatique');
+  assert.equal(mp.vueDe(F[0] + 10, F[1] + 5).vue, 'face');
+  assert.ok(mp.dansPiece(F[0] + 1, F[1] + 1) && !mp.dansPiece((F[2] + G[0]) / 2, F[1] + 5), 'la zone entre deux vues est « hors pièce »');
+});
+
+test('mise en plan : cercles reconnus et arêtes cachées en pointillé (MEP-02)', () => {
+  const mp = creerMiseEnPlan(plaque), cercles = id => mp.vues[id].items.filter(o => o.kind === 'circle');
+  const dessus = cercles('dessus');
+  const gros = dessus.filter(o => !o.pointille && proche(o.r, 30, 0.05));
+  assert.equal(gros.length, 1, 'logement Ø60 de la vue de dessus');
+  assert.ok(proche(gros[0].c[0], -60, 0.05) && proche(gros[0].c[1], 60, 0.05), 'centre (−60 ; 60)');
+  assert.equal(dessus.filter(o => !o.pointille && proche(o.r, 5, 0.05)).length, 4, '4 perçages Ø10 aux angles');
+  assert.ok(dessus.some(o => o.pointille && proche(o.r, 4, 0.05)), 'forages Ø8 vus par la tranche : cercles cachés');
+  assert.ok(mp.vues.face.items.some(o => o.pointille && o.kind === 'line'), 'forages cachés en pointillé dans la vue de face');
+  assert.ok(dessus.every(o => o.snap.some(s => s.t === 'centre')), 'le centre de chaque cercle est une accroche');
+  assert.ok(mp.vues.dessus.items.filter(o => o.kind === 'line' && !o.pointille).length >= 4, 'contour rectangulaire');
+});
+
+test('mise en plan : pièce de révolution, coupe A-A suivant l’axe, hachures, axe (MEP-03)', () => {
+  const busette = byName('BUSETTE_D20')[0];
+  const mp = creerMiseEnPlan([busette]);
+  assert.equal(mp.axe.axe, 'Z'); assert.equal(mp.axe.plan, 'XZ');
+  assert.equal(mp.sections.length, 1); const S = mp.sections[0];
+  assert.ok(S.auto && S.nom === 'Coupe A-A');
+  assert.ok(S.items.filter(o => o.hachure).length > 5, 'section hachurée');
+  assert.ok(S.items.every(o => !o.pointille), 'pas d’arêtes cachées dans une coupe');
+  const cx = (S.boite[0] + S.boite[2]) / 2;
+  assert.ok(proche(S.axeLocal.pos, cx, 0.05) && S.axeLocal.dir === 'V', 'axe de révolution au milieu de la coupe');
+  assert.deepEqual(mp.axeAt(cx, (S.boite[1] + S.boite[3]) / 2), S.axeLocal);
+  assert.equal(mp.axeAt(S.boite[0] - 100, 0), null);
+  const d = mp.dessin();
+  assert.ok(d.items.some(o => o.layer === 'Axes') && d.items.some(o => o.layer === 'Plan de coupe'), 'axes et traits de coupe sur le dessin');
+});
+
+test('mise en plan : coupe choisie par un point cliqué, évidement non hachuré, doublon refusé (MEP-04)', () => {
+  const mp = creerMiseEnPlan(plaque);
+  const pt = mp.vueDe(mp.vues.dessus.off[0] - 60, mp.vues.dessus.off[1] + 60, 0.5);
+  assert.equal(pt.vue, 'dessus'); assert.ok(proche(pt.Y, 60, 0.01));      // centre du logement Ø60
+  const S = mp.ajouterCoupe('XZ', pt.Y);
+  assert.equal(S.nom, 'Coupe A-A'); assert.ok(!S.auto && S.plan === 'XZ');
+  const hach = S.items.filter(o => o.hachure);
+  const couvre = (x, z) => hach.some(h => { const [a, c] = h.pts, t = (z - a[1]) / (c[1] - a[1]); return t >= 0 && t <= 1 && Math.abs(a[0] + t * (c[0] - a[0]) - x) < 3; });
+  assert.ok(!couvre(-60, 62), 'le logement Ø60 (centre −60 ; Z 62, près de la face supérieure) n’est pas hachuré');
+  assert.ok(couvre(-60, 33), 'sous le fond du logement, la matière est hachurée');
+  assert.ok(couvre(100, 38) && couvre(-140, 38), 'la matière est hachurée');
+  assert.ok(!couvre(100, 50), 'le forage Ø8 coupé suivant son axe (Z 46–54) n’est pas hachuré');
+  assert.throws(() => mp.ajouterCoupe('XZ', 60), /existe déjà/);
+  assert.throws(() => mp.ajouterCoupe('YZ', 1000), /ne rencontre pas/);
+  const S2 = mp.ajouterCoupe('YZ', -60);                                      // plan YZ par le même centre (X = −60)
+  assert.equal(S2.nom, 'Coupe B-B'); assert.ok(S2.boite[0] > S.boite[2], 'coupes alignées côte à côte, sans chevauchement');
+  assert.equal(mp.retirerCoupe().nom, 'Coupe B-B'); assert.equal(mp.sections.length, 1);
+});
+
+test('mise en plan : le STEP n’est jamais modifié et une sélection vide est refusée (MEP-05)', () => {
+  const avant = plaque[0].positions.slice(); creerMiseEnPlan(plaque);
+  assert.deepEqual(Array.from(plaque[0].positions), Array.from(avant), 'maillage d’origine intact');
+  assert.throws(() => creerMiseEnPlan([]), /Aucune géométrie/);
 });

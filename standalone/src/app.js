@@ -7,6 +7,7 @@ import { readCad, sha256 } from './step-loader.js';
 import { lireDxf } from './geom/dxf.js';
 import { lirePdf } from './geom/pdf.js';
 import { ouvrirDxf } from './dxf-view.js';
+import { creerMiseEnPlan } from './geom/mise-en-plan.js';
 import { partsFromOcct } from './geom/from-occt.js';
 import { meshStats, buildBom, toCsv, signature } from './geom/bom.js';
 import { extractCylinders } from './geom/holes.js';
@@ -31,7 +32,7 @@ THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
 THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
 THREE.Mesh.prototype.raycast = acceleratedRaycast;
 
-const APP_VERSION = '1.11.0';
+const APP_VERSION = '1.12.0';
 const $ = id => document.getElementById(id);
 const el = (tag, props = {}, ...kids) => { const e = document.createElement(tag); for (const [k, v] of Object.entries(props)) { if (k === 'class') e.className = v; else if (k === 'style') e.style.cssText = v; else if (k.startsWith('on')) e[k] = v; else if (v !== undefined && v !== null) e.setAttribute(k, v); } for (const k of kids.flat()) if (k !== null && k !== undefined && k !== false) e.append(k instanceof Node ? k : document.createTextNode(String(k))); return e; };
 const fmt = (x, d = 1) => (Number.isFinite(x) ? (Math.abs(x) < 0.5 * 10 ** -d ? 0 : x).toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d }) : '—');
@@ -607,6 +608,24 @@ function select(ids, additive = false) {
 }
 function clearSel() { S.sel.clear(); S.selFeature = null; refreshAll(); }
 function hideSel() { if (!S.sel.size) return; pushHistory(); for (const id of S.sel) S.items[id].visible = false; S.sel.clear(); refreshAll(); }
+// Mise en plan 2D : projection de la sélection (sinon des pièces visibles) en trois vues à l'échelle 1:1, puis coupes et cotation par l'opérateur.
+async function miseEnPlan() {
+  if (!S.parts.length) return toast('Ouvrir d\'abord un fichier STEP.');
+  const ids = S.sel.size ? [...S.sel] : S.parts.filter(p => S.items[p.id]?.visible).map(p => p.id);
+  const parts = S.parts.filter(p => ids.includes(p.id));
+  if (!parts.length) return toast('Aucune pièce visible à mettre en plan.');
+  const tri = parts.reduce((t, p) => t + p.index.length / 3, 0);
+  if (!S.sel.size && parts.length > 1 && !confirm(`Mise en plan de ${parts.length} pièces visibles (aucune sélection). Pour un plan lisible, sélectionner ou isoler d'abord une pièce. Continuer ?`)) return;
+  if (tri > 400000 && !confirm(`${Math.round(tri / 1000)} 000 triangles : le calcul peut durer plusieurs dizaines de secondes. Continuer ?`)) return;
+  busy('Projection des trois vues…'); await new Promise(r => setTimeout(r, 50));
+  try {
+    const mp = creerMiseEnPlan(parts), row = parts.length === 1 ? S.rowOf.get(parts[0].id) : null, n = row ? nomRow(row) : parts.length === 1 ? parts[0].name : `${parts.length} pièces`;
+    busy(false);
+    ouvrirDxf(mp.dessin(), `${n}`, { toast, mp });
+    toast(mp.axe ? `Pièce de révolution (axe ${mp.axe.axe}) : coupe A-A proposée suivant l'axe.` : 'Trois vues à l\'échelle 1:1. Outil « Coupe » : plan XZ ou YZ par un point cliqué.', 5000);
+  } catch (e) { busy(false); console.warn('mise en plan', e); toast('Mise en plan impossible : ' + e.message, 6000); }
+}
+
 function isolateSel() { if (!S.sel.size) return; pushHistory(); for (const id of S.objs.keys()) S.items[id].visible = S.sel.has(id); refreshAll(); fitSelection(); }
 function showAll() { pushHistory(); for (const it of Object.values(S.items)) { it.visible = true; it.opacity = 1; } S.catOff.clear(); refreshAll(); }
 
@@ -1237,7 +1256,7 @@ function wire() {
   $('cotes-hide-all').onclick = () => { for (const c of S.cotes) c.visible = false; refreshAll(); };
   $('cotes-del-all').onclick = () => { if (S.cotes.length && confirm(`Supprimer les ${S.cotes.length} cotes ?`)) { S.cotes = []; refreshAll(); } };
   $('undo').onclick = undo; $('redo').onclick = redo;
-  $('s-fit').onclick = fitSelection; $('s-hide').onclick = hideSel; $('s-isolate').onclick = isolateSel; $('s-clear').onclick = clearSel;
+  $('s-fit').onclick = fitSelection; $('s-hide').onclick = hideSel; $('s-isolate').onclick = isolateSel; $('s-plan').onclick = miseEnPlan; $('plan-btn').onclick = miseEnPlan; $('s-clear').onclick = clearSel;
   $('s-opacity').onpointerdown = () => pushHistory();
   $('s-opacity').oninput = () => { for (const id of S.sel) S.items[id].opacity = +$('s-opacity').value / 100; applyDisplay(); };
   $('s-opacity').onchange = () => saveLocal();
