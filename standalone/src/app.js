@@ -4,6 +4,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
 import { readCad, sha256 } from './step-loader.js';
+import { lireDxf } from './geom/dxf.js';
+import { ouvrirDxf } from './dxf-view.js';
 import { partsFromOcct } from './geom/from-occt.js';
 import { meshStats, buildBom, toCsv, signature } from './geom/bom.js';
 import { extractCylinders } from './geom/holes.js';
@@ -28,7 +30,7 @@ THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
 THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
 THREE.Mesh.prototype.raycast = acceleratedRaycast;
 
-const APP_VERSION = '1.8.0';
+const APP_VERSION = '1.9.0';
 const $ = id => document.getElementById(id);
 const el = (tag, props = {}, ...kids) => { const e = document.createElement(tag); for (const [k, v] of Object.entries(props)) { if (k === 'class') e.className = v; else if (k === 'style') e.style.cssText = v; else if (k.startsWith('on')) e[k] = v; else if (v !== undefined && v !== null) e.setAttribute(k, v); } for (const k of kids.flat()) if (k !== null && k !== undefined && k !== false) e.append(k instanceof Node ? k : document.createTextNode(String(k))); return e; };
 const fmt = (x, d = 1) => (Number.isFinite(x) ? (Math.abs(x) < 0.5 * 10 ** -d ? 0 : x).toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d }) : '—');
@@ -121,7 +123,12 @@ async function openFile(file) {
       return loadBytes(z.bytes, z.name);
     } catch (err) { busy(''); toast('Archive : ' + err.message, 8000); return; }
   }
-  if (!/\.(step|stp|iges|igs|brep)$/i.test(file.name)) { toast('Choisir un fichier STEP / STP (ou IGES), éventuellement zippé.'); return; }
+  if (/\.dxf$/i.test(file.name)) {
+    try { const d = lireDxf(await file.arrayBuffer()); if (!d.items.length) return toast('DXF sans entité 2D reconnue.', 6000); ouvrirDxf(d, file.name, { toast }); }
+    catch (err) { toast('DXF illisible : ' + err.message, 8000); }
+    return;
+  }
+  if (!/\.(step|stp|iges|igs|brep)$/i.test(file.name)) { toast('Choisir un fichier STEP / STP (ou IGES), ou un plan DXF, éventuellement zippé.'); return; }
   const bytes = await file.arrayBuffer();
   await loadBytes(bytes, file.name);
 }

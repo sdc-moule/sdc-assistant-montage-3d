@@ -156,3 +156,53 @@ test('cotation : faces parallèles, Ø, entraxe, axe-face, angle', async () => {
   const ang = coteEntre({ ...side, hit: side.p }, { ...bottom, hit: bottom.p });
   assert.equal(ang.kind, 'angle'); assert.ok(Math.abs(ang.value - 90) < 0.01);
 });
+
+// ——— DXF 2D (DXF-01…) ———
+import { lireDxf, estDxf, distance, angleEntre, accroche, entiteProche } from '../standalone/src/geom/dxf.js';
+const dxfSynth = () => lireDxf(fs.readFileSync(new URL('./fixtures/plan_synthetique.dxf', import.meta.url)));
+
+test('DXF : lecture du plan synthétique (entités, calques, unité)', () => {
+  const buf = fs.readFileSync(new URL('./fixtures/plan_synthetique.dxf', import.meta.url));
+  assert.ok(estDxf(buf));
+  const d = dxfSynth();
+  assert.equal(d.unite, 'mm');
+  assert.equal(d.items.filter(o => o.kind === 'line').length, 5);
+  assert.equal(d.items.filter(o => o.kind === 'circle').length, 3); // cercle, trou inséré, ellipse ronde
+  assert.deepEqual(d.calques.map(c => c.nom).sort(), ['0', 'Cache']);
+  assert.ok(d.items.find(o => o.layer === 'Cache').pointille, 'calque HIDDEN → pointillé');
+  assert.deepEqual([d.cadre.x0, d.cadre.y0, d.cadre.x1, d.cadre.y1].map(v => Math.round(v)), [0, 0, 100, 80]);
+});
+
+test('DXF : cotes chiffrées (distance, Ø, R, angle)', () => {
+  const d = dxfSynth();
+  assert.ok(Math.abs(distance({ x: 0, y: 0 }, { x: 100, y: 60 }) - 116.619) < 1e-3);
+  const c = d.items.find(o => o.kind === 'circle' && o.c[0] === 50);
+  assert.ok(Math.abs(2 * c.r - 20) < 1e-9, 'Ø 20');
+  const a = d.items.find(o => o.kind === 'arc');
+  assert.ok(Math.abs(a.r - 15) < 1e-9, 'R 15');
+  assert.ok(Math.abs(angleEntre({ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }) - 90) < 1e-9);
+  const rond = d.items.find(o => o.kind === 'circle' && Math.abs(o.c[0] - 70) < 1e-9);
+  assert.ok(Math.abs(rond.r - 5) < 1e-9, 'ellipse de rapport 1 = cercle R5');
+});
+
+test('DXF : normale -Z (miroir X) et bloc INSERT', () => {
+  const d = dxfSynth();
+  const el = d.items.find(o => o.kind === 'ellipse');
+  assert.ok(Math.abs(el.c[0] - 40) < 1e-9 && Math.abs(el.c[1] - 20) < 1e-9, 'centre monde (40,20), normale −Z');
+  const trou = d.items.find(o => o.kind === 'circle' && Math.abs(o.c[0] - 20) < 1e-9);
+  assert.ok(trou && Math.abs(trou.c[1] - 20) < 1e-9 && Math.abs(2 * trou.r - 6) < 1e-9, 'bloc TROU inséré en (20,20), Ø6');
+});
+
+test('DXF : accroche (extrémité, centre, intersection) et entité proche', () => {
+  const d = dxfSynth();
+  const s1 = accroche(d, 99.5, 0.4, 2); assert.equal(s1.t, 'extrémité'); assert.ok(Math.abs(s1.x - 100) < 1e-9 && Math.abs(s1.y) < 1e-9);
+  const s2 = accroche(d, 50.3, 30.2, 2); assert.equal(s2.t, 'centre');
+  const s3 = accroche(d, 10.2, 49.9, 2); assert.ok(s3 && s3.x === 10 && s3.y === 50, 'extrémité de la ligne du calque Cache');
+  assert.equal(entiteProche(d, 50, 40, 1.5).kind, 'circle'); // sommet du cercle Ø20 centré (50,30)
+});
+
+test('DXF : plan d\'exemple réel (si présent) — tout est lisible', { skip: !fs.existsSync('/root/.claude/uploads/670a3e29-2440-50bb-803d-1d87f8fac8e4/e79263bc-empreinte_axone_design_.dxf') }, () => {
+  const d = lireDxf(fs.readFileSync('/root/.claude/uploads/670a3e29-2440-50bb-803d-1d87f8fac8e4/e79263bc-empreinte_axone_design_.dxf'));
+  assert.equal(d.items.length, 97); assert.equal(d.unite, 'mm');
+  assert.ok(d.cadre.x1 > 93 && d.cadre.y0 < -75);
+});

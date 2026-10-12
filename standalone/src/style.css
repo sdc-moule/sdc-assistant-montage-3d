@@ -397,3 +397,16 @@ body.compact .selbar { top: 6px; bottom: auto; max-width: calc(100% - 12px); fle
 body.compact .selbar .op input[type=range] { width: calc(80px * var(--k)); }
 body.compact #toast { z-index: 40; max-width: min(420px, 80vw); top: calc(var(--top-h) + 8px); }
 body.compact .welcome h1 { font-size: 22px; } body.compact .welcome { padding: 10px; }
+
+/* Plan 2D DXF (DXF-01…) */
+.dxf-view { position: fixed; inset: 0; z-index: 70; display: flex; flex-direction: column; background: #fff; }
+.dxf-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 8px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.dxf-bar strong { margin-right: 8px; max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dxf-outil.on { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.dxf-zone { position: relative; flex: 1; min-height: 0; }
+.dxf-canvas { display: block; cursor: crosshair; }
+.dxf-aide, .dxf-info { position: absolute; left: 8px; padding: 4px 8px; background: rgba(251,252,253,.92); border: 1px solid var(--line); border-radius: 6px; font-size: 13px; pointer-events: none; max-width: calc(100% - 16px); }
+.dxf-aide { top: 8px; } .dxf-info { bottom: 8px; color: var(--muted); }
+.dxf-calques { position: absolute; top: 44px; right: 8px; max-height: 60%; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.15); }
+.dxf-calques .mi { display: flex; gap: 8px; padding: 6px 8px; min-height: 32px; align-items: center; }
+body.compact .dxf-bar { gap: 4px; padding: 4px; } body.compact .dxf-bar strong { display: none; }

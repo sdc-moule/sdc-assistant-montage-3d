@@ -1,5 +1,10 @@
 # Historique du cahier des charges
 
+## 1.14 — 12 octobre 2026 (Claude Code, demande de Christophe : lire un plan DXF et prendre des cotes)
+- Nouveau domaine **DXF** (DXF-01 à DXF-04) : ouverture d'un plan 2D DXF, affichage plein écran avec calques, cotation (distance, ΔX/ΔY, Ø/R, angle, accroches, export CSV). Pas de coupe ni de détection sur un plan 2D.
+- Limite signalée (DXF-04) : un DXF exporté d'une vue isométrique se mesure en longueurs projetées.
+- Application autonome 1.8.0 → **1.9.0**. La v1.13 passe en archive figée.
+
 ## 1.13 — 12 octobre 2026 (Claude Code, demande de Christophe : écran tactile de 125 mm et circuits)
 - **PER-09** : une couleur propre à chaque circuit / passage aligné (au lieu d'une couleur par classement) ; perçages isolés et alésages en gris.
 - **IHM-03** : affichage adaptatif à la taille de l'écran — mode compact automatique (étapes en icônes, panneaux en recouvrement, barre d'outils 3D repliée) pour un petit écran tactile, réglage manuel « Taille d'écran » dans Réglages ; l'affichage du grand écran (27") reste inchangé. Aucune fonction supprimée.
