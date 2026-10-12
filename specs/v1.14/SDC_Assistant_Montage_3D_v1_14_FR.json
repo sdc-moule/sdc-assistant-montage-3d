@@ -877,12 +877,13 @@
     {
       "id": "DXF-03",
       "domaine": "dxf_2d",
-      "exigence": "Cotation sur le plan 2D : distance entre deux points, ΔX / ΔY, diamètre et rayon d'un cercle ou arc de cercle (ellipse de rapport 1 reconnue comme cercle), angle à trois points ; accroche aux extrémités, milieux, centres, quadrants et intersections ; export CSV des cotes. Valeurs affichées comme indicatives (dessin 2D, non contractuelles).",
+      "exigence": "Cotation sur le plan 2D : distance entre deux points, ΔX / ΔY, diamètre et rayon d'un cercle ou arc de cercle (ellipse de rapport 1 reconnue comme cercle), angle à trois points ; accroche aux extrémités, milieux, centres, quadrants et intersections ; export CSV des cotes. Valeurs affichées comme indicatives (dessin 2D, non contractuelles). Échelle de la vue : liste (1:1 à 1:100, 40:1…), échelles n:1 / 1:n lues dans les textes du plan proposées « à vérifier », ou « Autre… » ; outil « Calibrer » (deux points + vraie longueur connue → échelle déduite). Chaque cote mémorise son échelle, affiche la valeur RÉELLE (papier ÷ échelle) et l'échelle utilisée ; le CSV porte une colonne Échelle. Sans choix, échelle 1:1 annoncée.",
       "statut": "fait",
       "livrable": "autonome",
       "reception_atelier": "à faire",
       "preuve": [
-        "tests « DXF : cotes chiffrées », « accroche » ; e2e distance 116,62 mm, Ø 20, ΔX 100, angle"
+        "tests « DXF : cotes chiffrées », « accroche » ; e2e distance 116,62 mm, Ø 20, ΔX 100, angle",
+        "e2e « échelle 4:1 détectée », « cote à l'échelle 4:1 », « calibrage »"
       ],
       "note": ""
     },

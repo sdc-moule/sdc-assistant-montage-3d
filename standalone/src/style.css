@@ -410,3 +410,5 @@ body.compact .welcome h1 { font-size: 22px; } body.compact .welcome { padding: 1
 .dxf-calques { position: absolute; top: 44px; right: 8px; max-height: 60%; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.15); }
 .dxf-calques .mi { display: flex; gap: 8px; padding: 6px 8px; min-height: 32px; align-items: center; }
 body.compact .dxf-bar { gap: 4px; padding: 4px; } body.compact .dxf-bar strong { display: none; }
+.dxf-echl { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; } .dxf-ech { min-height: 38px; }
+body.compact .dxf-echl { font-size: 0; } body.compact .dxf-ech { font-size: 13px; }

@@ -2,6 +2,7 @@
 
 ## 1.14 — 12 octobre 2026 (Claude Code, demande de Christophe : lire un plan DXF et prendre des cotes)
 - Nouveau domaine **DXF** (DXF-01 à DXF-04) : ouverture d'un plan 2D DXF, affichage plein écran avec calques, cotation (distance, ΔX/ΔY, Ø/R, angle, accroches, export CSV). Pas de coupe ni de détection sur un plan 2D.
+- **DXF-03** complétée : échelle par vue (liste, lecture dans le plan, calibrage) — les cotes sont affichées en vraie grandeur.
 - **DXF-05** : outil `tools/pdf_vers_dxf.py` (PDF vectoriel → DXF).
 - Limite signalée (DXF-04) : un DXF exporté d'une vue isométrique se mesure en longueurs projetées.
 - Application autonome 1.8.0 → **1.9.0**. La v1.13 passe en archive figée.

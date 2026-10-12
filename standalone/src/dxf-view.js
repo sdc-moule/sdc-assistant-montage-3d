@@ -8,6 +8,7 @@ const el = (tag, attrs = {}, ...kids) => {
   for (const k of kids) e.append(k);
   return e;
 };
+const suffixe = (c, nomE) => (Math.abs(c.ech - 1) > 1e-9 ? ` · éch. ${nomE(c.ech)}` : '');
 const f2 = v => v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const ACI = { 1: '#d32f2f', 2: '#b58900', 3: '#2e9e44', 4: '#00838f', 5: '#1f5f8b', 6: '#9c27b0', 7: '#15202b', 8: '#7a8896', 9: '#a0a8b0' };
 
@@ -19,8 +20,33 @@ export function ouvrirDxf(dessin, nom, { toast = () => {} } = {}) {
   fermerDxf();
   const u = dessin.unite || 'mm';
   const E = etat = {
-    d: dessin, nom, u, outil: 'dist', pend: [], cotes: [], masque: new Set(), snap: null,
+    d: dessin, nom, u, outil: 'dist', pend: [], ech: 1, cotes: [], masque: new Set(), snap: null,
     vue: { s: 1, ox: 0, oy: 0 }, w: 0, h: 0, pointeurs: new Map(), toast,
+  };
+  // Échelles lues dans les textes du plan (« 4:1 », « (40:1) », « Echelle: 4/1 ») : proposées, jamais appliquées d'office.
+  const detectees = new Map();
+  for (const o of dessin.items) if (o.kind === 'text') {
+    const m = /(?:^|[^\d.,])(\d+(?:[.,]\d+)?)\s*[:/]\s*(\d+(?:[.,]\d+)?)(?![\d.,])/.exec(o.texte);
+    if (!m) continue; // seulement n:1 ou 1:n retenus ci-dessous (écarte dates, duretés…)
+    const a = parseFloat(m[1].replace(',', '.')), b = parseFloat(m[2].replace(',', '.'));
+    if (a > 0 && b > 0 && a !== b && Math.min(a, b) === 1 && Math.max(a, b) <= 1000) detectees.set(`${m[1]}:${m[2]}`.replace(',', '.'), a / b);
+  }
+  const STANDARD = ['1:1', '2:1', '4:1', '5:1', '10:1', '20:1', '40:1', '1:2', '1:5', '1:10', '1:20', '1:50', '1:100'];
+  const parseEch = t => { const m = /^\s*(\d+(?:[.,]\d+)?)\s*[:/]\s*(\d+(?:[.,]\d+)?)\s*$/.exec(t); if (!m) return null; const v = parseFloat(m[1].replace(',', '.')) / parseFloat(m[2].replace(',', '.')); return v > 0 && Number.isFinite(v) ? v : null; };
+  const nomEch = r => { const c = [...detectees, ...STANDARD.map(x => [x, parseEch(x)])].find(([, v]) => Math.abs(v - r) < 1e-9); return c ? c[0] : `${+r.toFixed(4)}:1`; };
+  const selEch = el('select', { class: 'btn dxf-ech', title: "Échelle de la vue à mesurer (papier : réel). Les cotes suivantes sont ramenées à la vraie grandeur." });
+  const remplirEch = () => {
+    selEch.textContent = '';
+    for (const [k] of detectees) selEch.append(el('option', { value: k }, `${k} (lue dans le plan, à vérifier)`));
+    for (const k of STANDARD) if (!detectees.has(k)) selEch.append(el('option', { value: k }, k + (k === '1:1' ? ' (papier = réel)' : '')));
+    selEch.append(el('option', { value: 'autre' }, 'Autre…'));
+    const cur = nomEch(E.ech);
+    if (![...selEch.options].some(o => o.value === cur)) selEch.insertBefore(el('option', { value: cur }, cur), selEch.firstChild);
+    selEch.value = cur;
+  };
+  selEch.onchange = () => {
+    if (selEch.value === 'autre') { const t = prompt('Échelle de la vue (papier:réel), par exemple 4:1 ou 1:20'); const v = t && parseEch(t); if (v) E.ech = v; else E.toast('Échelle non reconnue : format attendu 4:1 ou 1:20.'); } else E.ech = parseEch(selEch.value) ?? E.ech;
+    remplirEch(); E.pend = []; dessiner();
   };
   const canvas = el('canvas', { class: 'dxf-canvas' });
   const infos = el('div', { class: 'dxf-info' });
@@ -31,11 +57,13 @@ export function ouvrirDxf(dessin, nom, { toast = () => {} } = {}) {
     ['dxy', 'ΔX / ΔY', 'Cliquer deux points : écarts horizontal et vertical'],
     ['rad', 'Ø / R', 'Cliquer un cercle ou un arc : diamètre et rayon'],
     ['ang', 'Angle', 'Cliquer trois points : sommet, puis les deux côtés'],
+    ['cal', 'Calibrer', "Cliquer deux points dont vous connaissez la vraie longueur : l'échelle en est déduite"],
   ];
   const bOut = {};
   const barre = el('div', { class: 'dxf-bar' },
     el('strong', {}, 'Plan 2D · ' + nom),
     ...outils.map(([k, t, h]) => (bOut[k] = el('button', { class: 'btn dxf-outil', title: h, onclick: () => choisir(k) }, t))),
+    el('label', { class: 'dxf-echl' }, 'Échelle ', selEch),
     el('button', { class: 'btn', title: 'Cadrer tout le dessin', onclick: () => cadrer() }, 'Ajuster'),
     el('button', { class: 'btn', title: 'Afficher / masquer des calques', onclick: () => { menuCalques.hidden = !menuCalques.hidden; } }, 'Calques'),
     el('button', { class: 'btn', title: 'Annuler la dernière cote', onclick: () => { E.pend = []; E.cotes.pop(); dessiner(); } }, 'Annuler'),
@@ -97,16 +125,16 @@ export function ouvrirDxf(dessin, nom, { toast = () => {} } = {}) {
     const col = '#e8730c';
     if (c.t === 'dist') {
       const A = px(c.a.x, c.a.y), B = px(c.b.x, c.b.y); fleche(A, B, col);
-      etiquette(`${f2(distance(c.a, c.b))} ${u}`, (A[0] + B[0]) / 2, (A[1] + B[1]) / 2, col);
+      etiquette(`${f2(distance(c.a, c.b) / c.ech)} ${u}${suffixe(c, nomEch)}`, (A[0] + B[0]) / 2, (A[1] + B[1]) / 2, col);
     } else if (c.t === 'dxy') {
       const C = { x: c.b.x, y: c.a.y }, A = px(c.a.x, c.a.y), B = px(c.b.x, c.b.y), K = px(C.x, C.y);
       ctx.setLineDash([4, 4]); ctx.strokeStyle = '#9aa7b4'; ctx.beginPath(); ctx.moveTo(A[0], A[1]); ctx.lineTo(B[0], B[1]); ctx.stroke(); ctx.setLineDash([]);
-      if (Math.abs(c.b.x - c.a.x) > 1e-9) { fleche(A, K, col); etiquette(`ΔX ${f2(Math.abs(c.b.x - c.a.x))} ${u}`, (A[0] + K[0]) / 2, (A[1] + K[1]) / 2 + (B[1] > A[1] ? -16 : 16), col); }
-      if (Math.abs(c.b.y - c.a.y) > 1e-9) { fleche(K, B, col); etiquette(`ΔY ${f2(Math.abs(c.b.y - c.a.y))} ${u}`, K[0] + (B[0] > A[0] ? 34 : -34), (K[1] + B[1]) / 2, col); }
+      if (Math.abs(c.b.x - c.a.x) > 1e-9) { fleche(A, K, col); etiquette(`ΔX ${f2(Math.abs(c.b.x - c.a.x) / c.ech)} ${u}${suffixe(c, nomEch)}`, (A[0] + K[0]) / 2, (A[1] + K[1]) / 2 + (B[1] > A[1] ? -16 : 16), col); }
+      if (Math.abs(c.b.y - c.a.y) > 1e-9) { fleche(K, B, col); etiquette(`ΔY ${f2(Math.abs(c.b.y - c.a.y) / c.ech)} ${u}`, K[0] + (B[0] > A[0] ? 34 : -34), (K[1] + B[1]) / 2, col); }
     } else if (c.t === 'rad') {
       const C = px(c.c.x, c.c.y), r = c.r * E.vue.s;
       ctx.strokeStyle = col; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(C[0] - r * Math.cos(0.7), C[1] + r * Math.sin(0.7)); ctx.lineTo(C[0] + r * Math.cos(0.7), C[1] - r * Math.sin(0.7)); ctx.stroke();
-      etiquette(`Ø ${f2(2 * c.r)} · R ${f2(c.r)} ${u}`, C[0], C[1], col);
+      etiquette(`Ø ${f2(2 * c.r / c.ech)} · R ${f2(c.r / c.ech)} ${u}${suffixe(c, nomEch)}`, C[0], C[1], col);
     } else if (c.t === 'ang') {
       const S = px(c.s.x, c.s.y), A = px(c.a.x, c.a.y), B = px(c.b.x, c.b.y);
       ctx.strokeStyle = col; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(A[0], A[1]); ctx.lineTo(S[0], S[1]); ctx.lineTo(B[0], B[1]); ctx.stroke();
@@ -142,9 +170,10 @@ export function ouvrirDxf(dessin, nom, { toast = () => {} } = {}) {
 
   function texteAide() {
     const o = E.outil, n = E.pend.length;
-    if (o === 'rad') return 'Ø / R : cliquer un cercle ou un arc de cercle.';
+    if (o === 'rad') return 'Ø / R : cliquer un cercle ou un arc de cercle.' + (Math.abs(E.ech - 1) > 1e-9 ? ` Échelle ${nomEch(E.ech)} appliquée.` : '');
     if (o === 'ang') return ['Angle : cliquer le sommet.', 'Angle : cliquer un point du 1er côté.', 'Angle : cliquer un point du 2e côté.'][n] ?? '';
-    return `${o === 'dxy' ? 'ΔX / ΔY' : 'Distance'} : ${n ? 'cliquer le 2e point.' : 'cliquer le 1er point.'} Valeurs indicatives (dessin 2D, non contractuelles).`;
+    const lib = o === 'dxy' ? 'ΔX / ΔY' : o === 'cal' ? 'Calibrage' : 'Distance';
+    return `${lib} : ${n ? 'cliquer le 2e point.' : 'cliquer le 1er point.'} ${Math.abs(E.ech - 1) > 1e-9 ? `Échelle ${nomEch(E.ech)} : valeurs ramenées au réel (indicatif).` : 'Échelle 1:1 (papier = réel) — choisir l\'échelle de la vue si le plan est à l\'échelle.'}`;
   }
   function choisir(k) {
     E.outil = k; E.pend = [];
@@ -163,12 +192,18 @@ export function ouvrirDxf(dessin, nom, { toast = () => {} } = {}) {
   }
   function valider(ev) {
     const p = viser(ev); if (!p) { E.toast('Aucun cercle ou arc de cercle ici (ellipses et splines : mesurer par points).'); return; }
-    if (E.outil === 'rad') { E.cotes.push({ t: 'rad', c: { x: p.o.c[0], y: p.o.c[1] }, r: p.o.r }); E.snap = null; dessiner(); return; }
+    if (E.outil === 'rad') { E.cotes.push({ t: 'rad', c: { x: p.o.c[0], y: p.o.c[1] }, r: p.o.r, ech: E.ech }); E.snap = null; dessiner(); return; }
     E.pend.push({ x: p.x, y: p.y });
-    const need = E.outil === 'ang' ? 3 : 2;
+    const need = E.outil === 'ang' ? 3 : 2;  // « cal » : 2 points
     if (E.pend.length >= need) {
       const [a, b, c] = E.pend;
-      E.cotes.push(E.outil === 'ang' ? { t: 'ang', s: a, a: b, b: c } : { t: E.outil, a, b });
+      if (E.outil === 'cal') {
+        const papier = distance(a, b), t = prompt(`Longueur RÉELLE entre ces deux points (${u}) ? Mesure sur le dessin : ${f2(papier)} ${u}.`);
+        const reel = t ? parseFloat(t.replace(',', '.')) : NaN;
+        if (reel > 0) { E.ech = papier / reel; remplirEch(); E.toast(`Échelle déduite : ${nomEch(E.ech)} (calibrée sur votre longueur).`, 5000); }
+        E.pend = []; dessiner(); return;
+      }
+      E.cotes.push(E.outil === 'ang' ? { t: 'ang', s: a, a: b, b: c, ech: E.ech } : { t: E.outil, a, b, ech: E.ech });
       E.pend = [];
     }
     dessiner();
@@ -216,19 +251,19 @@ export function ouvrirDxf(dessin, nom, { toast = () => {} } = {}) {
 
   function exporter() {
     if (!E.cotes.length) return E.toast('Aucune cote à exporter.');
-    const L = ['N°;Type;Valeur;Unité;Détail (indicatif)'];
+    const L = ['N°;Type;Valeur (réelle, indicative);Unité;Détail papier;Échelle'];
     E.cotes.forEach((c, i) => {
-      const dd = (a, b) => `${f2(a.x)} ; ${f2(a.y)} → ${f2(b.x)} ; ${f2(b.y)}`;
-      if (c.t === 'dist') L.push(`${i + 1};Distance;${f2(distance(c.a, c.b))};${u};${dd(c.a, c.b)}`);
-      if (c.t === 'dxy') L.push(`${i + 1};ΔX;${f2(Math.abs(c.b.x - c.a.x))};${u};${dd(c.a, c.b)}`, `${i + 1};ΔY;${f2(Math.abs(c.b.y - c.a.y))};${u};${dd(c.a, c.b)}`);
-      if (c.t === 'rad') L.push(`${i + 1};Diamètre;${f2(2 * c.r)};${u};centre ${f2(c.c.x)} ; ${f2(c.c.y)}`, `${i + 1};Rayon;${f2(c.r)};${u};`);
-      if (c.t === 'ang') L.push(`${i + 1};Angle;${f2(angleEntre(c.s, c.a, c.b))};°;sommet ${f2(c.s.x)} ; ${f2(c.s.y)}`);
+      const dd = (a, b) => `${f2(a.x)} ; ${f2(a.y)} → ${f2(b.x)} ; ${f2(b.y)}`, ec = nomEch(c.ech);
+      if (c.t === 'dist') L.push(`${i + 1};Distance;${f2(distance(c.a, c.b) / c.ech)};${u};${dd(c.a, c.b)};${ec}`);
+      if (c.t === 'dxy') L.push(`${i + 1};ΔX;${f2(Math.abs(c.b.x - c.a.x) / c.ech)};${u};${dd(c.a, c.b)};${ec}`, `${i + 1};ΔY;${f2(Math.abs(c.b.y - c.a.y) / c.ech)};${u};${dd(c.a, c.b)};${ec}`);
+      if (c.t === 'rad') L.push(`${i + 1};Diamètre;${f2(2 * c.r / c.ech)};${u};centre ${f2(c.c.x)} ; ${f2(c.c.y)};${ec}`, `${i + 1};Rayon;${f2(c.r / c.ech)};${u};;${ec}`);
+      if (c.t === 'ang') L.push(`${i + 1};Angle;${f2(angleEntre(c.s, c.a, c.b))};°;sommet ${f2(c.s.x)} ; ${f2(c.s.y)};`);
     });
     const a = el('a', { href: URL.createObjectURL(new Blob(['﻿' + L.join('\r\n')], { type: 'text/csv;charset=utf-8' })), download: nom.replace(/\.dxf$/i, '') + '_cotes.csv' });
     document.body.append(a); a.click(); a.remove();
   }
 
-  redim(); choisir('dist'); cadrer();
+  remplirEch(); redim(); choisir('dist'); cadrer();
   window.__SDC_DXF__ = E; // utilisé par l'essai navigateur
   return E;
 }

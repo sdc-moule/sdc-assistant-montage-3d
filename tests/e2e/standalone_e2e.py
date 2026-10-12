@@ -542,6 +542,13 @@ with sync_playwright() as p:
     check(D("E.cotes.at(-1).t") == "dxy" and abs(D("E.cotes.at(-1).b.x - E.cotes.at(-1).a.x") - 100) < 0.01, "DXF : ΔX = 100 mm")
     pd.click(".dxf-outil:has-text('Angle')"); clic(0, 0); clic(100, 0); clic(0, 60)
     check(D("E.cotes.at(-1).t") == "ang", "DXF : angle à 3 points créé")
+    # Échelle : « 4:1 » lue dans le texte du plan, proposée ; cotes ramenées au réel (÷ 4)
+    check(pd.evaluate("() => [...document.querySelectorAll('.dxf-ech option')].some(o => o.value === '4:1' && /lue dans le plan/.test(o.textContent))"), "DXF : échelle 4:1 détectée dans le texte du plan")
+    pd.select_option(".dxf-ech", "4:1"); pd.click(".dxf-outil:has-text('Distance')"); clic(0, 0); clic(100, 0)
+    check(abs(D("E.cotes.at(-1).ech") - 4) < 1e-9 and D("E.ech") == 4, "DXF : cote prise à l'échelle 4:1 (100 mm papier = 25 mm réel)")
+    pd.once("dialog", lambda d: d.accept("50"))
+    pd.click(".dxf-outil:has-text('Calibrer')"); clic(0, 0); clic(100, 0)
+    check(abs(D("E.ech") - 2) < 1e-9, "DXF : calibrage (100 mm papier = 50 mm réels → échelle 2:1)")
     # Masquage du calque Cache
     pd.click(".dxf-bar >> text=Calques"); pd.locator(".dxf-calques input").nth(1).uncheck()
     check(D("E.masque.has('Cache')"), "DXF : calque « Cache » masqué")
