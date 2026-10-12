@@ -20,7 +20,7 @@ export function ouvrirDxf(dessin, nom, { toast = () => {} } = {}) {
   fermerDxf();
   const u = dessin.unite || 'mm';
   const E = etat = {
-    d: dessin, nom, u, outil: 'dist', pend: [], ech: 1, cotes: [], masque: new Set(), snap: null,
+    d: dessin, nom, u, outil: 'dist', pend: [], ech: 1, cotesVis: true, survol: null, etiq: [], glisse: null, cotes: [], masque: new Set(), snap: null,
     vue: { s: 1, ox: 0, oy: 0 }, w: 0, h: 0, pointeurs: new Map(), toast,
   };
   // Échelles lues dans les textes du plan (« 4:1 », « (40:1) », « Echelle: 4/1 ») : proposées, jamais appliquées d'office.
@@ -59,13 +59,14 @@ export function ouvrirDxf(dessin, nom, { toast = () => {} } = {}) {
     ['ang', 'Angle', 'Cliquer trois points : sommet, puis les deux côtés'],
     ['cal', 'Calibrer', "Cliquer deux points dont vous connaissez la vraie longueur : l'échelle en est déduite"],
   ];
-  const bOut = {};
+  const bOut = {}; let bCotes = null;
   const barre = el('div', { class: 'dxf-bar' },
     el('strong', {}, 'Plan 2D · ' + nom),
     ...outils.map(([k, t, h]) => (bOut[k] = el('button', { class: 'btn dxf-outil', title: h, onclick: () => choisir(k) }, t))),
     el('label', { class: 'dxf-echl' }, 'Échelle ', selEch),
     el('button', { class: 'btn', title: 'Cadrer tout le dessin', onclick: () => cadrer() }, 'Ajuster'),
     el('button', { class: 'btn', title: 'Afficher / masquer des calques', onclick: () => { menuCalques.hidden = !menuCalques.hidden; } }, 'Calques'),
+    (bCotes = el('button', { class: 'btn', title: 'Masquer ou afficher les cotes (pour voir le dessin dessous)', onclick: () => { E.cotesVis = !E.cotesVis; bCotes.textContent = E.cotesVis ? 'Masquer cotes' : 'Afficher cotes'; planifier(); } }, 'Masquer cotes')),
     el('button', { class: 'btn', title: 'Annuler la dernière cote', onclick: () => { E.pend = []; E.cotes.pop(); dessiner(); } }, 'Annuler'),
     el('button', { class: 'btn', title: 'Effacer toutes les cotes', onclick: () => { E.pend = []; E.cotes = []; dessiner(); } }, 'Effacer'),
     el('button', { class: 'btn', title: 'Exporter les cotes en CSV', onclick: () => exporter() }, 'Cotes CSV'),
@@ -81,7 +82,7 @@ export function ouvrirDxf(dessin, nom, { toast = () => {} } = {}) {
     menuCalques.append(el('label', { class: 'mi' }, cb, `${c.nom} (${c.nb})`));
   }
   const ig = Object.entries(E.d.ignores);
-  infos.textContent = `${E.d.items.length} entités · unité : ${E.d.unite_inconnue ? 'mm (supposée, non indiquée dans le fichier)' : u}` + (ig.length ? ` · ignoré : ${ig.map(([k, n]) => `${k} ×${n}`).join(', ')}` : '');
+  infos.textContent = (E.d.papier ? 'Plan PDF : mm papier — choisir l\'échelle de chaque vue · ' : '') + `${E.d.items.length} entités · unité : ${E.d.unite_inconnue ? 'mm (supposée, non indiquée dans le fichier)' : u}` + (ig.length ? ` · ignoré : ${ig.map(([k, n]) => `${k} ×${n}`).join(', ')}` : '');
 
   const ctx = canvas.getContext('2d');
   const px = (x, y) => [x * E.vue.s + E.vue.ox, -y * E.vue.s + E.vue.oy];       // monde → écran
@@ -104,9 +105,19 @@ export function ouvrirDxf(dessin, nom, { toast = () => {} } = {}) {
   }
   E.cadrer = cadrer;
 
-  function etiquette(txt, X, Y, couleur = '#12324b') {
+  // reg = { c, cle } : étiquette de cote déplaçable (décalage mémorisé en unités du dessin, suit le zoom).
+  function etiquette(txt, X, Y, couleur = '#12324b', reg = null) {
     ctx.font = '600 14px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     const w = ctx.measureText(txt).width + 10;
+    if (reg) {
+      const off = reg.c.off?.[reg.cle];
+      if (off && (off[0] || off[1])) {
+        const X1 = X + off[0] * E.vue.s, Y1 = Y - off[1] * E.vue.s;
+        ctx.save(); ctx.setLineDash([3, 3]); ctx.strokeStyle = couleur; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(X, Y); ctx.lineTo(X1, Y1); ctx.stroke(); ctx.restore();
+        X = X1; Y = Y1;
+      }
+      E.etiq.push({ c: reg.c, cle: reg.cle, x: X - w / 2, y: Y - 11, w, h: 22 });
+    }
     ctx.fillStyle = 'rgba(255,255,255,.93)'; ctx.fillRect(X - w / 2, Y - 11, w, 22);
     ctx.strokeStyle = couleur; ctx.lineWidth = 1; ctx.strokeRect(X - w / 2, Y - 11, w, 22);
     ctx.fillStyle = couleur; ctx.fillText(txt, X, Y);
@@ -125,28 +136,28 @@ export function ouvrirDxf(dessin, nom, { toast = () => {} } = {}) {
     const col = '#e8730c';
     if (c.t === 'dist') {
       const A = px(c.a.x, c.a.y), B = px(c.b.x, c.b.y); fleche(A, B, col);
-      etiquette(`${f2(distance(c.a, c.b) / c.ech)} ${u}${suffixe(c, nomEch)}`, (A[0] + B[0]) / 2, (A[1] + B[1]) / 2, col);
+      etiquette(`${f2(distance(c.a, c.b) / c.ech)} ${u}${suffixe(c, nomEch)}`, (A[0] + B[0]) / 2, (A[1] + B[1]) / 2, col, { c, cle: 'm' });
     } else if (c.t === 'dxy') {
       const C = { x: c.b.x, y: c.a.y }, A = px(c.a.x, c.a.y), B = px(c.b.x, c.b.y), K = px(C.x, C.y);
       ctx.setLineDash([4, 4]); ctx.strokeStyle = '#9aa7b4'; ctx.beginPath(); ctx.moveTo(A[0], A[1]); ctx.lineTo(B[0], B[1]); ctx.stroke(); ctx.setLineDash([]);
-      if (Math.abs(c.b.x - c.a.x) > 1e-9) { fleche(A, K, col); etiquette(`ΔX ${f2(Math.abs(c.b.x - c.a.x) / c.ech)} ${u}${suffixe(c, nomEch)}`, (A[0] + K[0]) / 2, (A[1] + K[1]) / 2 + (B[1] > A[1] ? -16 : 16), col); }
-      if (Math.abs(c.b.y - c.a.y) > 1e-9) { fleche(K, B, col); etiquette(`ΔY ${f2(Math.abs(c.b.y - c.a.y) / c.ech)} ${u}`, K[0] + (B[0] > A[0] ? 34 : -34), (K[1] + B[1]) / 2, col); }
+      if (Math.abs(c.b.x - c.a.x) > 1e-9) { fleche(A, K, col); etiquette(`ΔX ${f2(Math.abs(c.b.x - c.a.x) / c.ech)} ${u}${suffixe(c, nomEch)}`, (A[0] + K[0]) / 2, (A[1] + K[1]) / 2 + (B[1] > A[1] ? -16 : 16), col, { c, cle: 'x' }); }
+      if (Math.abs(c.b.y - c.a.y) > 1e-9) { fleche(K, B, col); etiquette(`ΔY ${f2(Math.abs(c.b.y - c.a.y) / c.ech)} ${u}`, K[0] + (B[0] > A[0] ? 34 : -34), (K[1] + B[1]) / 2, col, { c, cle: 'y' }); }
     } else if (c.t === 'rad') {
       const C = px(c.c.x, c.c.y), r = c.r * E.vue.s;
       ctx.strokeStyle = col; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(C[0] - r * Math.cos(0.7), C[1] + r * Math.sin(0.7)); ctx.lineTo(C[0] + r * Math.cos(0.7), C[1] - r * Math.sin(0.7)); ctx.stroke();
-      etiquette(`Ø ${f2(2 * c.r / c.ech)} · R ${f2(c.r / c.ech)} ${u}${suffixe(c, nomEch)}`, C[0], C[1], col);
+      etiquette(`Ø ${f2(2 * c.r / c.ech)} · R ${f2(c.r / c.ech)} ${u}${suffixe(c, nomEch)}`, C[0], C[1], col, { c, cle: 'm' });
     } else if (c.t === 'ang') {
       const S = px(c.s.x, c.s.y), A = px(c.a.x, c.a.y), B = px(c.b.x, c.b.y);
       ctx.strokeStyle = col; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(A[0], A[1]); ctx.lineTo(S[0], S[1]); ctx.lineTo(B[0], B[1]); ctx.stroke();
       const a0 = Math.atan2(A[1] - S[1], A[0] - S[0]), a1 = Math.atan2(B[1] - S[1], B[0] - S[0]); let d = a1 - a0; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
       ctx.beginPath(); ctx.arc(S[0], S[1], 30, a0, a0 + d, d < 0); ctx.stroke();
-      const mid = a0 + d / 2; etiquette(`${f2(angleEntre(c.s, c.a, c.b))} °`, S[0] + 52 * Math.cos(mid), S[1] + 52 * Math.sin(mid), col);
+      const mid = a0 + d / 2; etiquette(`${f2(angleEntre(c.s, c.a, c.b))} °`, S[0] + 52 * Math.cos(mid), S[1] + 52 * Math.sin(mid), col, { c, cle: 'm' });
     }
     for (const k of ['a', 'b', 's']) if (c[k]) point(c[k], col, 3.5);
   }
 
   function dessiner() {
-    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, E.w, E.h);
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, E.w, E.h); E.etiq = [];
     const cal = new Map(E.d.calques.map(c => [c.nom, c]));
     for (const o of E.d.items) {
       if (!visible(o)) continue;
@@ -159,13 +170,26 @@ export function ouvrirDxf(dessin, nom, { toast = () => {} } = {}) {
       ctx.stroke();
     }
     ctx.setLineDash([]);
-    for (const c of E.cotes) dessinerCote(c);
+    if (E.survol && visible(E.survol)) {          // élément sous la souris : changement de couleur et trait épaissi
+      ctx.strokeStyle = '#d81b9a'; ctx.lineWidth = 3.5; ctx.beginPath();
+      E.survol.pts.forEach((p, i) => { const [X, Y] = px(p[0], p[1]); if (i) ctx.lineTo(X, Y); else ctx.moveTo(X, Y); });
+      ctx.stroke();
+    }
+    if (E.cotesVis) for (const c of E.cotes) dessinerCote(c);
     for (const p of E.pend) point(p, '#e8730c', 5);
     if (E.snap) {
       const [X, Y] = px(E.snap.x, E.snap.y); ctx.strokeStyle = '#1d8a4b'; ctx.lineWidth = 2; ctx.strokeRect(X - 7, Y - 7, 14, 14);
       etiquette(E.snap.t, X + 10, Y - 20, '#1d8a4b'); ctx.textAlign = 'left';
     }
-    aide.textContent = texteAide();
+    aide.textContent = texteAide() + (E.survol ? ' ▸ ' + decrire(E.survol) : '');
+  }
+  let rafId = 0;
+  const planifier = () => { if (!rafId) rafId = requestAnimationFrame(() => { rafId = 0; if (racine) dessiner(); }); };
+  function decrire(o) {
+    const k = E.ech, l = o.pts.reduce((t, p, i) => (i ? t + Math.hypot(p[0] - o.pts[i - 1][0], p[1] - o.pts[i - 1][1]) : 0), 0);
+    if (o.kind === 'circle') return `Cercle Ø ${f2(2 * o.r / k)} ${u} (${o.layer})`;
+    if (o.kind === 'arc') return `Arc R ${f2(o.r / k)} ${u} (${o.layer})`;
+    return `${o.kind === 'line' ? 'Segment' : 'Tracé'} ${f2(l / k)} ${u} (${o.layer})`;
   }
 
   function texteAide() {
@@ -187,10 +211,11 @@ export function ouvrirDxf(dessin, nom, { toast = () => {} } = {}) {
   }
   function viser(ev) {
     const s = sous(ev);
-    if (E.outil === 'rad') { const o = entiteProche(E.d, s.x, s.y, s.rayon, visible); return o && o.r != null ? { x: o.c[0], y: o.c[1], t: 'Ø ' + f2(2 * o.r), item: o.id, o } : null; }
+    if (E.outil === 'rad') { const o = entiteProche(E.d, s.x, s.y, s.rayon, q => visible(q) && q.r != null);  return o && o.r != null ? { x: o.c[0], y: o.c[1], t: 'Ø ' + f2(2 * o.r), item: o.id, o } : null; }
     return accroche(E.d, s.x, s.y, s.rayon, visible) ?? { x: s.x, y: s.y, t: 'libre' };
   }
   function valider(ev) {
+    E.cotesVis = true; if (bCotes) bCotes.textContent = 'Masquer cotes';
     const p = viser(ev); if (!p) { E.toast('Aucun cercle ou arc de cercle ici (ellipses et splines : mesurer par points).'); return; }
     if (E.outil === 'rad') { E.cotes.push({ t: 'rad', c: { x: p.o.c[0], y: p.o.c[1] }, r: p.o.r, ech: E.ech }); E.snap = null; dessiner(); return; }
     E.pend.push({ x: p.x, y: p.y });
@@ -211,13 +236,19 @@ export function ouvrirDxf(dessin, nom, { toast = () => {} } = {}) {
 
   // Pointeurs : 1 doigt/souris = panoramique (un simple clic sans déplacement = point), 2 doigts = zoom.
   let depart = null, pincement = null;
+  const etiquetteSous = ev => { if (!E.cotesVis) return null; const r = canvas.getBoundingClientRect(), X = ev.clientX - r.left, Y = ev.clientY - r.top; for (let i = E.etiq.length - 1; i >= 0; i--) { const q = E.etiq[i]; if (X >= q.x - 4 && X <= q.x + q.w + 4 && Y >= q.y - 4 && Y <= q.y + q.h + 4) return q; } return null; };
   canvas.addEventListener('pointerdown', ev => {
     canvas.setPointerCapture(ev.pointerId); E.pointeurs.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    const q = E.pointeurs.size === 1 ? etiquetteSous(ev) : null;
+    if (q) { const o = q.c.off?.[q.cle] ?? [0, 0]; E.glisse = { c: q.c, cle: q.cle, x: ev.clientX, y: ev.clientY, o0: [o[0], o[1]] }; depart = null; return; }
     if (E.pointeurs.size === 1) depart = { x: ev.clientX, y: ev.clientY, ox: E.vue.ox, oy: E.vue.oy, bouge: false };
     else { depart = null; const [a, b] = [...E.pointeurs.values()]; pincement = { d: Math.hypot(a.x - b.x, a.y - b.y), s: E.vue.s }; }
   });
   canvas.addEventListener('pointermove', ev => {
     if (E.pointeurs.has(ev.pointerId)) E.pointeurs.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    if (E.glisse) {
+      const g = E.glisse; (g.c.off ??= {})[g.cle] = [g.o0[0] + (ev.clientX - g.x) / E.vue.s, g.o0[1] - (ev.clientY - g.y) / E.vue.s]; planifier(); return;
+    }
     if (pincement && E.pointeurs.size >= 2) {
       const [a, b] = [...E.pointeurs.values()], d = Math.hypot(a.x - b.x, a.y - b.y), r = canvas.getBoundingClientRect();
       zoomer(d / pincement.d * pincement.s / E.vue.s, (a.x + b.x) / 2 - r.left, (a.y + b.y) / 2 - r.top); pincement.d = d; pincement.s = E.vue.s; return;
@@ -225,11 +256,16 @@ export function ouvrirDxf(dessin, nom, { toast = () => {} } = {}) {
     if (depart) {
       const dx = ev.clientX - depart.x, dy = ev.clientY - depart.y;
       if (!depart.bouge && Math.hypot(dx, dy) > 6) depart.bouge = true;
-      if (depart.bouge) { E.vue.ox = depart.ox + dx; E.vue.oy = depart.oy + dy; dessiner(); return; }
+      if (depart.bouge) { E.vue.ox = depart.ox + dx; E.vue.oy = depart.oy + dy; planifier(); return; }
     }
-    if (ev.pointerType !== 'touch') { E.snap = viser(ev); if (E.snap && E.snap.t === 'libre') E.snap = null; dessiner(); }
+    if (ev.pointerType !== 'touch') {
+      canvas.style.cursor = etiquetteSous(ev) ? 'move' : 'crosshair';
+      const s = sous(ev); E.survol = entiteProche(E.d, s.x, s.y, 8 / E.vue.s, visible);
+      E.snap = viser(ev); if (E.snap && E.snap.t === 'libre') E.snap = null; planifier();
+    }
   });
   const fin = ev => {
+    if (E.glisse) { E.glisse = null; E.pointeurs.delete(ev.pointerId); if (!E.pointeurs.size) depart = null; return; }
     const d = depart; E.pointeurs.delete(ev.pointerId); if (E.pointeurs.size < 2) pincement = null;
     if (d && !d.bouge && ev.type === 'pointerup') valider(ev);
     if (!E.pointeurs.size) depart = null;
@@ -237,7 +273,7 @@ export function ouvrirDxf(dessin, nom, { toast = () => {} } = {}) {
   canvas.addEventListener('pointerup', fin); canvas.addEventListener('pointercancel', fin);
   function zoomer(k, X, Y) {
     const s = Math.min(1e5, Math.max(1e-3, E.vue.s * k)), kk = s / E.vue.s;
-    E.vue.ox = X - (X - E.vue.ox) * kk; E.vue.oy = Y - (Y - E.vue.oy) * kk; E.vue.s = s; dessiner();
+    E.vue.ox = X - (X - E.vue.ox) * kk; E.vue.oy = Y - (Y - E.vue.oy) * kk; E.vue.s = s; planifier();
   }
   canvas.addEventListener('wheel', ev => { ev.preventDefault(); const r = canvas.getBoundingClientRect(); zoomer(ev.deltaY < 0 ? 1.18 : 1 / 1.18, ev.clientX - r.left, ev.clientY - r.top); }, { passive: false });
   canvas.style.touchAction = 'none';

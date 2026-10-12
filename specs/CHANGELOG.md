@@ -1,5 +1,10 @@
 # Historique du cahier des charges
 
+## 1.15 — 12 octobre 2026 (Claude Code, demande de Christophe : charger un PDF, cotes déplaçables, survol)
+- **DXF-06** : ouverture directe d'un plan PDF vectoriel (pdf.js embarqué, hors ligne), traits/couleurs/textes, cercles et arcs reconnus, mm papier + échelle par vue.
+- **DXF-07** : survol en surbrillance avec nature et taille réelle de l'élément. **DXF-08** : étiquettes de cotes déplaçables, cotes masquables.
+- Application autonome 1.9.0 → **1.10.0** (fichier complet 4,8 → 5,5 Mo : pdf.js embarqué). La v1.14 passe en archive figée.
+
 ## 1.14 — 12 octobre 2026 (Claude Code, demande de Christophe : lire un plan DXF et prendre des cotes)
 - Nouveau domaine **DXF** (DXF-01 à DXF-04) : ouverture d'un plan 2D DXF, affichage plein écran avec calques, cotation (distance, ΔX/ΔY, Ø/R, angle, accroches, export CSV). Pas de coupe ni de détection sur un plan 2D.
 - **DXF-03** complétée : échelle par vue (liste, lecture dans le plan, calibrage) — les cotes sont affichées en vraie grandeur.

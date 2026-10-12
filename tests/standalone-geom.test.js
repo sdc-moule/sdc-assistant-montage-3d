@@ -206,3 +206,18 @@ test('DXF : plan d\'exemple réel (si présent) — tout est lisible', { skip: !
   assert.equal(d.items.length, 97); assert.equal(d.unite, 'mm');
   assert.ok(d.cadre.x1 > 93 && d.cadre.y0 < -75);
 });
+
+// ——— PDF vectoriel → dessin 2D (DXF-05 ; lecteur dans l'application) ———
+import { lirePdf } from '../standalone/src/geom/pdf.js';
+test('PDF : plan synthétique (rectangle, cercle Ø20 papier, axe pointillé, texte d\'échelle)', async () => {
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const d = await lirePdf(pdfjs, new Uint8Array(fs.readFileSync(new URL('./fixtures/plan_synthetique.pdf', import.meta.url))));
+  assert.equal(d.source, 'pdf'); assert.equal(d.unite, 'mm');
+  assert.ok(Math.abs(d.cadre.x1 - 210) < 0.1 && Math.abs(d.cadre.y1 - 297) < 0.1, 'cadre A4 en mm papier');
+  const c = d.items.find(o => o.kind === 'circle');
+  assert.ok(c && Math.abs(2 * c.r - 20) < 0.02, 'cercle Ø 20,00 mm reconnu (Ø/R mesurable)');
+  assert.ok(Math.abs(c.c[0] - 70) < 0.02 && Math.abs(c.c[1] - (297 - 50)) < 0.02, 'centre (70 ; 247) — repère PDF, axe Y vers le haut');
+  assert.ok(d.items.some(o => o.pointille), 'trait mixte/tirets reconnu');
+  assert.ok(d.items.some(o => o.kind === 'text' && /2:1/.test(o.texte)), 'texte « 2:1 » conservé');
+  assert.ok(d.calques.some(k => /bleu/i.test(k.nom)) && d.calques.some(k => /rouge/i.test(k.nom)), 'calques par couleur');
+});

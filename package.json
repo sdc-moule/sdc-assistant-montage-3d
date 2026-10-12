@@ -12,6 +12,7 @@
     "build:standalone": "node standalone/build.mjs"
   },
   "dependencies": {
+    "pdfjs-dist": "4.10.38",
     "three": "0.180.0",
     "three-mesh-bvh": "^0.9.16"
   },

@@ -5,6 +5,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
 import { readCad, sha256 } from './step-loader.js';
 import { lireDxf } from './geom/dxf.js';
+import { lirePdf } from './geom/pdf.js';
 import { ouvrirDxf } from './dxf-view.js';
 import { partsFromOcct } from './geom/from-occt.js';
 import { meshStats, buildBom, toCsv, signature } from './geom/bom.js';
@@ -30,7 +31,7 @@ THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
 THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
 THREE.Mesh.prototype.raycast = acceleratedRaycast;
 
-const APP_VERSION = '1.9.0';
+const APP_VERSION = '1.10.0';
 const $ = id => document.getElementById(id);
 const el = (tag, props = {}, ...kids) => { const e = document.createElement(tag); for (const [k, v] of Object.entries(props)) { if (k === 'class') e.className = v; else if (k === 'style') e.style.cssText = v; else if (k.startsWith('on')) e[k] = v; else if (v !== undefined && v !== null) e.setAttribute(k, v); } for (const k of kids.flat()) if (k !== null && k !== undefined && k !== false) e.append(k instanceof Node ? k : document.createTextNode(String(k))); return e; };
 const fmt = (x, d = 1) => (Number.isFinite(x) ? (Math.abs(x) < 0.5 * 10 ** -d ? 0 : x).toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d }) : '—');
@@ -123,14 +124,38 @@ async function openFile(file) {
       return loadBytes(z.bytes, z.name);
     } catch (err) { busy(''); toast('Archive : ' + err.message, 8000); return; }
   }
+  if (/\.pdf$/i.test(file.name)) {
+    busy('Lecture du plan PDF…');
+    try {
+      const d = await lirePdf(await chargerPdfJs(), await file.arrayBuffer());
+      busy('');
+      if (!d.traits) return toast('Ce PDF ne contient aucun tracé vectoriel (scan ou image) : il ne peut pas être converti en plan mesurable.', 9000);
+      ouvrirDxf(d, file.name, { toast });
+      if (d.pages > 1) toast(`PDF de ${d.pages} pages : seule la page 1 est affichée.`, 6000);
+    } catch (err) { busy(''); toast('PDF illisible : ' + err.message, 9000); }
+    return;
+  }
   if (/\.dxf$/i.test(file.name)) {
     try { const d = lireDxf(await file.arrayBuffer()); if (!d.items.length) return toast('DXF sans entité 2D reconnue.', 6000); ouvrirDxf(d, file.name, { toast }); }
     catch (err) { toast('DXF illisible : ' + err.message, 8000); }
     return;
   }
-  if (!/\.(step|stp|iges|igs|brep)$/i.test(file.name)) { toast('Choisir un fichier STEP / STP (ou IGES), ou un plan DXF, éventuellement zippé.'); return; }
+  if (!/\.(step|stp|iges|igs|brep)$/i.test(file.name)) { toast('Choisir un fichier STEP / STP (ou IGES), ou un plan DXF / PDF, éventuellement zippé.'); return; }
   const bytes = await file.arrayBuffer();
   await loadBytes(bytes, file.name);
+}
+
+// pdf.js est embarqué (gzip) et chargé seulement à l'ouverture d'un PDF : module + « worker » exécutés dans la page (aucun réseau).
+let pdfjsLib = null;
+async function chargerPdfJs() {
+  if (pdfjsLib) return pdfjsLib;
+  if (!window.__SDC_PDFJS_GZ_B64__) throw new Error('lecteur PDF absent de cette version');
+  const url = async b64 => URL.createObjectURL(new Blob([await gunzip(b64)], { type: 'text/javascript' }));
+  const wUrl = await url(window.__SDC_PDFJS_WORKER_GZ_B64__);
+  globalThis.pdfjsWorker = await import(/* @vite-ignore */ wUrl);
+  const lib = await import(/* @vite-ignore */ await url(window.__SDC_PDFJS_GZ_B64__));
+  lib.GlobalWorkerOptions.workerSrc = wUrl;
+  return (pdfjsLib = lib);
 }
 
 let fichierOuvert = null; // octets du fichier ouvert (en mémoire seulement) : permet de changer la finesse d'affichage à chaud
