@@ -28,7 +28,7 @@ THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
 THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
 THREE.Mesh.prototype.raycast = acceleratedRaycast;
 
-const APP_VERSION = '1.7.1';
+const APP_VERSION = '1.8.0';
 const $ = id => document.getElementById(id);
 const el = (tag, props = {}, ...kids) => { const e = document.createElement(tag); for (const [k, v] of Object.entries(props)) { if (k === 'class') e.className = v; else if (k === 'style') e.style.cssText = v; else if (k.startsWith('on')) e[k] = v; else if (v !== undefined && v !== null) e.setAttribute(k, v); } for (const k of kids.flat()) if (k !== null && k !== undefined && k !== false) e.append(k instanceof Node ? k : document.createTextNode(String(k))); return e; };
 const fmt = (x, d = 1) => (Number.isFinite(x) ? (Math.abs(x) < 0.5 * 10 ** -d ? 0 : x).toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d }) : '—');
@@ -248,16 +248,23 @@ function rebuildNetworks() {
   S.drill = buildNetworks(S.parts, S.cyl, { maxDrillDiameter: S.maxDrill });
   S.drill.featureById = new Map(S.drill.features.map(f => [f.id, f]));
   S.drill.netOfFeature = new Map(); for (const n of S.drill.networks) for (const f of n.features) S.drill.netOfFeature.set(f, n);
+  // Une couleur propre à chaque circuit / passage aligné, fixée par le rang du réseau (elle ne change pas quand on le classe) ; perçages isolés et alésages en gris.
+  S.drill.couleur = new Map(); let rang = 0;
+  for (const n of S.drill.networks) S.drill.couleur.set(n.id, n.kind === 'circuit' || n.kind === 'alignement' ? couleurCircuit(rang++) : n.kind === 'isolé' ? COULEUR_ISOLE : COULEUR_ALESAGE);
   buildSkeleton();
+}
+// Teintes bien distinctes (le jaune #ffd400 reste réservé au perçage sélectionné) ; au-delà, angle d'or sur la roue des teintes.
+const CIRCUIT_COULEURS = ['#e6194b', '#1f77d0', '#2e9e44', '#f58231', '#911eb4', '#00a5b5', '#d81b9a', '#8d5a2b', '#5c6bc0', '#a3201a', '#16a085', '#e67e22', '#7b3fbf', '#0d8f9a', '#558b2f', '#6d4c41'];
+const COULEUR_ISOLE = '#8a96a3', COULEUR_ALESAGE = '#b3a597';
+function couleurCircuit(i) {
+  if (i < CIRCUIT_COULEURS.length) return CIRCUIT_COULEURS[i];
+  const k = i - CIRCUIT_COULEURS.length;
+  return '#' + new THREE.Color().setHSL(((k * 137.508 + 20) % 360) / 360, 0.68, k % 2 ? 0.36 : 0.5).getHexString();
 }
 const netLabel = n => S.netClass[n.id] ?? n.suggestion.replace(/ \?$/, '');
 const netValidated = n => S.netClass[n.id] !== undefined;
 const netClassOf = n => (NET_COLORS[netLabel(n)] ? netLabel(n) : 'non classé');
-function netColor(n) {
-  const cls = netClassOf(n), list = NET_COLORS[cls];
-  const same = S.drill.networks.filter(m => netClassOf(m) === cls);
-  return list[Math.max(0, same.indexOf(n)) % list.length];
-}
+const netColor = n => S.drill.couleur?.get(n.id) ?? COULEUR_ISOLE; // une couleur par circuit (voir rebuildNetworks) ; l'ancien choix par classement (NET_COLORS) n'est plus utilisé
 function netVisible(n) {
   const f = S.filters;
   if (!f[n.kind]) return false;
@@ -1169,12 +1176,16 @@ function setMode(m) {
   for (const s of document.querySelectorAll('#panel-left section')) s.hidden = s.dataset.panel !== m;
   if (m === 'percages' && !S.skelShowTouched) { S.skelShow = true; }
   if (m !== 'percages' && S.skelOnly) { S.skelOnly = false; }
+  if (compactActif && etatPanneau('left') === 'collapsed') fixerPanneau('left', 'docked'); // petit écran : choisir une étape affiche ses outils
   syncToggles(); refreshAll();
 }
 
 // ---------------------------------------------------------------- liaisons interface
 function wire() {
-  for (const b of document.querySelectorAll('#rail button')) b.onclick = () => setMode(b.dataset.mode);
+  for (const b of document.querySelectorAll('#rail button')) b.onclick = () => {
+    if (compactActif && S.mode === b.dataset.mode && etatPanneau('left') === 'docked') return fixerPanneau('left', 'collapsed'); // petit écran : retoucher l'étape active referme le panneau
+    setMode(b.dataset.mode);
+  };
   for (const id of ['file', 'file2']) $(id).onchange = e => { openFile(e.target.files[0]); e.target.value = ''; };
   const demo = () => { const b64 = window.__SDC_DEMO_STEP_GZ_B64__; if (!b64) return toast('Démonstration absente de cette version.'); busy('Préparation de la démonstration…'); gunzip(b64).then(bytes => loadBytes(bytes.buffer, 'demo_BCR_synthetique.step')).catch(err => { busy(''); toast('Démonstration impossible : ' + err.message); }); };
   $('demo').onclick = () => { if (S.loaded && !confirm('La démonstration remplace le fichier ouvert (les pièces finies et notes déjà enregistrées pour ce fichier restent sur ce poste). Continuer ?')) return; $('help').hidden = true; demo(); }; $('demo2').onclick = demo;
@@ -1290,12 +1301,16 @@ async function gunzip(b64) { const bin = Uint8Array.from(atob(b64), c => c.charC
 // ---------------------------------------------------------------- panneaux réductibles, détachables, déplaçables
 // Chaque panneau : poignée « ‹ » pour le réduire à une bande, « ⧉ » pour le détacher en fenêtre flottante déplaçable
 // (glisser l'en-tête, redimensionner par le coin). La barre d'outils 3D se déplace par sa poignée ⠿ et se replie.
+// En affichage compact (petit écran), les panneaux passent EN RECOUVREMENT de la vue 3D (un seul ouvert à la fois, fermés par défaut) :
+// leur état est mémorisé à part (clés « leftC » / « rightC ») pour ne pas écraser la disposition du grand écran.
+let compactActif = false;
 const LAYOUT_KEY = 'sdc-montage3d:disposition';
 const layout = (() => { try { return JSON.parse(localStorage.getItem(LAYOUT_KEY)) ?? {}; } catch { return {}; } })();
 const saveLayout = () => { try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout)); } catch { /* rien */ } };
 function dragBy(handle, target, onEnd) {
   handle.addEventListener('pointerdown', ev => {
     if (ev.target.closest('button,input,select,textarea')) return;
+    if (compactActif && target.id === 'viewbar') return; // affichage compact : barre d'outils fixe en bas
     ev.preventDefault();
     const r = target.getBoundingClientRect(), dx = ev.clientX - r.left, dy = ev.clientY - r.top;
     const fixed = getComputedStyle(target).position === 'fixed';
@@ -1306,10 +1321,17 @@ function dragBy(handle, target, onEnd) {
     addEventListener('pointermove', move); addEventListener('pointerup', up);
   });
 }
+const cleLayout = side => side + (compactActif ? 'C' : '');
+const etatPanneau = side => { const st = layout[cleLayout(side)] ?? (compactActif ? 'collapsed' : 'docked'); return compactActif && st === 'floating' ? 'docked' : st; };
+function fixerPanneau(side, st) {
+  layout[cleLayout(side)] = st;
+  if (compactActif && st === 'docked') layout[cleLayout(side === 'left' ? 'right' : 'left')] = 'collapsed'; // un seul panneau en recouvrement
+  saveLayout(); applyLayout();
+}
 function applyLayout() {
   const app = $('app');
   for (const side of ['left', 'right']) {
-    const p = $(`panel-${side}`), st = layout[side] ?? 'docked';
+    const p = $(`panel-${side}`), st = etatPanneau(side);
     p.classList.toggle('collapsed', st === 'collapsed'); p.classList.toggle('floating', st === 'floating');
     if (st === 'floating') { const f = layout[`${side}Pos`] ?? { x: side === 'left' ? 100 : innerWidth - 380, y: 80, w: 340, h: Math.round(innerHeight * 0.75) }; Object.assign(p.style, { left: f.x + 'px', top: f.y + 'px', width: f.w + 'px', height: f.h + 'px' }); }
     else Object.assign(p.style, { left: '', top: '', width: '', height: '' });
@@ -1318,26 +1340,27 @@ function applyLayout() {
     p.querySelector('.pc-float').textContent = st === 'floating' ? '⇲' : '⧉';
     p.querySelector('.pc-float').title = st === 'floating' ? 'Remettre le panneau en place' : 'Détacher le panneau (fenêtre déplaçable)';
   }
-  const vb = $('viewbar'); vb.classList.toggle('folded', !!layout.vbFolded); $('vb-fold').textContent = layout.vbFolded ? '▸' : '▾';
-  if (layout.vbPos) Object.assign(vb.style, { left: layout.vbPos.x + 'px', top: layout.vbPos.y + 'px', transform: 'none' }); else Object.assign(vb.style, { left: '', top: '', transform: '' });
+  const vb = $('viewbar'), plie = compactActif ? (layout.vbFoldedC ?? true) : !!layout.vbFolded;
+  vb.classList.toggle('folded', plie); $('vb-fold').textContent = compactActif ? (plie ? 'Outils 3D ▸' : 'Outils 3D ▾') : (plie ? '▸' : '▾');
+  if (layout.vbPos && !compactActif) Object.assign(vb.style, { left: layout.vbPos.x + 'px', top: layout.vbPos.y + 'px', transform: 'none' }); else Object.assign(vb.style, { left: '', top: '', transform: '' });
 }
 function setupPanels() {
   for (const side of ['left', 'right']) {
     const p = $(`panel-${side}`);
     const title = side === 'left' ? 'Outils' : 'Pièces';
     const head = el('div', { class: 'pchrome' }, el('span', { class: 'pc-title' }, title),
-      el('button', { class: 'pc-float', onclick: () => { const st = layout[side]; layout[side] = st === 'floating' ? 'docked' : 'floating'; saveLayout(); applyLayout(); } }, '⧉'),
-      el('button', { class: 'pc-fold', title: 'Réduire / agrandir le panneau', onclick: () => { layout[side] = layout[side] === 'collapsed' ? 'docked' : 'collapsed'; saveLayout(); applyLayout(); } }, '‹'));
+      el('button', { class: 'pc-float', onclick: () => { if (compactActif) return; const st = layout[side]; layout[side] = st === 'floating' ? 'docked' : 'floating'; saveLayout(); applyLayout(); } }, '⧉'),
+      el('button', { class: 'pc-fold', title: 'Réduire / agrandir le panneau', onclick: () => fixerPanneau(side, etatPanneau(side) === 'collapsed' ? 'docked' : 'collapsed') }, '‹'));
     p.prepend(head);
     // bande réduite cliquable
-    p.append(el('div', { class: 'pc-strip', title: 'Afficher le panneau', onclick: () => { layout[side] = 'docked'; saveLayout(); applyLayout(); } }, el('span', {}, title)));
-    dragBy(head, p, r => { if (layout[side] === 'floating') { layout[`${side}Pos`] = { x: r.left, y: r.top, w: r.width, h: r.height }; saveLayout(); } });
-    new ResizeObserver(() => { if (layout[side] === 'floating') { const r = p.getBoundingClientRect(); layout[`${side}Pos`] = { x: r.left, y: r.top, w: r.width, h: r.height }; saveLayout(); } }).observe(p);
+    p.append(el('div', { class: 'pc-strip', title: 'Afficher le panneau', onclick: () => fixerPanneau(side, 'docked') }, el('span', {}, title)));
+    dragBy(head, p, r => { if (!compactActif && layout[side] === 'floating') { layout[`${side}Pos`] = { x: r.left, y: r.top, w: r.width, h: r.height }; saveLayout(); } });
+    new ResizeObserver(() => { if (!compactActif && layout[side] === 'floating') { const r = p.getBoundingClientRect(); layout[`${side}Pos`] = { x: r.left, y: r.top, w: r.width, h: r.height }; saveLayout(); } }).observe(p);
   }
   const vb = $('viewbar'), grip = vb.querySelector('.vb-grip');
   dragBy(grip, vb, r => { const s = vb.parentElement.getBoundingClientRect(); layout.vbPos = { x: r.left - s.left, y: r.top - s.top }; Object.assign(vb.style, { left: layout.vbPos.x + 'px', top: layout.vbPos.y + 'px' }); saveLayout(); });
   grip.addEventListener('dblclick', () => { delete layout.vbPos; saveLayout(); applyLayout(); });
-  $('vb-fold').onclick = () => { layout.vbFolded = !layout.vbFolded; saveLayout(); applyLayout(); };
+  $('vb-fold').onclick = () => { if (compactActif) layout.vbFoldedC = !(layout.vbFoldedC ?? true); else layout.vbFolded = !layout.vbFolded; saveLayout(); applyLayout(); };
   applyLayout();
 }
 
@@ -1559,19 +1582,48 @@ function setupReste() {
 // ---------------------------------------------------------------- mode tactile (écran de présentation, table tactile)
 // Même application, même fichier : grands boutons (échelle A− / A+), appui long sur une pièce = menu à l'endroit touché
 // (sur un écran d'un mètre, on ne va pas chercher un bouton au bord). Actif d'office si un écran tactile est détecté.
-const ECHELLES = [1, 1.25, 1.5, 1.75, 2, 2.5];
-const prefTactile = { actif: null, e: 1.25 };
+// Échelle : une valeur par densité d'affichage — grand écran (e, 125 % d'office) et petit écran compact (ec, 100 % d'office, réductible jusqu'à 80 %).
+const ECHELLES = [0.8, 0.9, 1, 1.25, 1.5, 1.75, 2, 2.5];
+const prefTactile = { actif: null, e: 1.25, ec: 1 };
+const echelleActive = () => (compactActif ? prefTactile.ec : prefTactile.e);
 function lirePrefTactile() {
-  try { const m = localStorage.getItem('sdc-tactile'); prefTactile.actif = m === '1' ? true : m === '0' ? false : null; const e = parseFloat(localStorage.getItem('sdc-echelle')); if (ECHELLES.includes(e)) prefTactile.e = e; } catch { /* stockage indisponible */ }
+  try {
+    const m = localStorage.getItem('sdc-tactile'); prefTactile.actif = m === '1' ? true : m === '0' ? false : null;
+    const e = parseFloat(localStorage.getItem('sdc-echelle')); if (ECHELLES.includes(e)) prefTactile.e = e;
+    const ec = parseFloat(localStorage.getItem('sdc-echelle-compact')); if (ECHELLES.includes(ec)) prefTactile.ec = ec;
+  } catch { /* stockage indisponible */ }
 }
 function appliquerTactile() {
   const actif = prefTactile.actif ?? (navigator.maxTouchPoints > 0 && matchMedia('(any-pointer: coarse)').matches);
-  document.body.classList.toggle('tactile', actif); document.body.style.setProperty('--e', actif ? prefTactile.e : 1);
+  const e = echelleActive();
+  document.body.classList.toggle('tactile', actif); document.body.style.setProperty('--e', actif ? e : 1);
   $('tactile-toggle').classList.toggle('on', actif); $('ech-minus').hidden = $('ech-plus').hidden = !actif;
-  $('ech-minus').disabled = prefTactile.e <= ECHELLES[0]; $('ech-plus').disabled = prefTactile.e >= ECHELLES.at(-1);
+  $('ech-minus').disabled = e <= ECHELLES[0]; $('ech-plus').disabled = e >= ECHELLES.at(-1);
   fermerMenuCtx(); resize();
 }
-const memoriserPrefTactile = () => { try { localStorage.setItem('sdc-tactile', prefTactile.actif === null ? '' : prefTactile.actif ? '1' : '0'); localStorage.setItem('sdc-echelle', String(prefTactile.e)); } catch { /* rien */ } };
+const memoriserPrefTactile = () => { try { localStorage.setItem('sdc-tactile', prefTactile.actif === null ? '' : prefTactile.actif ? '1' : '0'); localStorage.setItem('sdc-echelle', String(prefTactile.e)); localStorage.setItem('sdc-echelle-compact', String(prefTactile.ec)); } catch { /* rien */ } };
+
+// ---------------------------------------------------------------- affichage adaptatif : grand écran ↔ petit écran (compact)
+// Le navigateur ne donne pas la taille PHYSIQUE de l'écran : on se fie aux pixels de la fenêtre (un écran tactile de 125 mm est
+// petit et dense), avec un réglage manuel mémorisé sur le poste (Réglages ▾ → Taille d'écran) pour les cas ambigus.
+// Compact : barre d'étapes en icônes, panneaux en recouvrement (un seul à la fois), barre d'outils 3D repliée, explications masquées.
+let prefDensite = 'auto';
+const compactAuto = () => Math.min(innerWidth, innerHeight) <= 700 || innerWidth < 1100;
+function appliquerDensite() {
+  const avant = compactActif;
+  compactActif = prefDensite === 'compact' || (prefDensite === 'auto' && compactAuto());
+  document.body.classList.toggle('compact', compactActif);
+  const sel = $('densite'); if (sel) sel.value = prefDensite;
+  const info = $('densite-info'); if (info) info.textContent = `Fenêtre ${innerWidth} × ${innerHeight} px → affichage ${compactActif ? 'compact' : 'normal'}${prefDensite === 'auto' ? ' (automatique)' : ' (choisi)'}`;
+  if (compactActif !== avant) { applyLayout(); appliquerTactile(); }
+  resize();
+}
+function setupDensite() {
+  try { const d = localStorage.getItem('sdc-densite'); if (['auto', 'compact', 'normal'].includes(d)) prefDensite = d; } catch { /* rien */ }
+  $('densite').onchange = () => { prefDensite = $('densite').value; try { localStorage.setItem('sdc-densite', prefDensite); } catch { /* rien */ } appliquerDensite(); };
+  let t = null; addEventListener('resize', () => { clearTimeout(t); t = setTimeout(appliquerDensite, 150); });
+  appliquerDensite();
+}
 function fermerMenuCtx() { const m = $('ctxmenu'); if (m) m.hidden = true; }
 function ouvrirMenuCtx(x, y) {
   const m = $('ctxmenu'), ids = [...S.sel]; if (!ids.length) return;
@@ -1598,7 +1650,7 @@ let appuiLong = null, appuiLongT0 = 0;
 function setupTactile() {
   lirePrefTactile(); appliquerTactile();
   $('tactile-toggle').onclick = () => { prefTactile.actif = !document.body.classList.contains('tactile'); memoriserPrefTactile(); appliquerTactile(); };
-  const echelle = d => { const i = ECHELLES.indexOf(prefTactile.e); prefTactile.e = ECHELLES[Math.max(0, Math.min(ECHELLES.length - 1, i + d))]; if (prefTactile.actif === null) prefTactile.actif = true; memoriserPrefTactile(); appliquerTactile(); };
+  const echelle = d => { const cle = compactActif ? 'ec' : 'e', i = ECHELLES.indexOf(prefTactile[cle]); prefTactile[cle] = ECHELLES[Math.max(0, Math.min(ECHELLES.length - 1, i + d))]; if (prefTactile.actif === null) prefTactile.actif = true; memoriserPrefTactile(); appliquerTactile(); };
   $('ech-minus').onclick = () => echelle(-1); $('ech-plus').onclick = () => echelle(1);
   const cv = renderer.domElement;
   cv.addEventListener('pointerdown', ev => {
@@ -1775,5 +1827,5 @@ function setupCommande() {
 }
 
 // ---------------------------------------------------------------- démarrage
-wire(); setupPanels(); setupGroupes(); setupReste(); setupTactile(); setupCommande(); renderGuide(); resize(); loop();
+wire(); setupPanels(); setupGroupes(); setupReste(); setupDensite(); setupTactile(); setupCommande(); renderGuide(); resize(); loop();
 window.__SDC__ = { S, loadBytes, setMode, select, selectNet, extractCylinders, buildNetworks, project, xf, partBox: id => { const b = partBox(id); return [...b.min.toArray(), ...b.max.toArray()]; }, fitBox, THREE, rectsCotes: () => coteCache.map(k => ({ id: k.c.id, x: k.x, y: k.y, w: k.w, h: k.h })) }; // accès pour essais automatisés

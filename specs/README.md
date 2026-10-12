@@ -1,6 +1,6 @@
 # Cahiers des charges — règles de rangement
 
-**Version en vigueur : voir [`ACTUEL.json`](ACTUEL.json)** (aujourd'hui 1.12).
+**Version en vigueur : voir [`ACTUEL.json`](ACTUEL.json)** (aujourd'hui 1.13).
 
 ```
 specs/

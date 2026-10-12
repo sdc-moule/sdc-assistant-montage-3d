@@ -1,5 +1,10 @@
 # Historique du cahier des charges
 
+## 1.13 — 12 octobre 2026 (Claude Code, demande de Christophe : écran tactile de 125 mm et circuits)
+- **PER-09** : une couleur propre à chaque circuit / passage aligné (au lieu d'une couleur par classement) ; perçages isolés et alésages en gris.
+- **IHM-03** : affichage adaptatif à la taille de l'écran — mode compact automatique (étapes en icônes, panneaux en recouvrement, barre d'outils 3D repliée) pour un petit écran tactile, réglage manuel « Taille d'écran » dans Réglages ; l'affichage du grand écran (27") reste inchangé. Aucune fonction supprimée.
+- Application autonome 1.7.1 → **1.8.0**. La v1.12 passe en archive figée.
+
 ## 1.12 — 11 octobre 2026 (Claude Code, **décision écrite de Christophe** : « je valide les 5 recommandations à retirer »)
 - **IHM-02** : cinq fonctions retirées de l'interface — type/statut/auteur des commentaires, bouton « Valider le repère », choix des bulles « Sélection seulement », filtres Ø mini/maxi des perçages, bouton « Fantôme autour ». Le code et les commandes JSON sont conservés (aucune suppression de fonction) ; notes ajoutées à NAV-02, NAV-04, NOM-03, DOC-01. Réintégration possible sur simple décision.
 - Application autonome 1.7.0 → **1.7.1**. La v1.11 passe en archive figée.

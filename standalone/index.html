@@ -23,6 +23,8 @@
       <div class="menu"><button class="btn" id="settings-btn" title="Finesse d'affichage, mode tactile, projet">Réglages ▾</button>
         <div class="menu-list menu-settings" id="settings-menu" hidden>
           <label class="mi">Finesse d'affichage<select id="quality" title="Finesse du maillage d'affichage (n'affecte pas le fichier)"><option value="rapide">Rapide</option><option value="normale" selected>Normale</option><option value="fine">Fine</option></select></label>
+          <label class="mi">Taille d'écran<select id="densite" title="Adapte les menus à la taille de l'écran : compact pour un petit écran tactile (panneaux en recouvrement, icônes), normal pour un grand écran"><option value="auto">Automatique</option><option value="compact">Petit écran (compact)</option><option value="normal">Grand écran (normal)</option></select></label>
+          <small class="mi-info" id="densite-info"></small>
           <div class="mi">Écran tactile<span class="mi-btns"><button class="btn toggle" id="tactile-toggle" title="Mode tactile : grands boutons, appui long sur une pièce = menu contextuel">Tactile</button><button class="btn" id="ech-minus" hidden title="Interface plus petite">A−</button><button class="btn" id="ech-plus" hidden title="Interface plus grande">A+</button></span></div>
           <label class="mi mi-file" title="Recharger un projet JSON ou une scène PNG">Ouvrir un projet / une scène…<input id="load-project" type="file" accept=".json,.png" hidden></label>
         </div></div>
