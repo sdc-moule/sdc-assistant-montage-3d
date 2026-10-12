@@ -51,12 +51,15 @@ export function boite3d(m) {
 
 // ——— Découpe par un plan (axe 0 = X, 1 = Y) : on garde le côté ≥ valeur ; renvoie le demi-maillage et les segments de coupe ———
 export function decouper(m, axe, valeur0) {
-  const valeur = valeur0 + 1.7e-5;   // décalage de 0,017 µm : évite les sommets exactement dans le plan (boucles de coupe rompues)
+  return couper(m, axe, valeur0 + 1.7e-5, 1);   // décalage de 0,017 µm : évite les sommets exactement dans le plan (boucles de coupe rompues)
+}
+// Découpe générale : signe = +1 garde le côté ≥ valeur, −1 garde le côté ≤ valeur (utilisé pour les bandes des coupes décalées).
+function couper(m, axe, valeur, signe = 1) {
   const P = [...m.P], T = [], F = [], seg = [], cle = new Map();
   const vid = (x, y, z) => { const k = `${Math.round(x * 1e3)},${Math.round(y * 1e3)},${Math.round(z * 1e3)}`; let i = cle.get(k); if (i === undefined) { i = P.length / 3; cle.set(k, i); P.push(x, y, z); } return i; };
   const eps = 1e-7;
   for (let t = 0; t < m.T.length / 3; t++) {
-    const v = [0, 1, 2].map(k => { const i = m.T[3 * t + k]; return [m.P[3 * i], m.P[3 * i + 1], m.P[3 * i + 2], m.P[3 * i + axe] - valeur, m.T[3 * t + k]]; });
+    const v = [0, 1, 2].map(k => { const i = m.T[3 * t + k]; return [m.P[3 * i], m.P[3 * i + 1], m.P[3 * i + 2], signe * (m.P[3 * i + axe] - valeur), m.T[3 * t + k]]; });
     if (v.every(q => q[3] <= eps)) continue;
     if (v.every(q => q[3] >= -eps)) { T.push(v[0][4], v[1][4], v[2][4]); F.push(m.F[t]); continue; }
     const poly = [], nouv = [];
@@ -128,7 +131,7 @@ function aretes(m) {
 // Tracés 2D d'une vue : chaînes d'arêtes retenues, chaînées en 3D (sommets soudés) puis projetées et découpées visible / caché.
 // Chaîner en 3D évite de mélanger des polygones différents qui se projettent au même endroit (entrée et sortie d'un perçage).
 function chainesVue(m, E, vue, opts) {
-  const { D, U, V } = vue, { capBoucles = null, planW = null } = opts;
+  const { D, U, V } = vue, { caps = null, ignorer = null } = opts;   // caps : [{ boucles, w, bande }] zones coupées qui masquent ce qui est derrière ; ignorer : plans [{axe, val}] dont les bords libres ne sont pas tracés
   const proj = i => { const p = [m.P[3 * i], m.P[3 * i + 1], m.P[3 * i + 2]]; return [dot(p, U), dot(p, V), dot(p, D)]; };
   let u0 = Infinity, v0 = Infinity, u1 = -Infinity, v1 = -Infinity;
   for (let i = 0; i < m.P.length / 3; i++) { const q = proj(i); if (q[0] < u0) u0 = q[0]; if (q[0] > u1) u1 = q[0]; if (q[1] < v0) v0 = q[1]; if (q[1] > v1) v1 = q[1]; }
@@ -138,7 +141,8 @@ function chainesVue(m, E, vue, opts) {
   const unSeul = m.nFaces <= 1, gardees = [];
   for (const e of E) {
     let garde = false;
-    if (e.t.length === 1 || e.t.length > 2) garde = true;
+    if (e.t.length === 1 && ignorer && ignorer.some(q => Math.abs(m.P[3 * e.a + q.axe] - q.val) < 2e-3 && Math.abs(m.P[3 * e.b + q.axe] - q.val) < 2e-3)) garde = false;   // bord créé par un décrochement de coupe : non tracé
+    else if (e.t.length === 1 || e.t.length > 2) garde = true;
     else {
       const [t1, t2] = e.t, n1 = [m.N[3 * t1], m.N[3 * t1 + 1], m.N[3 * t1 + 2]], n2 = [m.N[3 * t2], m.N[3 * t2 + 1], m.N[3 * t2 + 2]];
       const s1 = dot(n1, D), s2 = dot(n2, D), c = dot(n1, n2);
@@ -168,7 +172,7 @@ function chainesVue(m, E, vue, opts) {
       for (let q = 0; q < n; q++) {
         const t = (q + 0.5) / n, mid = [A[0] + t * (B[0] - A[0]), A[1] + t * (B[1] - A[1]), A[2] + t * (B[2] - A[2])];
         let cache = masque(g, mid[0], mid[1], mid[2], eps);
-        if (!cache && capBoucles && mid[2] > planW + eps && dansBoucles(capBoucles, mid[0], mid[1])) cache = true;
+        if (!cache && caps) for (const c of caps) if (mid[2] > c.w + eps && (!c.bande || (mid[0] >= c.bande[0] - 1e-6 && mid[0] <= c.bande[1] + 1e-6)) && dansBoucles(c.boucles, mid[0], mid[1])) { cache = true; break; }
         etat.push(cache);
       }
       let d = 0;
@@ -334,6 +338,13 @@ function fusionnerDroites(items) {
   return res;
 }
 
+// Réunit plusieurs maillages (sommets non soudés entre eux) en un seul.
+function fusionner(liste, nFaces) {
+  const P = [], T = [], F = []; let base = 0;
+  for (const q of liste) { for (const x of q.P) P.push(x); for (const i of q.T) T.push(i + base); for (const f of q.F) F.push(f); base += q.P.length / 3; }
+  return finir({ P: Float64Array.from(P), T: Uint32Array.from(T), F: Int32Array.from(F), nFaces });
+}
+
 // ——— Hachures d'une section : droites à 45°, règle pair-impair ———
 function hachures(boucles, pas) {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -366,17 +377,28 @@ function boucles2d(segments3d, vue) { // chaîne les segments de coupe 3D en bou
 // ——— Construction d'une vue (items en repère local de la vue : u, v en mm) ———
 function construireVue(m, vue, { coupe = null } = {}) {
   const E = aretes(m);
-  let capBoucles = null, planW = null;
-  if (coupe) { capBoucles = boucles2d(coupe.segments, vue); planW = coupe.w; }
-  const { chaines, emprise } = chainesVue(m, E, vue, { capBoucles, planW });
+  // coupe : { segments, w } (plan unique) ou { caps: [{ segments, w, bande }], ignorer } (plans décalés : une bande de la vue par plan)
+  const caps = coupe ? (coupe.caps ?? [{ segments: coupe.segments, w: coupe.w }]).map(c => ({ boucles: boucles2d(c.segments, vue), w: c.w, bande: c.bande ?? null })) : null;
+  const { chaines, emprise } = chainesVue(m, E, vue, { caps, ignorer: coupe?.ignorer ?? null });
   // En coupe, les arêtes cachées ne sont pas tracées (usage du dessin technique).
   let items = epurerItems(itemsDeChaines(coupe ? chaines.filter(c => !c.cache) : chaines, 'Contours', 'Arêtes cachées'));
   items = fusionnerDroites(items);
-  if (coupe && capBoucles.length) {
+  if (caps && caps.some(c => c.boucles.length)) {
     const etendue = Math.max(emprise[2] - emprise[0], emprise[3] - emprise[1]), pas = Math.min(4, Math.max(1, etendue / 40));
-    for (const [a, b] of hachures(capBoucles, pas)) items.push({ kind: 'line', layer: 'Hachures', pointille: false, pts: [a, b], snap: [], hachure: true });
+    for (const c of caps) for (const [a, b] of hachures(c.boucles, pas)) {
+      const h = c.bande ? rogner(a, b, c.bande[0], c.bande[1]) : [a, b];   // hachures de chaque plan limitées à sa bande ; réseau commun donc continu
+      if (h) items.push({ kind: 'line', layer: 'Hachures', pointille: false, pts: h, snap: [], hachure: true });
+    }
   }
   return { items, emprise };
+}
+// Rogne un segment (a → b) à la bande x0 ≤ x ≤ x1 ; null s'il n'en reste rien.
+function rogner(a, b, x0, x1) {
+  if (b[0] < a[0]) [a, b] = [b, a];
+  if (b[0] < x0 || a[0] > x1) return null;
+  const dx = b[0] - a[0], y = x => a[1] + ((x - a[0]) / (dx || 1)) * (b[1] - a[1]);
+  const xa = Math.max(a[0], x0), xb = Math.min(b[0], x1);
+  return xb - xa > 1e-3 ? [[xa, dx ? y(xa) : a[1]], [xb, dx ? y(xb) : b[1]]] : null;
 }
 
 // Axe de révolution : cercle extérieur d'une vue qui égale son encombrement (± 1 %).
@@ -412,23 +434,80 @@ export function creerMiseEnPlan(parts, { coupeAuto = true } = {}) {
   const axe = coupeAuto ? axeRevolution(vues) : null;
   etat.axe = axe;
 
+  const auxiliaires = [], ordre = [];   // ordre : vues supplémentaires (coupes et auxiliaires) dans l'ordre de création ; la mise en page ne bouge plus ensuite
+  etat.auxiliaires = auxiliaires; etat.ordre = ordre;
+  const lettreLibre = () => { const pris = new Set(ordre.map(q => q.lettre)); for (let i = 0; i < 26; i++) { const l = String.fromCharCode(65 + i); if (!pris.has(l)) return l; } return '?'; };
+  const placer = (emprise) => { const prec = ordre.length ? ordre[ordre.length - 1] : null; const dernX = prec ? prec.boite[2] + gap : (g[2] + vues.gauche.off[0]) + gap; return [dernX - emprise[0], vues.face.off[1]]; };
+  const caser = (S) => { S.boite = [S.emprise[0] + S.off[0], S.emprise[1] + S.off[1], S.emprise[2] + S.off[0], S.emprise[3] + S.off[1]]; ordre.push(S); return S; };
+
   etat.ajouterCoupe = (plan, valeur, { auto = false } = {}) => {
     const axeIdx = plan === 'XZ' ? 1 : 0, vueId = plan === 'XZ' ? 'face' : 'gauche', vue = VUES[vueId];
-    if (sections.length >= 8) throw new Error('Limite de 8 coupes atteinte.');
-    if (sections.some(q => q.plan === plan && Math.abs(q.valeur - valeur) < 0.01)) throw new Error('Cette coupe existe déjà.');
+    if (sections.length >= 8 || ordre.length >= 12) throw new Error('Limite de 8 coupes atteinte.');
+    if (sections.some(q => q.plan === plan && !q.decalee && Math.abs(q.valeur - valeur) < 0.01)) throw new Error('Cette coupe existe déjà.');
     const { maillage, segments } = decouper(m, axeIdx, valeur);
     if (!maillage.T.length || !segments.length) throw new Error('Le plan de coupe ne rencontre pas la pièce.');
     const v = construireVue(maillage, vue, { coupe: { segments, w: valeur } });
-    const lettre = String.fromCharCode(65 + sections.length);
-    const prec = sections.length ? sections[sections.length - 1] : null;
-    const dernX = prec ? prec.boite[2] + gap : (g[2] + vues.gauche.off[0]) + gap;
-    const off = [dernX - v.emprise[0], vues.face.off[1]];
-    const S = { id: `coupe${sections.length + 1}`, nom: `Coupe ${lettre}-${lettre}`, plan, valeur, vueId, auto, lettre, items: v.items, emprise: v.emprise, off, boite: [v.emprise[0] + off[0], v.emprise[1] + off[1], v.emprise[2] + off[0], v.emprise[3] + off[1]] };
-    if (auto && axe) S.axeLocal = axe.axe === 'Z' ? { dir: 'V', pos: axe.c[0] + off[0] } : { dir: 'H', pos: axe.c[1] + off[1] };
-    sections.push(S); return S;
+    const lettre = lettreLibre();
+    const S = { type: 'coupe', id: `coupe${sections.length + 1}`, nom: `Coupe ${lettre}-${lettre}`, plan, valeur, vueId, auto, lettre, items: v.items, emprise: v.emprise, off: placer(v.emprise) };
+    if (auto && axe) S.axeLocal = axe.axe === 'Z' ? { dir: 'V', pos: axe.c[0] + S.off[0] } : { dir: 'H', pos: axe.c[1] + S.off[1] };
+    sections.push(S); return caser(S);
   };
-  etat.retirerCoupe = () => sections.pop() ?? null;
-  const boites = () => [...['face', 'dessus', 'gauche'].map(id => [vues[id].emprise[0] + vues[id].off[0], vues[id].emprise[1] + vues[id].off[1], vues[id].emprise[2] + vues[id].off[0], vues[id].emprise[3] + vues[id].off[1]]), ...sections.map(q => q.boite)];
+  // Coupe décalée (plans parallèles) : plan 'XZ' (Y = valeurs[i], bords = positions X des décrochements) ou 'YZ' (X = valeurs[i], bords = positions Y).
+  // La pièce est conservée plan par plan sur sa bande ; les décrochements ne sont pas tracés dans la vue (usage du dessin technique).
+  etat.ajouterCoupeDecalee = (plan, valeurs0, bords0) => {
+    if (plan !== 'XZ' && plan !== 'YZ') throw new Error('Plan de coupe inconnu.');
+    let valeurs = [...valeurs0], bords = [...bords0];
+    if (valeurs.length < 2 || valeurs.length > 5 || bords.length !== valeurs.length - 1) throw new Error('Une coupe décalée comporte de 2 à 5 plans, séparés par un décrochement chacun.');
+    if (bords.length > 1 && bords[0] > bords[1]) { valeurs.reverse(); bords.reverse(); }
+    for (let i = 1; i < bords.length; i++) if (!(bords[i] > bords[i - 1] + 0.01)) throw new Error('Les décrochements doivent se suivre dans un seul sens.');
+    for (let i = 1; i < valeurs.length; i++) if (Math.abs(valeurs[i] - valeurs[i - 1]) < 0.01) throw new Error('Deux plans consécutifs sont identiques : ce n’est pas un décrochement.');
+    if (sections.length >= 8 || ordre.length >= 12) throw new Error('Limite de 8 coupes atteinte.');
+    if (sections.some(q => q.decalee && q.plan === plan && q.valeurs.length === valeurs.length && q.valeurs.every((x, i) => Math.abs(x - valeurs[i]) < 0.01) && q.bords.every((x, i) => Math.abs(x - bords[i]) < 0.01))) throw new Error('Cette coupe existe déjà.');
+    const axeIdx = plan === 'XZ' ? 1 : 0, axeBande = plan === 'XZ' ? 0 : 1, vueId = plan === 'XZ' ? 'face' : 'gauche', vue = VUES[vueId], e = 1.7e-5;
+    const morceaux = [], caps = [], ignorer = []; let nSeg = 0;
+    valeurs.forEach((val, i) => {
+      const lo = i > 0 ? bords[i - 1] : -Infinity, hi = i < bords.length ? bords[i] : Infinity;
+      const r = couper(m, axeIdx, val + e, 1); nSeg += r.segments.length;
+      let mi = r.maillage;
+      if (Number.isFinite(lo)) { mi = couper(mi, axeBande, lo + e, 1).maillage; ignorer.push({ axe: axeBande, val: lo + e }); }
+      if (Number.isFinite(hi)) { mi = couper(mi, axeBande, hi - e, -1).maillage; ignorer.push({ axe: axeBande, val: hi - e }); }
+      morceaux.push(mi);
+      const bande = plan === 'XZ' ? [lo, hi] : [-hi, -lo];   // abscisse de la vue : X pour la face, −Y pour la gauche
+      caps.push({ segments: r.segments, w: val, bande });
+    });
+    if (!nSeg) throw new Error('Le plan de coupe ne rencontre pas la pièce.');
+    const fusion = fusionner(morceaux, m.nFaces);
+    if (!fusion.T.length) throw new Error('Le plan de coupe ne rencontre pas la pièce.');
+    const v = construireVue(fusion, vue, { coupe: { caps, ignorer } });
+    const lettre = lettreLibre();
+    const S = { type: 'coupe', id: `coupe${sections.length + 1}`, nom: `Coupe ${lettre}-${lettre}`, plan, decalee: true, valeur: valeurs[0], valeurs, bords, vueId, auto: false, lettre, items: v.items, emprise: v.emprise, off: placer(v.emprise) };
+    sections.push(S); return caser(S);
+  };
+  // Vue auxiliaire : projection sur un plan perpendiculaire à la vue source et à la droite choisie (a → b, coordonnées locales de la vue source).
+  // Le regard est perpendiculaire à la droite, dans le plan de la vue source ; la droite devient l'horizontale de la vue auxiliaire.
+  etat.ajouterAuxiliaire = (vueId, a, b, { inverse = false } = {}) => {
+    const src = vues[vueId]; if (!src) throw new Error('Vue source inconnue.');
+    if (ordre.length >= 12 || auxiliaires.length >= 6) throw new Error('Limite de 6 vues auxiliaires atteinte.');
+    const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy);
+    if (L < 0.5) throw new Error('La droite de référence est trop courte : choisir deux points plus éloignés.');
+    let t = [dx / L, dy / L]; if (t[0] < -1e-9 || (Math.abs(t[0]) <= 1e-9 && t[1] < 0)) t = [-t[0], -t[1]];
+    let n = [-t[1], t[0]];
+    const M = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], e = src.emprise, c = [(e[0] + e[2]) / 2, (e[1] + e[3]) / 2];
+    if ((c[0] - M[0]) * n[0] + (c[1] - M[1]) * n[1] < 0) n = [-n[0], -n[1]];   // sens proposé : on regarde la pièce depuis l'extérieur de la droite choisie
+    if (inverse) n = [-n[0], -n[1]];
+    const comb = (p) => [0, 1, 2].map(k => p[0] * src.U[k] + p[1] * src.V[k]);
+    const D = comb(n), U = comb(t), cr = (x, y) => [x[1] * y[2] - x[2] * y[1], x[2] * y[0] - x[0] * y[2], x[0] * y[1] - x[1] * y[0]], Vv = cr(D, U).map(q => -q);
+    const vue = { U, V: Vv, D };
+    if (auxiliaires.some(q => q.source === vueId && Math.abs(q.regard[0] - n[0]) < 1e-6 && Math.abs(q.regard[1] - n[1]) < 1e-6)) throw new Error('Cette vue auxiliaire existe déjà.');
+    const v = construireVue(m, vue);
+    if (!v.items.length) throw new Error('Rien à projeter dans cette direction.');
+    const lettre = lettreLibre();
+    const S = { type: 'auxiliaire', id: `aux${auxiliaires.length + 1}`, nom: `Vue auxiliaire ${lettre}`, lettre, source: vueId, a: [...a], b: [...b], milieu: M, regard: n, angle: Math.atan2(t[1], t[0]) * 180 / Math.PI, vue, items: v.items, emprise: v.emprise, off: placer(v.emprise) };
+    auxiliaires.push(S); return caser(S);
+  };
+  etat.retirerCoupe = () => { const q = sections.pop() ?? null; if (q) ordre.splice(ordre.indexOf(q), 1); return q; };
+  etat.retirerAuxiliaire = () => { const q = auxiliaires.pop() ?? null; if (q) ordre.splice(ordre.indexOf(q), 1); return q; };
+  const boites = () => [...['face', 'dessus', 'gauche'].map(id => [vues[id].emprise[0] + vues[id].off[0], vues[id].emprise[1] + vues[id].off[1], vues[id].emprise[2] + vues[id].off[0], vues[id].emprise[3] + vues[id].off[1]]), ...ordre.map(q => q.boite)];
   // Le point (feuille) tombe-t-il sur une vue ou une coupe (encombrement) ? Sert à refuser une cote placée sur la pièce.
   etat.dansPiece = (x, y, marge = 0) => boites().some(b => x >= b[0] - marge && x <= b[2] + marge && y >= b[1] - marge && y <= b[3] + marge);
   // Axe de révolution de la coupe qui contient le point (coupe automatique seulement) : { dir:'V'|'H', pos } en coordonnées feuille.
@@ -442,9 +521,9 @@ export function creerMiseEnPlan(parts, { coupeAuto = true } = {}) {
       const V = vues[id], b = V.emprise, o = V.off;
       if (x >= b[0] + o[0] - marge && x <= b[2] + o[0] + marge && y >= b[1] + o[1] - marge && y <= b[3] + o[1] + marge) {
         const u = x - o[0], w = y - o[1];
-        if (id === 'face') return { vue: id, X: u, Z: w };
-        if (id === 'dessus') return { vue: id, X: u, Y: w };
-        return { vue: id, Y: -u, Z: w };
+        if (id === 'face') return { vue: id, X: u, Z: w, u, v: w };
+        if (id === 'dessus') return { vue: id, X: u, Y: w, u, v: w };
+        return { vue: id, Y: -u, Z: w, u, v: w };
       }
     }
     return null;
@@ -464,7 +543,7 @@ function assembler(et) {
   for (const S of et.sections) {
     for (const o of S.items) ajoute(o, S.off);
     texte(S.nom, S.boite[0], S.boite[1] - 4.2 * hT, hT);
-    texte(`plan ${S.plan} · ${S.plan === 'XZ' ? 'Y' : 'X'} = ${z0(S.valeur)}${S.auto ? ' · axe' : ''}`, S.boite[0], S.boite[1] - 5.8 * hT, 0.8 * hT);
+    texte(S.decalee ? `plans ${S.plan} décalés · ${S.plan === 'XZ' ? 'Y' : 'X'} = ${S.valeurs.map(z0).join(' | ')}` : `plan ${S.plan} · ${S.plan === 'XZ' ? 'Y' : 'X'} = ${z0(S.valeur)}${S.auto ? ' · axe' : ''}`, S.boite[0], S.boite[1] - 5.8 * hT, 0.8 * hT);
     const ax = et.axe, marque = (a, b, layer) => items.push({ kind: 'line', layer, pointille: true, pts: [a, b], snap: [], axe: true });
     if (S.auto && ax) {                                        // axe de révolution de la coupe automatique
       if (ax.axe === 'Z') { const x = ax.c[0] + S.off[0]; marque([x, S.emprise[1] + S.off[1] - 1.5 * k * 4], [x, S.emprise[3] + S.off[1] + 1.5 * k * 4], 'Axes'); }
@@ -472,7 +551,16 @@ function assembler(et) {
     }
     // traits de coupe dans les vues sources, avec lettres et flèches de visée
     const dv = et.vues.dessus, gv = et.vues.gauche, fv = et.vues.face, traits = [];
-    if (S.plan === 'XZ') {
+    if (S.decalee) {   // tracé dans la vue de dessus : plans parallèles reliés par des décrochements perpendiculaires
+      const XZ = S.plan === 'XZ', lo = XZ ? dv.emprise[0] + dv.off[0] - ext : dv.emprise[1] + dv.off[1] - ext, hi = XZ ? dv.emprise[2] + dv.off[0] + ext : dv.emprise[3] + dv.off[1] + ext;
+      const pos = (c, i) => (XZ ? [c, S.valeurs[i] + dv.off[1]] : [S.valeurs[i] + dv.off[0], c]), bd = S.bords.map(b => b + (XZ ? dv.off[0] : dv.off[1]));
+      const chemin = [pos(lo, 0)]; bd.forEach((b, i) => { chemin.push(pos(b, i), pos(b, i + 1)); }); chemin.push(pos(hi, S.valeurs.length - 1));
+      items.push({ kind: 'poly', layer: 'Plan de coupe', pointille: true, pts: chemin, snap: [], axe: true });
+      chemin.forEach((p, i) => {   // repères épais aux extrémités et aux décrochements
+        for (const q of [chemin[i - 1], chemin[i + 1]]) if (q) { const l = Math.hypot(q[0] - p[0], q[1] - p[1]), c = Math.min(6 * k, l / 3); if (l > 1e-6) items.push({ kind: 'line', layer: 'Plan de coupe', pointille: false, epais: true, pts: [p, [p[0] + (q[0] - p[0]) / l * c, p[1] + (q[1] - p[1]) / l * c]], snap: [], axe: true }); }
+      });
+      traits.push({ a: chemin[0], b: chemin[chemin.length - 1], dir: XZ ? [0, 1] : [1, 0], fleches: true });
+    } else if (S.plan === 'XZ') {
       traits.push({ a: [dv.emprise[0] + dv.off[0] - ext, S.valeur + dv.off[1]], b: [dv.emprise[2] + dv.off[0] + ext, S.valeur + dv.off[1]], dir: [0, 1] });
       traits.push({ a: [-S.valeur + gv.off[0], gv.emprise[1] + gv.off[1] - ext], b: [-S.valeur + gv.off[0], gv.emprise[3] + gv.off[1] + ext], dir: [-1, 0] });
     } else {
@@ -480,13 +568,28 @@ function assembler(et) {
       traits.push({ a: [S.valeur + fv.off[0], fv.emprise[1] + fv.off[1] - ext], b: [S.valeur + fv.off[0], fv.emprise[3] + fv.off[1] + ext], dir: [1, 0] });
     }
     for (const t of traits) {
-      items.push({ kind: 'line', layer: 'Plan de coupe', pointille: true, pts: [t.a, t.b], snap: [], axe: true });
+      if (!t.fleches) items.push({ kind: 'line', layer: 'Plan de coupe', pointille: true, pts: [t.a, t.b], snap: [], axe: true });
       for (const p of [t.a, t.b]) {
         const n = t.dir, q = [-n[1], n[0]], w = 2 * k, tip = [p[0] + n[0] * 8 * k, p[1] + n[1] * 8 * k], base = [p[0] + n[0] * 2 * k, p[1] + n[1] * 2 * k];
-        items.push({ kind: 'poly', layer: 'Plan de coupe', pointille: false, pts: [tip, [base[0] + q[0] * w, base[1] + q[1] * w], [base[0] - q[0] * w, base[1] - q[1] * w], tip], snap: [], axe: true });
+        items.push({ kind: 'poly', layer: 'Plan de coupe', pointille: false, plein: true, pts: [tip, [base[0] + q[0] * w, base[1] + q[1] * w], [base[0] - q[0] * w, base[1] - q[1] * w], tip], snap: [], axe: true });
         texte(S.lettre, p[0] + n[0] * 9.5 * k - 0.6 * k * 2.5, p[1] + n[1] * 9.5 * k - 0.6 * k * 2.5, 5 * k, 'Plan de coupe');
       }
     }
+  }
+  const NOMS = { face: 'vue de face', dessus: 'vue de dessus', gauche: 'vue de gauche' };
+  for (const S of et.auxiliaires) {
+    for (const o of S.items) ajoute(o, S.off);
+    texte(S.nom, S.boite[0], S.boite[1] - 4.2 * hT, hT);
+    texte(`regard perpendiculaire à la droite choisie (${NOMS[S.source]}, ${z0(S.angle)}°) · sens proposé`, S.boite[0], S.boite[1] - 5.8 * hT, 0.8 * hT);
+    // flèche de visée dans la vue source, sur le prolongement du regard, avec la lettre de la vue
+    const sv = et.vues[S.source], bs = [sv.emprise[0] + sv.off[0], sv.emprise[1] + sv.off[1], sv.emprise[2] + sv.off[0], sv.emprise[3] + sv.off[1]];
+    const n = S.regard, M = [S.milieu[0] + sv.off[0], S.milieu[1] + sv.off[1]];
+    let te = Infinity; for (let i = 0; i < 2; i++) if (Math.abs(n[i]) > 1e-9) te = Math.min(te, n[i] > 0 ? (M[i] - bs[i]) / n[i] : (bs[2 + i] - M[i]) / -n[i]);
+    if (!Number.isFinite(te) || te < 0) te = 0;
+    const pt = d => [M[0] - n[0] * (te + d * k), M[1] - n[1] * (te + d * k)], q = [-n[1], n[0]], w = 2 * k, tip = pt(3), base = pt(9), queue = pt(20);
+    items.push({ kind: 'line', layer: 'Plan de coupe', pointille: false, pts: [queue, base], snap: [], axe: true });
+    items.push({ kind: 'poly', layer: 'Plan de coupe', pointille: false, plein: true, pts: [tip, [base[0] + q[0] * w, base[1] + q[1] * w], [base[0] - q[0] * w, base[1] - q[1] * w], tip], snap: [], axe: true });
+    const L = pt(24); texte(S.lettre, L[0] - 1.5 * k, L[1] - 2 * k, 5 * k, 'Plan de coupe');
   }
   // Axes des cercles entiers visibles (croix de centre), pour repérer les perçages
   for (const o of [...items]) if (o.kind === 'circle' && !o.pointille && o.r >= 1.5) {

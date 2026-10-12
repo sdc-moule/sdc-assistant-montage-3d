@@ -637,6 +637,55 @@ with sync_playwright() as p:
     check(mp.evaluate("() => window.__SDC__.S.parts.length") == 15, "Mise en plan : consultation seule, assemblage STEP intact")
     mp.click(".dxf-bar >> text=Fermer")
     check(mp.locator("#dxf-view").count() == 0, "Mise en plan : retour à la vue 3D")
+    # --- Coupe décalée, vue auxiliaire, export DXF / PDF (plaque porte-empreinte) ---
+    mp.evaluate(f"() => window.__SDC__.select(['{ids['PLAQUE_PORTE_EMPREINTE']}'])")
+    mp.click("#s-plan"); mp.wait_for_selector("#dxf-view canvas"); mp.wait_for_timeout(800)
+    ox, oy = P("E.mp.vues.dessus.off")
+    c60 = P("(() => { const o = E.d.items.filter(q => q.kind === 'circle' && !q.pointille && Math.abs(q.r - 30) < 0.1)[0]; return o.c; })()")
+    c10 = P("(() => { const o = E.d.items.filter(q => q.kind === 'circle' && !q.pointille && Math.abs(q.r - 5) < 0.1 && q.c[0] > 0).sort((a, b) => a.c[1] - b.c[1])[0]; return o.c; })()")
+    outil("Coupe décalée")
+    clic(c60[0], c60[1])                                                   # plan 1 : Y du centre du logement Ø60
+    clic((c60[0] + c10[0]) / 2, c60[1])                                    # décrochement entre les deux
+    clic(c10[0], c10[1])                                                   # plan 2 : Y d'un perçage Ø10
+    check(P("E.dec.valeurs.length") == 2 and P("E.dec.bords.length") == 1, "Coupe décalée : 2 plans et 1 décrochement saisis (aperçu orange)")
+    mp.screenshot(path=str(OUT / "35_coupe_decalee_trace.png"))
+    mp.click('.dxf-coupe button:text-is("Terminer")')
+    d0 = P("E.mp.sections[0] && [E.mp.sections[0].decalee, E.mp.sections[0].plan, E.mp.sections[0].valeurs.map(v => +v.toFixed(2)), E.mp.sections[0].nom]")
+    check(d0 and d0[0] is True and d0[1] == "XZ" and abs(d0[2][0] - (c60[1] - oy)) < 0.05 and abs(d0[2][1] - (c10[1] - oy)) < 0.05 and d0[3] == "Coupe A-A", f"Coupe décalée : A-A créée, plans Y = {d0 and d0[2]}")
+    check(P("E.d.items.some(o => o.kind === 'poly' && o.layer === 'Plan de coupe' && o.pointille && o.pts.length === 4)") and P("E.d.items.filter(o => o.epais).length") >= 6, "Coupe décalée : tracé en palier et repères épais dans la vue de dessus")
+    # vue auxiliaire : bord avant de la plaque, deux extrémités cliquées
+    outil("Vue auxiliaire")
+    clic(-150 + ox, -125 + oy); clic(150 + ox, -125 + oy)
+    a0 = P("E.mp.auxiliaires[0] && [E.mp.auxiliaires[0].nom, +(E.mp.auxiliaires[0].emprise[2] - E.mp.auxiliaires[0].emprise[0]).toFixed(2), +(E.mp.auxiliaires[0].emprise[3] - E.mp.auxiliaires[0].emprise[1]).toFixed(2)]")
+    check(a0 and a0[0] == "Vue auxiliaire B" and abs(a0[1] - 300) < 0.05 and abs(a0[2] - 40) < 0.05, f"Vue auxiliaire : B créée perpendiculairement au bord avant (300 × 40) {a0}")
+    # une cote horizontale sur la largeur de la plaque, posée hors pièce
+    outil("Cote horizontale")
+    clic(-150 + ox, -125 + oy); clic(150 + ox, -125 + oy); clic(ox, -125 + oy - 45)
+    cw = P("E.cotes[0] && [E.cotes[0].t, Math.abs(E.cotes[0].b.x - E.cotes[0].a.x)]")
+    check(cw and cw[0] == "ph" and abs(cw[1] - 300) < 0.05, "Mise en plan : cote horizontale 300,00 posée hors pièce")
+    mp.click(".dxf-bar >> text=Ajuster"); mp.wait_for_timeout(200)
+    mp.screenshot(path=str(OUT / "36_coupe_decalee_auxiliaire.png"))
+    with mp.expect_download() as dl:
+        mp.click('.dxf-bar button:text-is("Export DXF")')
+    fd = OUT / "plan_export.dxf"; dl.value.save_as(str(fd)); txt = fd.read_bytes().decode("latin-1")
+    check(dl.value.suggested_filename.endswith("_mise_en_plan.dxf") and txt.startswith("0\r\nSECTION") and "AC1009" in txt and "Coupe A-A" in txt and "Vue auxiliaire B" in txt and "300,00" in txt and "INDICATIVES" in txt, "Export DXF : fichier R12 avec vues, coupe décalée, vue auxiliaire, cote et mention d'indicatif")
+    check(txt.count("\r\nSOLID\r\n") >= 5 and "\r\nCIRCLE\r\n" in txt and "COTES" in txt, "Export DXF : flèches pleines, cercles et calque des cotes")
+    with mp.expect_download() as dl2:
+        mp.click('.dxf-bar button:text-is("Export PDF")')
+    fp = OUT / "plan_export.pdf"; dl2.value.save_as(str(fp)); raw = fp.read_bytes()
+    check(raw.startswith(b"%PDF-1.4") and raw.rstrip().endswith(b"%%EOF") and dl2.value.suggested_filename.endswith("_mise_en_plan.pdf"), "Export PDF : fichier PDF vectoriel")
+    import shutil, subprocess
+    if shutil.which("qpdf"):
+        check(subprocess.run(["qpdf", "--check", str(fp)], capture_output=True).returncode == 0, "Export PDF : structure valide (qpdf)")
+    if shutil.which("pdftotext"):
+        t = subprocess.run(["pdftotext", "-layout", str(fp), "-"], capture_output=True, text=True).stdout
+        check("Vue de face" in t and "Coupe A-A" in t and "Vue auxiliaire B" in t and "300,00" in t and "INDICATIVES" in t, "Export PDF : textes lisibles (titres, cote, mention d'indicatif)")
+    if shutil.which("pdftoppm"):
+        subprocess.run(["pdftoppm", "-png", "-r", "60", str(fp), str(OUT / "37_export_pdf")], capture_output=True)
+    check(P("E.dernierExport && E.dernierExport.fmt") == "pdf", "Export : l'interface annonce le format et la mention d'indicatif")
+    mp.click(".dxf-bar >> text=Retirer vue aux.")
+    check(P("E.mp.auxiliaires.length") == 0 and P("E.mp.sections.length") == 1, "Vue auxiliaire : « Retirer vue aux. » ne touche pas aux coupes")
+    mp.click(".dxf-bar >> text=Fermer")
     mp.close()
     check(not errors, "aucune erreur JavaScript" + (f" : {errors[:3]}" if errors else ""))
     b.close()

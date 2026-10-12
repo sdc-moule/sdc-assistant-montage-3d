@@ -324,3 +324,231 @@ test('mise en plan : le STEP n’est jamais modifié et une sélection vide est 
   assert.deepEqual(Array.from(plaque[0].positions), Array.from(avant), 'maillage d’origine intact');
   assert.throws(() => creerMiseEnPlan([]), /Aucune géométrie/);
 });
+
+// ——— Mise en plan : vues auxiliaires et coupes décalées (MEP-06, MEP-07) ———
+// Cylindre Ø24 × 50 dont l'axe est incliné de 30° dans le plan XZ (maillage synthétique, 48 facettes).
+function cylindreIncline(R, L, deg, n = 48) {
+  const th = deg * Math.PI / 180, a = [Math.sin(th), 0, Math.cos(th)], t = [Math.cos(th), 0, -Math.sin(th)], y = [0, 1, 0];
+  const pt = (h, phi) => [0, 1, 2].map(k => h * a[k] + R * (Math.cos(phi) * t[k] + Math.sin(phi) * y[k]));
+  const pos = [], idx = [], add = p => { pos.push(...p); return pos.length / 3 - 1; }, b = [], h = [];
+  for (let i = 0; i < n; i++) { b.push(add(pt(0, 2 * Math.PI * i / n))); h.push(add(pt(L, 2 * Math.PI * i / n))); }
+  const cb = add([0, 0, 0]), ct = add(a.map(q => q * L));
+  for (let i = 0; i < n; i++) { const j = (i + 1) % n; idx.push(b[i], b[j], h[i], b[j], h[j], h[i]); }
+  for (let i = 0; i < n; i++) { const j = (i + 1) % n; idx.push(cb, b[j], b[i]); }
+  for (let i = 0; i < n; i++) { const j = (i + 1) % n; idx.push(ct, h[i], h[j]); }
+  return { name: 'CYL_INCLINE', positions: Float32Array.from(pos), index: Uint32Array.from(idx), faces: [{ first: 0, last: 2 * n - 1 }, { first: 2 * n, last: 3 * n - 1 }, { first: 3 * n, last: 4 * n - 1 }] };
+}
+const R_CYL = 12, L_CYL = 50, ANG_CYL = 30;
+const droiteCapCyl = () => {   // arête du plan de base supérieur vue par la tranche dans la vue de face : (u, v) = (X, Z)
+  const th = ANG_CYL * Math.PI / 180, C = [L_CYL * Math.sin(th), L_CYL * Math.cos(th)], t = [Math.cos(th), -Math.sin(th)];
+  return [[C[0] - R_CYL * t[0], C[1] - R_CYL * t[1]], [C[0] + R_CYL * t[0], C[1] + R_CYL * t[1]]];
+};
+
+test('mise en plan : vue auxiliaire — le cercle d’une face inclinée apparaît en vraie grandeur (MEP-06)', () => {
+  const mp = creerMiseEnPlan([cylindreIncline(R_CYL, L_CYL, ANG_CYL)]);
+  assert.equal(mp.axe, null);
+  const fv = mp.vues.face.items.filter(o => o.kind === 'circle');
+  assert.equal(fv.length, 0, 'dans la vue de face le cylindre incliné n’a aucun cercle');
+  const [a, b] = droiteCapCyl(), S = mp.ajouterAuxiliaire('face', a, b);
+  assert.equal(S.nom, 'Vue auxiliaire A'); assert.equal(S.type, 'auxiliaire');
+  const cercles = S.items.filter(o => o.kind === 'circle' && !o.pointille);
+  assert.equal(cercles.length, 1, 'un seul cercle (celui du fond, caché, est superposé donc supprimé)');
+  assert.ok(proche(cercles[0].r, R_CYL, 0.05), 'Ø24 en vraie grandeur');
+  assert.ok(S.items.every(o => !(o.kind === 'circle' && o.pointille)), 'pas de doublon pointillé');
+  const e = S.emprise; assert.ok(proche(e[2] - e[0], 2 * R_CYL, 0.05) && proche(e[3] - e[1], 2 * R_CYL, 0.05), 'vue 24 × 24');
+  // regard : du dehors du cylindre vers son centre, soit −axe (0,5 ; 0,866) ; proposé à partir de la droite choisie
+  assert.ok(proche(S.regard[0], -Math.sin(ANG_CYL * Math.PI / 180), 1e-6) && proche(S.regard[1], -Math.cos(ANG_CYL * Math.PI / 180), 1e-6));
+  // mise en page : à droite de tout le reste, flèche + lettre dans la vue source
+  const bg = mp.vues.gauche, xg = bg.emprise[2] + bg.off[0];
+  assert.ok(S.boite[0] > xg, 'vue auxiliaire placée à droite');
+  const d = mp.dessin();
+  assert.ok(d.items.some(o => o.kind === 'text' && o.texte === 'A' && o.layer === 'Plan de coupe'), 'lettre A');
+  assert.ok(d.items.some(o => o.kind === 'poly' && o.plein && o.layer === 'Plan de coupe'), 'flèche pleine de visée');
+  assert.ok(d.items.some(o => o.kind === 'text' && /Vue auxiliaire A/.test(o.texte)) && d.items.some(o => o.kind === 'text' && /sens proposé/.test(o.texte)));
+  // refus : doublon, droite trop courte, vue inconnue
+  assert.throws(() => mp.ajouterAuxiliaire('face', a, b), /existe déjà/);
+  assert.throws(() => mp.ajouterAuxiliaire('face', [0, 0], [0.1, 0]), /trop courte/);
+  assert.throws(() => mp.ajouterAuxiliaire('dessous', a, b), /inconnue/);
+  // sens inversé : on regarde l'autre extrémité, le cercle reste un vrai cercle
+  const S2 = mp.ajouterAuxiliaire('face', a, b, { inverse: true });
+  assert.equal(S2.nom, 'Vue auxiliaire B'); assert.ok(S2.regard[0] > 0 && S2.regard[1] > 0);
+  assert.ok(S2.items.some(o => o.kind === 'circle' && proche(o.r, R_CYL, 0.05)));
+  assert.ok(S2.boite[0] > S.boite[2], 'sans chevauchement');
+  assert.equal(mp.retirerAuxiliaire().nom, 'Vue auxiliaire B'); assert.equal(mp.auxiliaires.length, 1);
+  assert.equal(mp.ajouterAuxiliaire('face', a, b, { inverse: true }).nom, 'Vue auxiliaire B', 'la lettre libérée est réutilisée');
+});
+
+test('mise en plan : vue auxiliaire d’une plaque — droite horizontale du dessus, vue 300 × 40 (MEP-06)', () => {
+  const mp = creerMiseEnPlan(plaque);
+  const S = mp.ajouterAuxiliaire('dessus', [-150, -125], [150, -125]);      // bord avant de la plaque
+  const e = S.emprise;
+  assert.ok(proche(e[2] - e[0], 300, 0.02) && proche(e[3] - e[1], 40, 0.02), 'on regarde la plaque par la tranche : 300 × 40');
+  assert.ok(Math.abs(S.regard[0]) < 1e-9 && proche(S.regard[1], 1, 1e-9), 'regard vers +Y, depuis le bord avant');
+  assert.equal(mp.dessin().items.filter(o => o.kind === 'text' && o.texte === 'A').length, 1);
+});
+
+test('mise en plan : coupe décalée XZ — deux plans parallèles, hachures continues, décrochement non tracé (MEP-07)', () => {
+  const mp = creerMiseEnPlan(plaque);
+  const S = mp.ajouterCoupeDecalee('XZ', [60, -60], [20]);
+  assert.equal(S.nom, 'Coupe A-A'); assert.ok(S.decalee && S.plan === 'XZ' && S.valeurs.length === 2);
+  const hach = S.items.filter(o => o.hachure);
+  const couvre = (x, z) => hach.some(h => { const [a, c] = h.pts, t = (z - a[1]) / (c[1] - a[1]); return t >= 0 && t <= 1 && Math.abs(a[0] + t * (c[0] - a[0]) - x) < 3; });
+  assert.ok(!couvre(-60, 62), 'plan Y = 60 : le logement Ø60 n’est pas hachuré');
+  assert.ok(couvre(-60, 33), 'sous le fond du logement : hachuré');
+  assert.ok(couvre(100, 38) && couvre(-140, 38) && couvre(100, 62), 'matière hachurée des deux côtés du décrochement');
+  assert.ok(!couvre(100, 50), 'plan Y = −60 : le forage Ø8 (Z 46–54) n’est pas hachuré');
+  assert.ok(couvre(20, 38) && couvre(19.5, 33) && couvre(20.5, 62), 'hachures continues à la hauteur du décrochement');
+  const vert = S.items.filter(o => o.kind === 'line' && !o.hachure && Math.abs(o.pts[0][0] - 20) < 0.1 && Math.abs(o.pts[1][0] - 20) < 0.1 && Math.abs(o.pts[1][1] - o.pts[0][1]) > 1);
+  assert.equal(vert.length, 0, 'aucun trait vertical au décrochement X = 20');
+  assert.ok(S.items.every(o => !o.pointille), 'pas d’arêtes cachées en coupe');
+  const d = mp.dessin();
+  const chemin = d.items.find(o => o.kind === 'poly' && o.layer === 'Plan de coupe' && o.pointille);
+  assert.equal(chemin.pts.length, 4, 'tracé : départ, deux sommets du décrochement, arrivée');
+  const dv = mp.vues.dessus; assert.ok(proche(chemin.pts[1][0], 20 + dv.off[0]) && proche(chemin.pts[1][1], 60 + dv.off[1]) && proche(chemin.pts[2][1], -60 + dv.off[1]), 'décrochement à X = 20 entre Y = 60 et Y = −60');
+  assert.ok(d.items.filter(o => o.epais).length >= 6, 'repères épais aux extrémités et au décrochement');
+  assert.equal(d.items.filter(o => o.kind === 'text' && o.texte === 'A' && o.layer === 'Plan de coupe').length, 2, 'lettre A aux deux extrémités');
+  assert.ok(d.items.some(o => o.kind === 'text' && /plans XZ décalés · Y = 60,00 \| -60,00/.test(o.texte)));
+  // validations
+  assert.throws(() => mp.ajouterCoupeDecalee('XZ', [60, -60], [20]), /existe déjà/);
+  assert.throws(() => mp.ajouterCoupeDecalee('XZ', [60], []), /2 à 5 plans/);
+  assert.throws(() => mp.ajouterCoupeDecalee('XZ', [10, 10], [0]), /identiques/);
+  assert.throws(() => mp.ajouterCoupeDecalee('XZ', [10, 20, 30], [5, 5]), /un seul sens/);
+  assert.throws(() => mp.ajouterCoupeDecalee('XY', [10, 20], [5]), /inconnu/);
+  assert.throws(() => mp.ajouterCoupeDecalee('XZ', [1000, 2000], [0]), /ne rencontre pas/);
+  // sens de saisie quelconque : bords rangés dans l'ordre croissant
+  const S2 = mp.ajouterCoupeDecalee('XZ', [60, 0, -60], [40, -100]);
+  assert.deepEqual(S2.bords, [-100, 40]); assert.deepEqual(S2.valeurs, [-60, 0, 60]); assert.equal(S2.nom, 'Coupe B-B');
+  assert.ok(S2.boite[0] > S.boite[2]);
+  assert.equal(mp.retirerCoupe().nom, 'Coupe B-B');
+});
+
+test('mise en plan : coupe décalée YZ et mélange avec vue auxiliaire (MEP-07)', () => {
+  const mp = creerMiseEnPlan(plaque);
+  const S = mp.ajouterCoupeDecalee('YZ', [-60, 100], [0]);
+  assert.ok(S.decalee && S.plan === 'YZ' && S.vueId === 'gauche');
+  assert.ok(S.items.filter(o => o.hachure).length > 10);
+  const A = mp.ajouterAuxiliaire('dessus', [-150, -125], [150, -125]);
+  assert.equal(A.nom, 'Vue auxiliaire B', 'la lettre A est prise par la coupe');
+  assert.ok(A.boite[0] > S.boite[2], 'vue auxiliaire placée à droite de la coupe, sans chevauchement');
+  assert.ok(mp.dansPiece((A.boite[0] + A.boite[2]) / 2, (A.boite[1] + A.boite[3]) / 2), 'la vue auxiliaire compte comme « pièce » pour le placement des cotes');
+  const chemin = mp.dessin().items.find(o => o.kind === 'poly' && o.pointille && o.layer === 'Plan de coupe');
+  const dv = mp.vues.dessus; assert.ok(proche(chemin.pts[1][0], -60 + dv.off[0]) && proche(chemin.pts[1][1], 0 + dv.off[1]) && proche(chemin.pts[2][0], 100 + dv.off[0]), 'YZ : décrochement à Y = 0 entre X = −60 et X = 100');
+  assert.equal(mp.retirerAuxiliaire().nom, 'Vue auxiliaire B'); assert.equal(mp.retirerCoupe().nom, 'Coupe A-A'); assert.equal(mp.ordre.length, 0);
+});
+
+// ——— Export DXF / PDF de la mise en plan (MEP-08, MEP-09) ———
+import { exporterDxf, exporterPdf, composerPlan, itemsCotes, texteCote, choisirPage, largeurTexte, versAnsi } from '../standalone/src/geom/export-plan.js';
+import { spawnSync } from 'node:child_process';
+function planCote() {
+  const mp = creerMiseEnPlan(plaque), dv = mp.vues.dessus, ox = dv.off[0], oy = dv.off[1];
+  const cotes = [
+    { t: 'ph', a: { x: -150 + ox, y: -125 + oy }, b: { x: 150 + ox, y: -125 + oy }, p: { x: ox, y: -150 + oy }, ech: 1 },                 // 300,00 sous la vue
+    { t: 'pv', a: { x: -150 + ox, y: -125 + oy }, b: { x: -150 + ox, y: 125 + oy }, p: { x: -175 + ox, y: oy }, ech: 1 },                 // 250,00 à gauche
+    { t: 'pdia', c: { x: -60 + ox, y: 60 + oy }, r: 30, p: { x: -20 + ox + 150, y: 100 + oy + 40 }, ech: 1 },                           // Ø 60,00
+    { t: 'prad', c: { x: 100 + ox, y: -90 + oy }, r: 5, p: { x: 130 + ox, y: -100 + oy }, ech: 1 },                                       // R 5,00
+    { t: 'pa', a: { x: -150 + ox, y: -125 + oy }, b: { x: 150 + ox, y: 125 + oy }, p: { x: ox + 170, y: oy - 170 }, ech: 1, off: { m: [10, 5] } },
+  ];
+  return { mp, cotes, dessin: mp.dessin() };
+}
+const cleLigne = (a, b) => [a, b].map(p => p.map(v => Math.round(v * 100) / 100).join(',')).sort().join('|');
+
+test('export : cotes en géométrie — valeurs, Ø/R, flèches pleines, traits fins (MEP-08)', () => {
+  const { cotes } = planCote(), it = itemsCotes(cotes, 3.5);
+  const textes = it.filter(o => o.kind === 'text').map(o => o.texte);
+  assert.deepEqual(textes, ['300,00', '250,00', 'Ø 60,00', 'R 5,00', '390,51']);   // cote alignée : hypoténuse de 300 × 250
+  assert.ok(it.filter(o => o.plein).length >= 8, 'flèches pleines');
+  assert.ok(it.every(o => o.layer === 'Cotes') && it.some(o => o.kind === 'line'));
+  assert.equal(texteCote({ t: 'ph', dia: true, a: { x: 0, y: 0 }, b: { x: 20, y: 0 } }), 'Ø 20,00');
+  // cote déplacée par l'opérateur : trait d'attache vers le texte déplacé
+  const sans = itemsCotes([{ ...cotes[4], off: undefined }], 3.5);
+  assert.equal(itemsCotes([cotes[4]], 3.5).length, sans.length + 1);
+});
+
+test('export : DXF R12 relu par le lecteur de l’application — géométrie, calques, textes, pointillés (MEP-08)', () => {
+  const { cotes, dessin } = planCote();
+  const octets = exporterDxf(dessin, cotes, { nom: 'plaque', date: '2026-10-12' });
+  assert.ok(estDxf(octets));
+  const txt = new TextDecoder('latin1').decode(octets);
+  assert.match(txt, /\$ACADVER\r\n1\r\nAC1009/); assert.match(txt, /ANSI_1252/); assert.ok(txt.trimEnd().endsWith('EOF'));
+  const d = lireDxf(octets);
+  const nom = n => n.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9_$-]/g, '_');
+  assert.deepEqual(d.calques.map(c => c.nom).sort(), [...new Set(['0', ...dessin.calques.map(c => nom(c.nom)), 'COTES', 'CARTOUCHE'])].sort());
+  const mm = (L, k) => L.filter(o => o.kind === k);
+  const orig = dessin.items;
+  // cercles : mêmes rayons et centres
+  const cir = L => mm(L, 'circle').map(o => `${o.c.map(v => v.toFixed(2)).join(',')}:${o.r.toFixed(2)}:${o.pointille ? 'h' : 'v'}`).sort();
+  assert.deepEqual(cir(d.items), cir(orig)); assert.ok(cir(orig).length >= 5);
+  // droites : mêmes extrémités (hors cotes et cartouche), pointillés conservés
+  const lg = (L, f) => mm(L.filter(f), 'line').map(o => cleLigne(o.pts[0], o.pts.at(-1)) + (o.pointille ? 'h' : 'v')).sort();
+  assert.deepEqual(lg(d.items, o => o.layer !== 'COTES' && o.layer !== 'CARTOUCHE'), lg(orig, () => true));
+  // textes : titres, valeurs de cotes (Ø en ANSI 1252), cartouche avec la mention d'indicatif
+  const T = d.items.filter(o => o.kind === 'text').map(o => o.texte);
+  for (const t of ['Vue de face', 'Vue de dessus', '300,00', '250,00', 'Ø 60,00', 'R 5,00']) assert.ok(T.includes(t), t);
+  assert.ok(T.some(t => /INDICATIVES/.test(t) && /2026-10-12/.test(t)), 'cartouche : valeurs indicatives, date');
+  const h = d.items.find(o => o.kind === 'text' && o.texte === 'Vue de face'); assert.ok(h.h > 3, 'hauteur de texte conservée');
+  // flèches pleines → SOLID (ignorées par le lecteur d'affichage mais présentes dans le fichier)
+  assert.ok(d.ignores.SOLID >= 8 && d.ignores.SOLID === dessin.items.filter(o => o.plein).length + itemsCotes(cotes, 3.5).filter(o => o.plein).length);
+  assert.ok(d.items.every(o => o.layer !== 'TITRES' || o.kind === 'text'));
+  // dessin 1:1 : l'emprise du plateau reste 300 × 250 (rectangle du dessus)
+  const dv = planCote().mp.vues.dessus, bx = dv.emprise[2] - dv.emprise[0];
+  assert.ok(proche(bx, 300, 0.02));
+  assert.ok(d.cadre.x1 - d.cadre.x0 > 600, 'plan complet exporté');
+});
+
+test('export : DXF d’une pièce de révolution — arcs, coupe hachurée et chemin de coupe (MEP-08)', () => {
+  const mp = creerMiseEnPlan([byName('BUSETTE_D20')[0]]), dessin = mp.dessin();
+  const d = lireDxf(exporterDxf(dessin, [], { nom: 'busette', date: '2026-10-12' }));
+  const n = k => d.items.filter(o => o.kind === k).length, no = k => dessin.items.filter(o => o.kind === k).length;
+  assert.equal(n('circle'), no('circle')); assert.equal(n('arc'), no('arc'));
+  assert.equal(d.items.filter(o => o.layer === 'HACHURES').length, dessin.items.filter(o => o.layer === 'Hachures').length);
+  for (const a of dessin.items.filter(o => o.kind === 'arc')) {
+    const b = d.items.find(o => o.kind === 'arc' && Math.abs(o.r - a.r) < 1e-3 && Math.hypot(o.c[0] - a.c[0], o.c[1] - a.c[1]) < 1e-3 && Math.hypot(o.pts[0][0] - a.pts[0][0], o.pts[0][1] - a.pts[0][1]) < 1e-2 && Math.hypot(o.pts.at(-1)[0] - a.pts.at(-1)[0], o.pts.at(-1)[1] - a.pts.at(-1)[1]) < 1e-2);
+    assert.ok(b, `arc R${a.r.toFixed(2)} relu avec le même sens et les mêmes extrémités`);
+  }
+  assert.ok(d.items.some(o => o.kind === 'poly' && o.layer === 'PLAN_DE_COUPE') || d.items.some(o => o.layer === 'PLAN_DE_COUPE'), 'traits de coupe');
+  assert.ok(d.items.filter(o => o.layer === 'AXES').every(o => o.pointille), 'axes en trait mixte');
+});
+
+test('export : coupe décalée et vue auxiliaire passent dans le DXF (MEP-07, MEP-08)', () => {
+  const mp = creerMiseEnPlan(plaque); mp.ajouterCoupeDecalee('XZ', [60, -60], [20]); mp.ajouterAuxiliaire('dessus', [-150, -125], [150, -125]);
+  const dessin = mp.dessin(), d = lireDxf(exporterDxf(dessin, [], { nom: 'x', date: 'd' }));
+  const T = d.items.filter(o => o.kind === 'text').map(o => o.texte);
+  assert.ok(T.includes('Coupe A-A') && T.includes('Vue auxiliaire B') && T.some(t => /plans XZ décalés/.test(t)));
+  assert.equal(d.items.filter(o => o.layer === 'HACHURES').length, dessin.items.filter(o => o.layer === 'Hachures').length);
+  assert.ok(d.items.some(o => o.kind === 'poly' && o.layer === 'PLAN_DE_COUPE' && o.pts.length === 4), 'chemin de coupe décalée');
+});
+
+test('export : texte ANSI 1252 et largeur Helvetica (MEP-08)', () => {
+  assert.deepEqual(Array.from(versAnsi('Ø 6° ±0,05 · é')), [0xD8, 32, 54, 0xB0, 32, 0xB1, 48, 44, 48, 53, 32, 0xB7, 32, 0xE9]);
+  assert.deepEqual(Array.from(versAnsi('≈ → ’')), [126, 32, 45, 62, 32, 0x92], 'caractères hors page remplacés, jamais d’erreur');
+  assert.ok(proche(largeurTexte('0', 10), 5.56, 1e-9) && proche(largeurTexte('Ø', 10), 7.78, 1e-9));
+  assert.deepEqual([choisirPage(250, 150).nom, choisirPage(380, 250).nom, choisirPage(700, 500).nom, choisirPage(2000, 900).nom], ['A4', 'A3', 'A1', 'sur mesure']);
+});
+
+test('export : PDF vectoriel 1:1 relu par pdf.js, structure valide (MEP-09)', async () => {
+  const { cotes, dessin } = planCote();
+  const r = exporterPdf(dessin, cotes, { nom: 'plaque', date: '2026-10-12' });
+  assert.equal(r.format, 'A1'); assert.ok(r.normalise);
+  const brut = Buffer.from(r.octets), t = brut.toString('latin1');
+  assert.ok(t.startsWith('%PDF-1.4') && t.trimEnd().endsWith('%%EOF'));
+  const x0 = +/startxref\n(\d+)/.exec(t)[1]; assert.equal(t.slice(x0, x0 + 4), 'xref', 'startxref pointe sur la table');
+  const noms = [...t.matchAll(/(\d{10}) 00000 n/g)].map(q => +q[1]);
+  noms.forEach((p, i) => assert.equal(t.slice(p, p + `${i + 1} 0 obj`.length), `${i + 1} 0 obj`, `décalage de l’objet ${i + 1}`));
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const d = await lirePdf(pdfjs, r.octets);
+  assert.ok(proche(d.cadre.x1, 841, 0.3) && proche(d.cadre.y1, 594, 0.3), 'page A1 paysage en mm');
+  const gros = d.items.filter(o => o.kind === 'circle' && proche(2 * o.r, 60, 0.05));
+  assert.ok(gros.length >= 1, 'logement Ø60 en vraie grandeur (1:1)');
+  assert.ok(d.items.filter(o => o.kind === 'circle' && proche(2 * o.r, 10, 0.05)).length >= 4, '4 perçages Ø10');
+  const T = d.items.filter(o => o.kind === 'text').map(o => o.texte.trim());
+  for (const s of ['Vue de face', 'Vue de dessus', '300,00', '250,00']) assert.ok(T.some(x => x.includes(s)), s);
+  assert.ok(T.some(x => x.includes('Ø 60,00')) && T.some(x => /INDICATIVES/.test(x)), 'valeur Ø et mention d’indicatif lisibles');
+  assert.ok(d.items.some(o => o.pointille), 'pointillés');
+  // distance entre les deux bords verticaux du rectangle du dessus : 300 mm
+  const L = d.items.filter(o => o.kind === 'poly' || o.kind === 'line').flatMap(o => o.pts.slice(1).map((p, i) => [o.pts[i], p]));
+  const verts = L.filter(([a, b]) => Math.abs(a[0] - b[0]) < 0.01 && Math.abs(a[1] - b[1]) > 249 && Math.abs(a[1] - b[1]) < 251).map(([a]) => a[0]).sort((a, b) => a - b);
+  assert.ok(verts.some(a => verts.some(b => proche(b - a, 300, 0.1))), 'rectangle 300 × 250 mm sur la page');
+  // qpdf, s'il est installé, valide aussi la structure
+  const q = spawnSync('qpdf', ['--version']);
+  if (!q.error) { fs.mkdirSync('/tmp/sdc-test', { recursive: true }); fs.writeFileSync('/tmp/sdc-test/plan.pdf', brut); const c = spawnSync('qpdf', ['--check', '/tmp/sdc-test/plan.pdf']); assert.equal(c.status, 0, String(c.stdout) + String(c.stderr)); }
+});
