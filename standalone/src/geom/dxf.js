@@ -287,3 +287,4 @@ export function entiteProche(dessin, x, y, rayon, filtre = () => true) {
   for (const o of dessin.items) { if (!filtre(o) || o.kind === 'text') continue; const d = distanceItem(o, x, y); if (d < bd) { bd = d; best = o; } }
   return best;
 }
+export const intersectionsItems = (A, B) => intersections(A, B);

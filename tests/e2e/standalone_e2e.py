@@ -561,6 +561,18 @@ with sync_playwright() as p:
     pd.click(".dxf-bar >> text=Masquer cotes")
     check(D("E.cotesVis") is False, "DXF : « Masquer cotes » cache les cotes")
     pd.click(".dxf-bar >> text=Afficher cotes")
+    # Cotation automatique proposée (niveau 1) : référence + zone → cotes bleues « proposées », à valider
+    D("document.activeElement && document.activeElement.blur()"); pd.click(".dxf-outil:has-text('Cotation auto')"); pd.wait_for_timeout(300)
+    clic(0, 0); clic(-3, -3); clic(103, 80)
+    n_auto = D("E.cotes.filter(c => c.auto).length")
+    check(n_auto >= 8 and D("E.cotes.filter(c => c.auto).every(c => !c.valide)"), f"DXF : cotation auto propose {n_auto} cotes, toutes « proposées » (non validées)")
+    check(D("E.cotes.some(c => c.auto && c.t === 'rad' && Math.abs(c.r - 10) < 1e-6)") and D("E.cotes.some(c => c.auto && c.t === 'ordx' && Math.abs(c.x - 50) < 1e-6)"), "DXF : Ø 20 et ordonnée X = 50 proposés depuis la référence")
+    pd.screenshot(path=str(OUT / "31_dxf_cotation_auto.png"))
+    q = D("(() => { const q = E.etiq.find(q => q.c.auto); const c = document.querySelector('.dxf-canvas').getBoundingClientRect(); return [c.left + q.x + q.w / 2, c.top + q.y + q.h / 2]; })()")
+    pd.mouse.dblclick(q[0], q[1])
+    check(D("E.cotes.filter(c => c.auto).length") == n_auto - 1, "DXF : double-clic sur une cote proposée la supprime")
+    pd.click(".dxf-auto >> text=Valider les cotes")
+    check(D("E.cotes.filter(c => c.auto).every(c => c.valide)"), "DXF : « Valider les cotes » les marque validées par l'utilisateur")
     # Masquage du calque Cache
     pd.click(".dxf-bar >> text=Calques"); pd.locator(".dxf-calques input").nth(1).uncheck()
     check(D("E.masque.has('Cache')"), "DXF : calque « Cache » masqué")

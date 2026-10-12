@@ -221,3 +221,30 @@ test('PDF : plan synthétique (rectangle, cercle Ø20 papier, axe pointillé, te
   assert.ok(d.items.some(o => o.kind === 'text' && /2:1/.test(o.texte)), 'texte « 2:1 » conservé');
   assert.ok(d.calques.some(k => /bleu/i.test(k.nom)) && d.calques.some(k => /rouge/i.test(k.nom)), 'calques par couleur');
 });
+
+// ——— Cotation automatique proposée (niveau 1) ———
+import { proposerCotes, traitsForts } from '../standalone/src/geom/cotation-auto.js';
+test('Cotation auto : ordonnées depuis une référence, Ø groupés, traits cachés exclus', () => {
+  const d = dxfSynth();
+  const r = proposerCotes(d, { origine: { x: 0, y: 0 }, zone: d.cadre });
+  const ax = r.xs.map(e => +e.x.toFixed(2)), ay = r.ys.map(e => +e.y.toFixed(2));
+  for (const v of [0, 20, 50, 70, 100]) assert.ok(ax.includes(v), `ordonnée X ${v}`);
+  for (const v of [0, 20, 30, 45, 60]) assert.ok(ay.includes(v), `ordonnée Y ${v}`);
+  assert.ok(!ay.includes(50) && !ax.includes(90), 'extrémités du calque Cache (pointillé) non cotées');
+  assert.equal(new Set(ax).size, ax.length, 'une seule cote par valeur');
+  const d20 = r.dias.find(g => g.kind === 'circle' && Math.abs(2 * g.r - 20) < 1e-6); assert.ok(d20 && d20.n === 1);
+  assert.ok(r.dias.find(g => g.kind === 'arc' && Math.abs(g.r - 15) < 1e-6), 'arc R15');
+  assert.ok(traitsForts(d).every(o => !o.pointille && o.kind !== 'text'));
+});
+test('Cotation auto : origine décalée, zone restreinte et catégories', () => {
+  const d = dxfSynth();
+  const r = proposerCotes(d, { origine: { x: 50, y: 30 }, zone: { x0: 40, y0: 20, x1: 60, y1: 40 }, categories: { centres: true, coins: false, inter: false } });
+  assert.equal(r.dias.length, 1); assert.ok(Math.abs(2 * r.dias[0].r - 20) < 1e-6);
+  assert.deepEqual(r.xs.map(e => +(e.x - 50).toFixed(2)), [0]); assert.deepEqual(r.ys.map(e => +(e.y - 30).toFixed(2)), [0]);
+});
+test('Cotation auto : plans PDF réels — traits forts = contours épais, plafonné', { skip: !fs.existsSync('/root/.claude/uploads/670a3e29-2440-50bb-803d-1d87f8fac8e4/e4883814-11193_01_Plaque_semelle_SUP_2D.pdf') }, async () => {
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const d = await lirePdf(pdfjs, new Uint8Array(fs.readFileSync('/root/.claude/uploads/670a3e29-2440-50bb-803d-1d87f8fac8e4/e4883814-11193_01_Plaque_semelle_SUP_2D.pdf')));
+  const t0 = Date.now(), r = proposerCotes(d, { origine: { x: 0, y: 0 }, zone: d.cadre });
+  assert.ok(Date.now() - t0 < 20000 && r.xs.length <= 60 && r.ys.length <= 60 && r.dias.length > 0);
+});

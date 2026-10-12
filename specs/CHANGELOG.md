@@ -1,5 +1,10 @@
 # Historique du cahier des charges
 
+## 1.16 — 12 octobre 2026 (Claude Code, **décision écrite de Christophe** : « Commençons avec le niveau 1 — pour le niveau 2, nous allons établir des limites »)
+- **DXF-09** (niveau 1) : cotation automatique proposée sur plan 2D — référence + zone, cotes ordonnées X/Y et Ø/R groupés, à valider/ignorer/supprimer, CSV avec statut.
+- **Niveau 2 (mise en plan automatique depuis une pièce 3D isolée) : NON commencé.** Christophe doit d'abord fixer les limites (vues, cotes, formats, ce qui reste hors périmètre) ; elles seront consignées ici avant tout code. Rappel : plan généré = proposé, non contractuel, aucune validation de fabrication.
+- Application autonome 1.10.0 → **1.11.0**. La v1.15 passe en archive figée.
+
 ## 1.15 — 12 octobre 2026 (Claude Code, demande de Christophe : charger un PDF, cotes déplaçables, survol)
 - **DXF-06** : ouverture directe d'un plan PDF vectoriel (pdf.js embarqué, hors ligne), traits/couleurs/textes, cercles et arcs reconnus, mm papier + échelle par vue.
 - **DXF-07** : survol en surbrillance avec nature et taille réelle de l'élément. **DXF-08** : étiquettes de cotes déplaçables, cotes masquables.

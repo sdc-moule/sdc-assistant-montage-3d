@@ -1,6 +1,7 @@
 // Vue 2D d'un plan DXF avec prise de cotes. Lecture seule : le fichier n'est jamais modifié.
 // Le code géométrique (lecture, accroches, mesures) est dans geom/dxf.js ; ici seulement l'interface.
 import { accroche, entiteProche, distance, angleEntre } from './geom/dxf.js';
+import { proposerCotes } from './geom/cotation-auto.js';
 
 const el = (tag, attrs = {}, ...kids) => {
   const e = document.createElement(tag);
@@ -20,7 +21,7 @@ export function ouvrirDxf(dessin, nom, { toast = () => {} } = {}) {
   fermerDxf();
   const u = dessin.unite || 'mm';
   const E = etat = {
-    d: dessin, nom, u, outil: 'dist', pend: [], ech: 1, cotesVis: true, survol: null, etiq: [], glisse: null, cotes: [], masque: new Set(), snap: null,
+    d: dessin, nom, u, outil: 'dist', pend: [], autoOpt: { centres: true, coins: true, inter: true, tout: false }, autoCtx: null, ech: 1, cotesVis: true, survol: null, etiq: [], glisse: null, cotes: [], masque: new Set(), snap: null,
     vue: { s: 1, ox: 0, oy: 0 }, w: 0, h: 0, pointeurs: new Map(), toast,
   };
   // Échelles lues dans les textes du plan (« 4:1 », « (40:1) », « Echelle: 4/1 ») : proposées, jamais appliquées d'office.
@@ -52,11 +53,13 @@ export function ouvrirDxf(dessin, nom, { toast = () => {} } = {}) {
   const infos = el('div', { class: 'dxf-info' });
   const aide = el('div', { class: 'dxf-aide' });
   const menuCalques = el('div', { class: 'dxf-calques', hidden: '' });
+  const panAuto = el('div', { class: 'dxf-auto', hidden: '' });
   const outils = [
     ['dist', 'Distance', 'Cliquer deux points : distance directe'],
     ['dxy', 'ΔX / ΔY', 'Cliquer deux points : écarts horizontal et vertical'],
     ['rad', 'Ø / R', 'Cliquer un cercle ou un arc : diamètre et rayon'],
     ['ang', 'Angle', 'Cliquer trois points : sommet, puis les deux côtés'],
+    ['auto', 'Cotation auto', "Propose des cotes ordonnées depuis une référence : cliquer la référence, puis deux coins de la zone"],
     ['cal', 'Calibrer', "Cliquer deux points dont vous connaissez la vraie longueur : l'échelle en est déduite"],
   ];
   const bOut = {}; let bCotes = null;
@@ -72,7 +75,7 @@ export function ouvrirDxf(dessin, nom, { toast = () => {} } = {}) {
     el('button', { class: 'btn', title: 'Exporter les cotes en CSV', onclick: () => exporter() }, 'Cotes CSV'),
     el('button', { class: 'btn primary', title: 'Revenir à la vue 3D', onclick: () => fermerDxf() }, 'Fermer'),
   );
-  racine = el('div', { id: 'dxf-view', class: 'dxf-view' }, barre, el('div', { class: 'dxf-zone' }, canvas, menuCalques, aide, infos));
+  racine = el('div', { id: 'dxf-view', class: 'dxf-view' }, barre, el('div', { class: 'dxf-zone' }, canvas, menuCalques, panAuto, aide, infos));
   document.body.append(racine);
 
   for (const c of E.d.calques) {
@@ -106,7 +109,7 @@ export function ouvrirDxf(dessin, nom, { toast = () => {} } = {}) {
   E.cadrer = cadrer;
 
   // reg = { c, cle } : étiquette de cote déplaçable (décalage mémorisé en unités du dessin, suit le zoom).
-  function etiquette(txt, X, Y, couleur = '#12324b', reg = null) {
+  function etiquette(txt, X, Y, couleur = '#12324b', reg = null, _decale = false) {
     ctx.font = '600 14px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     const w = ctx.measureText(txt).width + 10;
     if (reg) {
@@ -132,8 +135,10 @@ export function ouvrirDxf(dessin, nom, { toast = () => {} } = {}) {
   }
   function point(p, couleur, r = 4) { const [X, Y] = px(p.x, p.y); ctx.fillStyle = couleur; ctx.beginPath(); ctx.arc(X, Y, r, 0, 7); ctx.fill(); }
 
+  const COL_PROP = '#1f77d0', COL_OK = '#e8730c';
   function dessinerCote(c) {
-    const col = '#e8730c';
+    if (c.t === 'ordx' || c.t === 'ordy') return;   // dessinées ensemble (étagement des étiquettes)
+    const col = c.auto && !c.valide ? COL_PROP : COL_OK;
     if (c.t === 'dist') {
       const A = px(c.a.x, c.a.y), B = px(c.b.x, c.b.y); fleche(A, B, col);
       etiquette(`${f2(distance(c.a, c.b) / c.ech)} ${u}${suffixe(c, nomEch)}`, (A[0] + B[0]) / 2, (A[1] + B[1]) / 2, col, { c, cle: 'm' });
@@ -143,9 +148,17 @@ export function ouvrirDxf(dessin, nom, { toast = () => {} } = {}) {
       if (Math.abs(c.b.x - c.a.x) > 1e-9) { fleche(A, K, col); etiquette(`ΔX ${f2(Math.abs(c.b.x - c.a.x) / c.ech)} ${u}${suffixe(c, nomEch)}`, (A[0] + K[0]) / 2, (A[1] + K[1]) / 2 + (B[1] > A[1] ? -16 : 16), col, { c, cle: 'x' }); }
       if (Math.abs(c.b.y - c.a.y) > 1e-9) { fleche(K, B, col); etiquette(`ΔY ${f2(Math.abs(c.b.y - c.a.y) / c.ech)} ${u}`, K[0] + (B[0] > A[0] ? 34 : -34), (K[1] + B[1]) / 2, col, { c, cle: 'y' }); }
     } else if (c.t === 'rad') {
-      const C = px(c.c.x, c.c.y), r = c.r * E.vue.s;
-      ctx.strokeStyle = col; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(C[0] - r * Math.cos(0.7), C[1] + r * Math.sin(0.7)); ctx.lineTo(C[0] + r * Math.cos(0.7), C[1] - r * Math.sin(0.7)); ctx.stroke();
-      etiquette(`Ø ${f2(2 * c.r / c.ech)} · R ${f2(c.r / c.ech)} ${u}${suffixe(c, nomEch)}`, C[0], C[1], col, { c, cle: 'm' });
+      const C = px(c.c.x, c.c.y), r = c.r * E.vue.s, n = c.n > 1 ? `${c.n}× ` : '';
+      const txt = c.arc ? `${n}R ${f2(c.r / c.ech)} ${u}${suffixe(c, nomEch)}` : `${n}Ø ${f2(2 * c.r / c.ech)} · R ${f2(c.r / c.ech)} ${u}${suffixe(c, nomEch)}`;
+      if (c.auto) {   // proposition : étiquette sortie du cercle avec un trait de rappel, pour ne pas masquer le dessin
+        const A = [C[0] + r * 0.7071, C[1] - r * 0.7071];
+        ctx.strokeStyle = col; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.arc(C[0], C[1], r, 0, 7); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(A[0], A[1]); ctx.lineTo(A[0] + 14, A[1] - 14); ctx.stroke();
+        etiquette(txt, A[0] + 14, A[1] - 14, col, { c, cle: 'm' }, true);
+      } else {
+        ctx.strokeStyle = col; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(C[0] - r * Math.cos(0.7), C[1] + r * Math.sin(0.7)); ctx.lineTo(C[0] + r * Math.cos(0.7), C[1] - r * Math.sin(0.7)); ctx.stroke();
+        etiquette(txt, C[0], C[1], col, { c, cle: 'm' });
+      }
     } else if (c.t === 'ang') {
       const S = px(c.s.x, c.s.y), A = px(c.a.x, c.a.y), B = px(c.b.x, c.b.y);
       ctx.strokeStyle = col; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(A[0], A[1]); ctx.lineTo(S[0], S[1]); ctx.lineTo(B[0], B[1]); ctx.stroke();
@@ -175,13 +188,40 @@ export function ouvrirDxf(dessin, nom, { toast = () => {} } = {}) {
       E.survol.pts.forEach((p, i) => { const [X, Y] = px(p[0], p[1]); if (i) ctx.lineTo(X, Y); else ctx.moveTo(X, Y); });
       ctx.stroke();
     }
-    if (E.cotesVis) for (const c of E.cotes) dessinerCote(c);
+    if (E.cotesVis) { for (const c of E.cotes) dessinerCote(c); dessinerOrdonnees(); }
+    if (E.outil === 'auto' && E.pend.length === 2 && E.snap) {   // zone en cours de tracé
+      const A = px(E.pend[1].x, E.pend[1].y), B = px(E.snap.x, E.snap.y); ctx.setLineDash([5, 4]); ctx.strokeStyle = COL_PROP; ctx.lineWidth = 1.2; ctx.strokeRect(Math.min(A[0], B[0]), Math.min(A[1], B[1]), Math.abs(B[0] - A[0]), Math.abs(B[1] - A[1])); ctx.setLineDash([]);
+    }
     for (const p of E.pend) point(p, '#e8730c', 5);
     if (E.snap) {
       const [X, Y] = px(E.snap.x, E.snap.y); ctx.strokeStyle = '#1d8a4b'; ctx.lineWidth = 2; ctx.strokeRect(X - 7, Y - 7, 14, 14);
       etiquette(E.snap.t, X + 10, Y - 20, '#1d8a4b'); ctx.textAlign = 'left';
     }
     aide.textContent = texteAide() + (E.survol ? ' ▸ ' + decrire(E.survol) : '');
+  }
+  // Cotes ordonnées : une ligne d'attache par valeur, étiquettes alignées au-dessus (X) et à gauche (Y) de la zone, étagées pour ne pas se chevaucher.
+  function dessinerOrdonnees() {
+    const lot = E.cotes.filter(c => c.t === 'ordx' || c.t === 'ordy');
+    for (const t of ['ordx', 'ordy']) {
+      const L = lot.filter(c => c.t === t); if (!L.length) continue;
+      const horiz = t === 'ordx', pad = 7;                 // distance de la zone, en unités du dessin
+      const items = L.map(c => {
+        const z = c.zone, ancre = horiz ? px(c.x, c.py) : px(c.px, c.y), base = horiz ? px(c.x, z.y1 + pad) : px(z.x0 - pad, c.y);
+        const val = horiz ? (c.x - c.o.x) / c.ech : (c.y - c.o.y) / c.ech;
+        return { c, ancre, base, txt: f2(val), col: c.auto && !c.valide ? COL_PROP : COL_OK };
+      }).sort((a, b) => horiz ? a.base[0] - b.base[0] : a.base[1] - b.base[1]);
+      ctx.font = '600 14px system-ui, sans-serif';
+      const fin = [0, 0, 0, 0]; // fin occupée de chaque rangée (px)
+      for (const it of items) {
+        const w = ctx.measureText(it.txt).width + 10, deb = horiz ? it.base[0] - w / 2 : it.base[1] - 11, taille = horiz ? w : 22;
+        let r = 0; while (r < 3 && deb < fin[r] + 2) r++;
+        r = Math.min(r, 3); fin[r] = deb + taille;
+        const X = horiz ? it.base[0] : it.base[0] - 8 - w / 2 - r * 72, Y = horiz ? it.base[1] - 8 - r * 24 : it.base[1];
+        ctx.save(); ctx.globalAlpha = 0.55; ctx.strokeStyle = it.col; ctx.lineWidth = 0.9; ctx.beginPath(); ctx.moveTo(it.ancre[0], it.ancre[1]); ctx.lineTo(X, Y); ctx.stroke(); ctx.restore();
+        ctx.fillStyle = it.col; ctx.beginPath(); ctx.arc(it.ancre[0], it.ancre[1], 2.5, 0, 7); ctx.fill();
+        etiquette(it.txt, X, Y, it.col, { c: it.c, cle: 'm' });
+      }
+    }
   }
   let rafId = 0;
   const planifier = () => { if (!rafId) rafId = requestAnimationFrame(() => { rafId = 0; if (racine) dessiner(); }); };
@@ -194,15 +234,41 @@ export function ouvrirDxf(dessin, nom, { toast = () => {} } = {}) {
 
   function texteAide() {
     const o = E.outil, n = E.pend.length;
+    if (o === 'auto') return ['Cotation auto : cliquer la RÉFÉRENCE (origine des cotes).', E.autoOpt.tout ? '' : 'Cotation auto : cliquer un coin de la zone à coter.', 'Cotation auto : cliquer le coin opposé de la zone.'][n] ?? '';
     if (o === 'rad') return 'Ø / R : cliquer un cercle ou un arc de cercle.' + (Math.abs(E.ech - 1) > 1e-9 ? ` Échelle ${nomEch(E.ech)} appliquée.` : '');
     if (o === 'ang') return ['Angle : cliquer le sommet.', 'Angle : cliquer un point du 1er côté.', 'Angle : cliquer un point du 2e côté.'][n] ?? '';
     const lib = o === 'dxy' ? 'ΔX / ΔY' : o === 'cal' ? 'Calibrage' : 'Distance';
     return `${lib} : ${n ? 'cliquer le 2e point.' : 'cliquer le 1er point.'} ${Math.abs(E.ech - 1) > 1e-9 ? `Échelle ${nomEch(E.ech)} : valeurs ramenées au réel (indicatif).` : 'Échelle 1:1 (papier = réel) — choisir l\'échelle de la vue si le plan est à l\'échelle.'}`;
   }
+  // Cotation auto : proposition (cotes bleues) à valider ou ignorer ; chaque catégorie se coche/décoche.
+  function proposer() {
+    const ctxA = E.autoCtx; if (!ctxA) return;
+    E.cotes = E.cotes.filter(c => !(c.auto && !c.valide));
+    const r = proposerCotes(E.d, { origine: ctxA.o, zone: ctxA.zone, categories: { centres: E.autoOpt.centres, coins: E.autoOpt.coins, inter: E.autoOpt.inter }, visible });
+    for (const g of r.dias) E.cotes.push({ t: 'rad', c: { x: g.c[0], y: g.c[1] }, r: g.r, n: g.n, arc: g.kind === 'arc', ech: E.ech, auto: true, valide: false });
+    for (const e of r.xs) E.cotes.push({ t: 'ordx', o: ctxA.o, zone: ctxA.zone, x: e.x, py: e.py, ech: E.ech, auto: true, valide: false, cat: e.cat });
+    for (const e of r.ys) E.cotes.push({ t: 'ordy', o: ctxA.o, zone: ctxA.zone, y: e.y, px: e.px, ech: E.ech, auto: true, valide: false, cat: e.cat });
+    E.cotesVis = true; if (bCotes) bCotes.textContent = 'Masquer cotes';
+    E.autoInfo = `${r.dias.length} Ø/R · ${r.xs.length} ordonnées X · ${r.ys.length} ordonnées Y (${r.nbForts} traits forts)` + (r.tronque.x + r.tronque.y ? ` — ${r.tronque.x + r.tronque.y} ordonnées non proposées (limite 60 par axe) : réduire la zone` : '');
+    majPanneauAuto();
+  }
+  function majPanneauAuto() {
+    const props = E.cotes.filter(c => c.auto && !c.valide).length;
+    panAuto.hidden = !(E.outil === 'auto' || props);
+    if (panAuto.hidden) return;
+    panAuto.textContent = '';
+    const cb = (cle, txt) => { const i = el('input', { type: 'checkbox' }); i.checked = E.autoOpt[cle]; i.onchange = () => { E.autoOpt[cle] = i.checked; if (cle === 'tout') return; proposer(); dessiner(); }; return el('label', { class: 'mi' }, i, txt); };
+    panAuto.append(el('strong', {}, 'Cotation automatique'), cb('tout', 'Zone = tout le plan'), cb('centres', 'Centres de perçages (Ø et positions)'), cb('coins', 'Coins des traits forts'), cb('inter', 'Intersections'),
+      el('small', {}, E.autoInfo ?? 'Traits forts : contours épais (PDF) ou traits pleins visibles. Les calques masqués sont ignorés.'),
+      el('small', {}, props ? `${props} cotes PROPOSÉES (bleues), à vérifier. Double-clic sur une cote : la supprimer.` : ''),
+      el('div', { class: 'dxf-auto-btn' },
+        el('button', { class: 'btn primary', onclick: () => { for (const c of E.cotes) if (c.auto) c.valide = true; majPanneauAuto(); dessiner(); E.toast('Cotes validées par vous : elles restent indicatives.'); } }, 'Valider les cotes'),
+        el('button', { class: 'btn', onclick: () => { E.cotes = E.cotes.filter(c => !(c.auto && !c.valide)); E.autoCtx = null; E.autoInfo = null; majPanneauAuto(); dessiner(); } }, 'Ignorer')));
+  }
   function choisir(k) {
     E.outil = k; E.pend = [];
     for (const [id, b] of Object.entries(bOut)) b.classList.toggle('on', id === k);
-    dessiner();
+    majPanneauAuto(); dessiner();
   }
 
   function sous(ev) {
@@ -216,6 +282,13 @@ export function ouvrirDxf(dessin, nom, { toast = () => {} } = {}) {
   }
   function valider(ev) {
     E.cotesVis = true; if (bCotes) bCotes.textContent = 'Masquer cotes';
+    if (E.outil === 'auto') {
+      const pa = viser(ev); E.pend.push({ x: pa.x, y: pa.y });
+      if (E.pend.length === 1 && E.autoOpt.tout) { E.autoCtx = { o: E.pend[0], zone: { ...E.d.cadre } }; E.pend = []; proposer(); } else if (E.pend.length === 3) {
+        const [o, a, b] = E.pend; E.autoCtx = { o, zone: { x0: Math.min(a.x, b.x), y0: Math.min(a.y, b.y), x1: Math.max(a.x, b.x), y1: Math.max(a.y, b.y) } }; E.pend = []; proposer();
+      }
+      dessiner(); return;
+    }
     const p = viser(ev); if (!p) { E.toast('Aucun cercle ou arc de cercle ici (ellipses et splines : mesurer par points).'); return; }
     if (E.outil === 'rad') { E.cotes.push({ t: 'rad', c: { x: p.o.c[0], y: p.o.c[1] }, r: p.o.r, ech: E.ech }); E.snap = null; dessiner(); return; }
     E.pend.push({ x: p.x, y: p.y });
@@ -270,6 +343,7 @@ export function ouvrirDxf(dessin, nom, { toast = () => {} } = {}) {
     if (d && !d.bouge && ev.type === 'pointerup') valider(ev);
     if (!E.pointeurs.size) depart = null;
   };
+  canvas.addEventListener('dblclick', ev => { const q = etiquetteSous(ev); if (!q) return; E.cotes = E.cotes.filter(c => c !== q.c); E.pend = []; majPanneauAuto(); dessiner(); });
   canvas.addEventListener('pointerup', fin); canvas.addEventListener('pointercancel', fin);
   function zoomer(k, X, Y) {
     const s = Math.min(1e5, Math.max(1e-3, E.vue.s * k)), kk = s / E.vue.s;
@@ -287,13 +361,16 @@ export function ouvrirDxf(dessin, nom, { toast = () => {} } = {}) {
 
   function exporter() {
     if (!E.cotes.length) return E.toast('Aucune cote à exporter.');
-    const L = ['N°;Type;Valeur (réelle, indicative);Unité;Détail papier;Échelle'];
+    const L = ['N°;Type;Valeur (réelle, indicative);Unité;Détail papier;Échelle;Statut'];
     E.cotes.forEach((c, i) => {
+      const st = c.auto && !c.valide ? 'proposée (à vérifier)' : c.auto ? 'proposée, validée par l\'utilisateur' : 'mesurée';
       const dd = (a, b) => `${f2(a.x)} ; ${f2(a.y)} → ${f2(b.x)} ; ${f2(b.y)}`, ec = nomEch(c.ech);
-      if (c.t === 'dist') L.push(`${i + 1};Distance;${f2(distance(c.a, c.b) / c.ech)};${u};${dd(c.a, c.b)};${ec}`);
-      if (c.t === 'dxy') L.push(`${i + 1};ΔX;${f2(Math.abs(c.b.x - c.a.x) / c.ech)};${u};${dd(c.a, c.b)};${ec}`, `${i + 1};ΔY;${f2(Math.abs(c.b.y - c.a.y) / c.ech)};${u};${dd(c.a, c.b)};${ec}`);
-      if (c.t === 'rad') L.push(`${i + 1};Diamètre;${f2(2 * c.r / c.ech)};${u};centre ${f2(c.c.x)} ; ${f2(c.c.y)};${ec}`, `${i + 1};Rayon;${f2(c.r / c.ech)};${u};;${ec}`);
-      if (c.t === 'ang') L.push(`${i + 1};Angle;${f2(angleEntre(c.s, c.a, c.b))};°;sommet ${f2(c.s.x)} ; ${f2(c.s.y)};`);
+      if (c.t === 'dist') L.push(`${i + 1};Distance;${f2(distance(c.a, c.b) / c.ech)};${u};${dd(c.a, c.b)};${ec};${st}`);
+      if (c.t === 'dxy') L.push(`${i + 1};ΔX;${f2(Math.abs(c.b.x - c.a.x) / c.ech)};${u};${dd(c.a, c.b)};${ec};${st}`, `${i + 1};ΔY;${f2(Math.abs(c.b.y - c.a.y) / c.ech)};${u};${dd(c.a, c.b)};${ec};${st}`);
+      if (c.t === 'rad') L.push(`${i + 1};Diamètre;${f2(2 * c.r / c.ech)};${u};centre ${f2(c.c.x)} ; ${f2(c.c.y)};${ec};${st}${c.n > 1 ? ` ×${c.n}` : ''}`, `${i + 1};Rayon;${f2(c.r / c.ech)};${u};;${ec};${st}`);
+      if (c.t === 'ordx') L.push(`${i + 1};Ordonnée X;${f2((c.x - c.o.x) / c.ech)};${u};depuis la référence ${f2(c.o.x)} ; ${f2(c.o.y)};${ec};${st}`);
+      if (c.t === 'ordy') L.push(`${i + 1};Ordonnée Y;${f2((c.y - c.o.y) / c.ech)};${u};depuis la référence ${f2(c.o.x)} ; ${f2(c.o.y)};${ec};${st}`);
+      if (c.t === 'ang') L.push(`${i + 1};Angle;${f2(angleEntre(c.s, c.a, c.b))};°;sommet ${f2(c.s.x)} ; ${f2(c.s.y)};;${st}`);
     });
     const a = el('a', { href: URL.createObjectURL(new Blob(['﻿' + L.join('\r\n')], { type: 'text/csv;charset=utf-8' })), download: nom.replace(/\.dxf$/i, '') + '_cotes.csv' });
     document.body.append(a); a.click(); a.remove();

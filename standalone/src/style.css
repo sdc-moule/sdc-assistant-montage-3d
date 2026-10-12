@@ -412,3 +412,8 @@ body.compact .welcome h1 { font-size: 22px; } body.compact .welcome { padding: 1
 body.compact .dxf-bar { gap: 4px; padding: 4px; } body.compact .dxf-bar strong { display: none; }
 .dxf-echl { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; } .dxf-ech { min-height: 38px; }
 body.compact .dxf-echl { font-size: 0; } body.compact .dxf-ech { font-size: 13px; }
+
+.dxf-auto { position: absolute; top: 44px; left: 8px; width: min(300px, 80vw); display: flex; flex-direction: column; gap: 4px; padding: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.15); max-height: calc(100% - 100px); overflow: auto; }
+.dxf-auto .mi { display: flex; gap: 8px; align-items: center; min-height: 30px; } .dxf-auto small { color: var(--muted); }
+.dxf-auto-btn { display: flex; gap: 6px; margin-top: 4px; }
+body.compact .dxf-auto { width: min(240px, 60vw); top: 40px; }
