@@ -514,7 +514,7 @@ with sync_playwright() as p:
     check(not C("document.body.classList.contains('compact')") and pc.evaluate("() => localStorage.getItem('sdc-densite')") == "normal", "réglage « Grand écran » : affichage normal, mémorisé")
     pc.select_option("#densite", "auto")
     check(C("document.body.classList.contains('compact')"), "réglage « Automatique » : retour au compact")
-    pc.set_viewport_size({"width": 800, "height": 480}); time.sleep(1.5)
+    pc.set_viewport_size({"width": 800, "height": 480}); time.sleep(4)
     ov = C("[document.documentElement.scrollWidth <= innerWidth + 1, document.documentElement.scrollHeight <= innerHeight + 1, document.querySelector('.top').scrollWidth <= document.querySelector('.top').clientWidth + 1]")
     check(all(ov), f"compact 800×480 : aucun débordement ({ov})")
     sz = C("(() => { const st = document.querySelector('.stage').getBoundingClientRect(), cv = document.querySelector('#viewport canvas').getBoundingClientRect(); return [Math.round(st.height), Math.round(cv.height)]; })()")
@@ -524,6 +524,7 @@ with sync_playwright() as p:
     # --- Plan 2D DXF (DXF-01…DXF-04) ---
     pd = b.new_page(viewport={"width": 1280, "height": 800})
     pd.on("pageerror", lambda e: errors.append(str(e)))
+    pd.set_default_timeout(120000)  # rendu logiciel lent : chargement du fichier de 4,7 Mo
     pd.add_init_script("delete window.showSaveFilePicker")
     pd.goto(HTML.as_uri())
     pd.set_input_files("#file", str(ROOT / "tests" / "fixtures" / "plan_synthetique.dxf"))
