@@ -1,6 +1,7 @@
 // Vue plein écran « Annoter » : annotations vectorielles posées sur une capture, un plan ou une image.
 // Le fond n'est jamais modifié ; les annotations sont INDICATIVES (pas des cotes). Calculs dans geom/annotations.js.
 import * as A from './geom/annotations.js';
+import { reconnaitreTexte } from './geom/manuscrit.js';
 
 const el = (tag, attrs = {}, ...kids) => {
   const e = document.createElement(tag);
@@ -18,6 +19,7 @@ const OUTILS = [
   ['rect', '▭ Rectangle', 'Glisser d’un coin au coin opposé'],
   ['cercle', '◯ Cercle', 'Glisser du centre vers un point du cercle'],
   ['poly', '✎ Tracé libre', 'Dessiner à main levée : le tracé est corrigé (droite, cercle, rectangle, flèche) ou simplifié en polyligne avec une poignée à chaque sommet'],
+  ['encre', '✍ Écriture', 'Écrire à la main, un caractère après l’autre (chiffres, Ø × ° , . - ±, quelques lettres). Une pause de 1,5 s lance la reconnaissance : le résultat est PROPOSÉ dans une zone modifiable, à vérifier avant Entrée'],
   ['texte', 'T Texte', 'Toucher l’endroit du texte, le saisir au clavier, Entrée pour valider (Maj + Entrée : ligne suivante)'],
 ];
 const TAILLES = [['S', 16], ['M', 24], ['L', 36], ['XL', 52]];
@@ -42,7 +44,7 @@ export function ouvrirAnnot(opts) {
   const k = Math.max(1, w / 1200), kE = opts.kEpais ?? k, kT = opts.kTexte ?? k;   // échelle des épaisseurs et des textes selon la définition du fond (ou imposée : plan en mm)
   const E = {
     liste: A.nettoyer(opts.items), sel: -1, outil: 'sel', couleur: A.PALETTE[0], epais: EPAISSEURS(kE)[1], taille: TAILLES[1][1] * kT, corriger: true,
-    vue: { s: 1, ox: 0, oy: 0 }, W: 0, H: 0, hist: [], futur: [], ptr: new Map(), geste: null, espace: false, modifie: false, editeur: null,
+    encre: { traits: [], minuteur: 0 }, delaiEncre: opts.delaiEncre ?? 1500, vue: { s: 1, ox: 0, oy: 0 }, W: 0, H: 0, hist: [], futur: [], ptr: new Map(), geste: null, espace: false, modifie: false, editeur: null,
   };
   function EPAISSEURS(m) { return A.EPAISSEURS.map(v => v * m); }
 
@@ -101,6 +103,11 @@ export function ouvrirAnnot(opts) {
     g.fillStyle = '#fff'; g.fillRect(0, 0, w, h); g.drawImage(fond, 0, 0, w, h);
     const aff = E.geste?.apercu ? [...E.liste, E.geste.apercu] : E.liste;
     g.save(); g.beginPath(); g.rect(0, 0, w, h); g.clip(); dessinerAnnotations(g, aff); g.restore();
+    if (E.encre.traits.length || E.geste?.type === 'encre') {
+      g.save(); g.setTransform(E.dpr * s, 0, 0, E.dpr * s, E.dpr * ox, E.dpr * oy); g.strokeStyle = E.couleur; g.lineWidth = Math.max(1.5 / s, E.epais * 0.5); g.lineJoin = g.lineCap = 'round';
+      for (const t of [...E.encre.traits, ...(E.geste?.type === 'encre' ? [E.geste.pts] : [])]) { g.beginPath(); t.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]))); if (t.length === 1) g.lineTo(t[0][0] + 0.01, t[0][1]); g.stroke(); }
+      g.restore();
+    }
     if (E.geste?.type === 'trace') { g.strokeStyle = E.couleur; g.lineWidth = E.epais; g.lineJoin = g.lineCap = 'round'; g.beginPath(); E.geste.pts.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]))); g.stroke(); }
     g.setTransform(E.dpr, 0, 0, E.dpr, 0, 0);
     const a = E.liste[E.sel];
@@ -128,7 +135,7 @@ export function ouvrirAnnot(opts) {
   }
   function majSw() { for (const [c, b] of bSw) b.classList.toggle('on', c.toLowerCase() === E.couleur.toLowerCase()); }
   function choisir(id) {
-    fermerEditeur(true); E.outil = id; if (id !== 'sel') E.sel = -1;
+    fermerEditeur(true); abandonnerEncre(); E.outil = id; if (id !== 'sel') E.sel = -1;
     for (const [k2, b] of Object.entries(bOut)) b.classList.toggle('on', k2 === id);
     aide.textContent = OUTILS.find(o => o[0] === id)[2]; canvas.style.cursor = id === 'sel' ? 'default' : id === 'texte' ? 'text' : 'crosshair'; dessiner();
   }
@@ -140,13 +147,29 @@ export function ouvrirAnnot(opts) {
   }
 
   // ——— Texte au clavier ———
-  function ouvrirEditeur(p, existant = -1) {
+  // ——— Écriture manuscrite : tracés regroupés puis reconnus après une pause ———
+  function abandonnerEncre() { clearTimeout(E.encre.minuteur); E.encre.traits = []; }
+  function reconnaitreEncre() {
+    clearTimeout(E.encre.minuteur); const traits = E.encre.traits; E.encre.traits = [];
+    if (!traits.length) return;
+    const r = reconnaitreTexte(traits, {});
+    if (!r.texte.trim()) { toast('Écriture non reconnue : réécrire plus grand et plus lentement, ou utiliser l’outil Texte (clavier).', 5000); dessiner(); return; }
+    const taille = Math.max(8 * kT, Math.min(r.taille, 300 * kT));
+    ouvrirEditeur(r.ancre, -1, { texte: r.texte, taille, propose: true, doutes: r.car.filter(c => c.doute).length });
+    dessiner();
+  }
+  function ouvrirEditeur(p, existant = -1, prop = null) {
     fermerEditeur(true);
-    const a0 = existant >= 0 ? E.liste[existant] : null, taille = a0 ? a0.taille : E.taille, couleur = a0 ? a0.couleur : E.couleur, s = E.vue.s;
+    const a0 = existant >= 0 ? E.liste[existant] : null, taille = a0 ? a0.taille : prop?.taille ?? E.taille, couleur = a0 ? a0.couleur : E.couleur, s = E.vue.s;
     const ta = el('textarea', { class: 'annot-texte', rows: '1', spellcheck: 'false' });
-    ta.value = a0 ? a0.texte : '';
+    ta.value = a0 ? a0.texte : prop?.texte ?? '';
+    if (prop) ta.classList.add('propose');
     Object.assign(ta.style, { left: `${E.vue.ox + p[0] * s}px`, top: `${E.vue.oy + (p[1] - taille * 0.85) * s}px`, fontSize: `${Math.max(12, taille * s)}px`, color: couleur, minWidth: '6em' });
-    const ajuster = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; ta.style.width = 'auto'; ta.style.width = Math.max(ta.scrollWidth + 8, 80) + 'px'; };
+    const mesure = document.createElement('canvas').getContext('2d');
+    const ajuster = () => {
+      const fs = parseFloat(ta.style.fontSize) || 16, lignes = ta.value.split('\n'); mesure.font = `${fs}px Helvetica, Arial, sans-serif`;
+      ta.rows = Math.max(1, lignes.length); ta.style.width = Math.max(...lignes.map(t => mesure.measureText(t).width), fs * 2) + 14 + 'px'; ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px';
+    };
     ta.oninput = ajuster;
     ta.onkeydown = ev => {
       ev.stopPropagation();
@@ -154,16 +177,18 @@ export function ouvrirAnnot(opts) {
       else if (ev.key === 'Escape') { ev.preventDefault(); fermerEditeur(false); }
     };
     ta.onblur = () => setTimeout(() => { if (E.editeur?.ta === ta) fermerEditeur(true); }, 0);
-    zone.append(ta); E.editeur = { ta, p, existant }; ajuster(); ta.focus(); ta.select();
+    let etiq = null;
+    if (prop) { etiq = el('div', { class: 'annot-prop' }, `Écriture reconnue : proposé, à vérifier${prop.doutes ? ` (${prop.doutes} caractère${prop.doutes > 1 ? 's' : ''} douteux)` : ''}. Corriger au clavier, Entrée pour valider, Échap pour annuler.`); Object.assign(etiq.style, { left: ta.style.left, top: `calc(${ta.style.top} - 2.6em)` }); zone.append(etiq); }
+    zone.append(ta); E.editeur = { ta, p, existant, taille: prop ? taille : undefined, etiq }; ajuster(); ta.focus(); ta.select();
   }
   function fermerEditeur(valider) {
     const ed = E.editeur; if (!ed) return; E.editeur = null;
-    const t = ed.ta.value.replace(/\s+$/, ''); ed.ta.remove();
+    const t = ed.ta.value.replace(/\s+$/, ''); ed.ta.remove(); ed.etiq?.remove();
     if (!valider) return;
     if (ed.existant >= 0) {
       const a = E.liste[ed.existant]; if (!a || t === a.texte) return;
       pousser(); if (t.trim()) a.texte = t; else { E.liste.splice(ed.existant, 1); E.sel = -1; }
-    } else if (t.trim()) ajouter(A.creer('texte', [ed.p], { texte: t, taille: E.taille, couleur: E.couleur }));
+    } else if (t.trim()) ajouter(A.creer('texte', [ed.p], { texte: t, taille: ed.taille ?? E.taille, couleur: E.couleur }));
     dessiner();
   }
 
@@ -195,6 +220,7 @@ export function ouvrirAnnot(opts) {
       return;
     }
     E.sel = -1;
+    if (E.outil === 'encre') { clearTimeout(E.encre.minuteur); E.geste = { type: 'encre', pts: [p] }; dessiner(); return; }
     if (E.outil === 'poly') E.geste = { type: 'trace', pts: [p] };
     else E.geste = { type: 'forme', p0: p, apercu: null };
     dessiner();
@@ -209,7 +235,7 @@ export function ouvrirAnnot(opts) {
     const g = E.geste; if (!g) return;
     const p = vers(ev);
     if (g.type === 'pan') { E.vue.ox = g.ox + ev.clientX - g.x; E.vue.oy = g.oy + ev.clientY - g.y; }
-    else if (g.type === 'trace') { const q = g.pts.at(-1); if (Math.hypot(p[0] - q[0], p[1] - q[1]) * E.vue.s >= 2) g.pts.push(p); }
+    else if (g.type === 'trace' || g.type === 'encre') { const q = g.pts.at(-1); if (Math.hypot(p[0] - q[0], p[1] - q[1]) * E.vue.s >= 2) g.pts.push(p); }
     else if (g.type === 'forme') g.apercu = forme(E.outil, g.p0, p, ev.shiftKey);
     else if (g.type === 'deplace') { const i = E.sel, nv = A.deplacer(g.a0, p[0] - g.p0[0], p[1] - g.p0[1]); if (!g.bouge && Math.hypot(p[0] - g.p0[0], p[1] - g.p0[1]) * E.vue.s < 3) return; g.bouge = true; E.liste[i] = nv; }
     else if (g.type === 'poignee') { E.liste[E.sel] = A.deplacerPoignee(g.a0, g.i, p); g.bouge = true; }
@@ -220,7 +246,8 @@ export function ouvrirAnnot(opts) {
     const g = E.geste; if (!g) return; E.geste = null;
     canvas.style.cursor = E.outil === 'sel' ? 'default' : E.outil === 'texte' ? 'text' : 'crosshair';
     if (ev.type === 'pointercancel') { if (g.avant) E.liste = JSON.parse(g.avant); dessiner(); return; }
-    if (g.type === 'trace') {
+    if (g.type === 'encre') { E.encre.traits.push(g.pts); E.encre.minuteur = setTimeout(reconnaitreEncre, E.delaiEncre); }
+    else if (g.type === 'trace') {
       const r = A.reconnaitre(g.pts, { corriger: E.corriger });
       if (r) {
         const a = ajouter(A.creer(r.type, r.pts, { couleur: E.couleur, epais: E.epais, ferme: r.ferme }));
@@ -248,6 +275,7 @@ export function ouvrirAnnot(opts) {
     else if (ctrl && ev.key.toLowerCase() === 'z' && !ev.shiftKey) { ev.preventDefault(); annuler(); }
     else if (ctrl && (ev.key.toLowerCase() === 'y' || (ev.key.toLowerCase() === 'z' && ev.shiftKey))) { ev.preventDefault(); retablir(); }
     else if (ev.key === 'Delete' || ev.key === 'Backspace') { ev.preventDefault(); supprimer(); }
+    else if (ev.key === 'Enter' && E.encre.traits.length) { ev.preventDefault(); reconnaitreEncre(); }
     else if (ev.key === 'Escape') { if (E.sel >= 0) { E.sel = -1; dessiner(); } else fermerAnnot(true); }
   };
   addEventListener('keydown', touche, true); addEventListener('keyup', touche, true);
@@ -274,7 +302,7 @@ export function ouvrirAnnot(opts) {
     opts.onEnregistrer(JSON.parse(instant()), c.toDataURL('image/jpeg', 0.8)); E.modifie = false;
     if (msg) toast('Annotations enregistrées dans le projet (onglet Notes & vues).');
   }
-  E.enregistrer = enregistrer; E.fermerEditeur = fermerEditeur; E.opts = opts;
+  E.enregistrer = enregistrer; E.fermerEditeur = fermerEditeur; E.reconnaitreEncre = reconnaitreEncre; E.opts = opts;
   E.api = { liste: () => JSON.parse(instant()), etat: () => ({ outil: E.outil, sel: E.sel, vue: { ...E.vue }, nb: E.liste.length }), choisir, exporterPng, exporterPdf };
   racine._annot = E;
 

@@ -124,7 +124,9 @@ test('ANN-06 : DXF avec calque ANNOTATIONS, couleurs propres, texte multiligne, 
   assert.ok(it.find(o => o.kind === 'text' && o.texte === 'à vérifier').pts[0][1] < 80);   // 2ᵉ ligne SOUS la 1ʳᵉ (axe Y vers le haut)
   assert.equal(it.filter(o => o.plein).length, 1);
   assert.equal(aciProche('#1e88e5'), 150); assert.equal(aciProche('#e53935'), 1); assert.equal(aciProche('zzz'), 7);
-  const plan = composerPlan(dessin0(), [], { cartouche: true, annotations: it });
+  const src = dessin0(), avant = JSON.stringify(src);
+  const plan = composerPlan(src, [], { cartouche: true, annotations: it });
+  assert.equal(JSON.stringify(src), avant, 'le dessin source n’est pas modifié');
   assert.ok(plan.calques.some(c => c.nom === 'Annotations'));
   const dxf = Buffer.from(ecrireDxf(plan, {})).toString('latin1');
   assert.ok(dxf.includes('ANNOTATIONS') && /\n 62\r\n150\r\n|\r\n62\r\n150\r\n/.test(dxf), 'couleur ACI par entité');

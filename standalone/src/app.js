@@ -34,7 +34,7 @@ THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
 THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
 THREE.Mesh.prototype.raycast = acceleratedRaycast;
 
-const APP_VERSION = '1.13.0';
+const APP_VERSION = '1.14.0';
 const $ = id => document.getElementById(id);
 const el = (tag, props = {}, ...kids) => { const e = document.createElement(tag); for (const [k, v] of Object.entries(props)) { if (k === 'class') e.className = v; else if (k === 'style') e.style.cssText = v; else if (k.startsWith('on')) e[k] = v; else if (v !== undefined && v !== null) e.setAttribute(k, v); } for (const k of kids.flat()) if (k !== null && k !== undefined && k !== false) e.append(k instanceof Node ? k : document.createTextNode(String(k))); return e; };
 const fmt = (x, d = 1) => (Number.isFinite(x) ? (Math.abs(x) < 0.5 * 10 ** -d ? 0 : x).toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d }) : '—');
@@ -1675,8 +1675,8 @@ function renderGuide() {
   const box = $('guide'); if (!box) return;
   const g = guide(contexteGuide());
   box.className = `guide g-${g.cle}`; box.dataset.cle = g.cle;
-  box.replaceChildren(el('div', { class: 'g-titre' }, g.titre), el('p', { class: 'g-texte' }, g.texte),
-    g.actions.length ? el('div', { class: 'g-actions' }, g.actions.map(a => el('button', { class: `btn sm${a.primaire ? ' primary' : ''}`, onclick: () => ACTIONS_GUIDE_UI[a.id]?.() }, a.label))) : null);
+  box.replaceChildren(...[el('div', { class: 'g-titre' }, g.titre), el('p', { class: 'g-texte' }, g.texte),
+    g.actions.length ? el('div', { class: 'g-actions' }, g.actions.map(a => el('button', { class: `btn sm${a.primaire ? ' primary' : ''}`, onclick: () => ACTIONS_GUIDE_UI[a.id]?.() }, a.label))) : null].filter(Boolean));   // replaceChildren(null) écrirait « null »
 }
 const coche = (checked, props) => { const i = el('input', { type: 'checkbox', class: 'fini', ...props }); i.checked = !!checked; return i; }; // « checked » doit être une propriété, pas un attribut
 let resteFiltre = 'a_faire';

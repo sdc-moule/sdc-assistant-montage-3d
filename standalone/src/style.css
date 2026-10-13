@@ -436,3 +436,6 @@ body.compact .dxf-auto { width: min(240px, 60vw); top: 40px; }
 .annot-corr { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; cursor: pointer; }
 .annot-texte { position: absolute; z-index: 2; margin: 0; padding: 0 2px; border: 1px dashed #1f5f8b; background: rgba(255,255,255,.75); font-family: Helvetica, Arial, sans-serif; line-height: 1.2; resize: none; overflow: hidden; outline: none; white-space: pre; }
 body.compact .annot-bar { gap: 4px; padding: 4px; } body.compact .annot-bar strong { display: none; }
+
+.annot-texte.propose { border-color: #e8730c; background: rgba(255,244,230,.92); }
+.annot-prop { position: absolute; z-index: 3; max-width: min(520px, 90%); padding: 3px 8px; background: #fff4e6; border: 1px solid #e8730c; border-radius: 6px; font-size: 13px; color: #7a3d00; pointer-events: none; }
