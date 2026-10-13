@@ -7,6 +7,8 @@ import { readCad, sha256 } from './step-loader.js';
 import { lireDxf } from './geom/dxf.js';
 import { lirePdf } from './geom/pdf.js';
 import { ouvrirDxf } from './dxf-view.js';
+import { ouvrirAnnot, annotOuvert } from './annot-view.js';
+import { nettoyer as nettoyerAnnots } from './geom/annotations.js';
 import { creerMiseEnPlan } from './geom/mise-en-plan.js';
 import { partsFromOcct } from './geom/from-occt.js';
 import { meshStats, buildBom, toCsv, signature } from './geom/bom.js';
@@ -82,7 +84,7 @@ const S = {
   ex: { amount: 0, dir: 'z', scope: 'all', ids: null }, exVec: new Map(), moves: [], open: 0, opType: 'translation', pickAxis: false, hinge: null, boxMode: false,
   cuts: { x: { on: false, pos: 0, flip: false }, y: { on: false, pos: 0, flip: false }, z: { on: false, pos: 0, flip: false } }, caps: true, planeVis: false, hiddenFaces: {}, faceMode: false, drillLabels: false, fill: { on: true, min: 3, max: 20 },
   drill: null, netClass: {}, skelOnly: false, skelShow: false, selNet: null, selFeature: null, filters: { circuit: true, alignement: false, 'isolé': false, 'alésage': false, dmin: 0, dmax: 999 }, maxDrill: 32, cyl: null,
-  comments: [], views: [], rowNotes: {}, bubbleOff: {}, groups: [], typo: new Map(),
+  comments: [], views: [], annots: [], rowNotes: {}, bubbleOff: {}, groups: [], typo: new Map(),
   bounds: new THREE.Box3(), measure: { on: false, pts: [] }, cote: { pending: null }, cotes: [], cotesVisible: true, skelItems: [], skelGroups: new Map(),
   undo: [], redo: [],
 };
@@ -131,13 +133,13 @@ async function openFile(file) {
       const d = await lirePdf(await chargerPdfJs(), await file.arrayBuffer());
       busy('');
       if (!d.traits) return toast('Ce PDF ne contient aucun tracé vectoriel (scan ou image) : il ne peut pas être converti en plan mesurable.', 9000);
-      ouvrirDxf(d, file.name, { toast });
+      ouvrirDxf(d, file.name, { toast, annoter: c => nouveauDocAnnot('plan', 'Plan ' + file.name, c) });
       if (d.pages > 1) toast(`PDF de ${d.pages} pages : seule la page 1 est affichée.`, 6000);
     } catch (err) { busy(''); toast('PDF illisible : ' + err.message, 9000); }
     return;
   }
   if (/\.dxf$/i.test(file.name)) {
-    try { const d = lireDxf(await file.arrayBuffer()); if (!d.items.length) return toast('DXF sans entité 2D reconnue.', 6000); ouvrirDxf(d, file.name, { toast }); }
+    try { const d = lireDxf(await file.arrayBuffer()); if (!d.items.length) return toast('DXF sans entité 2D reconnue.', 6000); ouvrirDxf(d, file.name, { toast, annoter: c => nouveauDocAnnot('plan', 'Plan ' + file.name, c) }); }
     catch (err) { toast('DXF illisible : ' + err.message, 8000); }
     return;
   }
@@ -206,7 +208,7 @@ function install(res, name, hash) {
   const { parts } = partsFromOcct(res);
   const kept = parts.filter(p => p.index.length >= 3);
   if (!kept.length) throw new Error('aucun solide trouvé dans le fichier.');
-  Object.assign(S, { loaded: true, fileName: name, hash, parts: kept, byId: new Map(kept.map(p => [p.id, p])), items: {}, sel: new Set(), comments: [], views: [], rowNotes: {}, bubbleOff: {}, groups: [], typo: new Map(), netClass: {}, catOverride: {}, catOff: new Set(), hiddenFaces: {}, moves: [], open: 0, hinge: null, cotes: [], undo: [], redo: [], selNet: null, selFeature: null });
+  Object.assign(S, { loaded: true, fileName: name, hash, parts: kept, byId: new Map(kept.map(p => [p.id, p])), items: {}, sel: new Set(), comments: [], views: [], annots: [], rowNotes: {}, bubbleOff: {}, groups: [], typo: new Map(), netClass: {}, catOverride: {}, catOff: new Set(), hiddenFaces: {}, moves: [], open: 0, hinge: null, cotes: [], undo: [], redo: [], selNet: null, selFeature: null });
   S.ex = { amount: 0, dir: 'z', scope: 'all', ids: null };
   S.stats = new Map(kept.map(p => [p.id, meshStats(p.positions, p.index)]));
   S.bom = buildBom(kept, S.stats);
@@ -621,7 +623,7 @@ async function miseEnPlan() {
   try {
     const mp = creerMiseEnPlan(parts), row = parts.length === 1 ? S.rowOf.get(parts[0].id) : null, n = row ? nomRow(row) : parts.length === 1 ? parts[0].name : `${parts.length} pièces`;
     busy(false);
-    ouvrirDxf(mp.dessin(), `${n}`, { toast, mp });
+    ouvrirDxf(mp.dessin(), `${n}`, { toast, mp, annoter: c => nouveauDocAnnot('plan', 'Plan ' + n, c) });
     toast(mp.axe ? `Pièce de révolution (axe ${mp.axe.axe}) : coupe A-A proposée suivant l'axe.` : 'Trois vues à l\'échelle 1:1. Outil « Coupe » : plan XZ ou YZ par un point cliqué.', 5000);
   } catch (e) { busy(false); console.warn('mise en plan', e); toast('Mise en plan impossible : ' + e.message, 6000); }
 }
@@ -1094,7 +1096,56 @@ function applyViewState(v) {
   camera.position.fromArray(v.camera.position); controls.target.fromArray(v.camera.target); controls.update();
   refreshAll();
 }
+// ---------------------------------------------------------------- annotations (capture, plan ou image)
+const canvasVersData = (c, type) => c.toDataURL(type === 'plan' ? 'image/png' : 'image/jpeg', 0.88);
+function ouvrirDocAnnot(doc, fond) {
+  if (annotOuvert()) return;
+  ouvrirAnnot({
+    fond, w: doc.w, h: doc.h, nom: doc.nom, fichier: S.fileName, items: doc.items, toast, telecharger: (n, b) => download(n, b),
+    onEnregistrer: (items, vignette) => {
+      if (!S.annots.includes(doc)) { if (!items.length) return; doc.fond = doc.fond ?? canvasVersData(fond, doc.source); S.annots.push(doc); }
+      doc.items = items; doc.vignette = vignette; doc.date = new Date().toISOString(); refreshAll(); saveLocal();
+    },
+  });
+}
+function nouveauDocAnnot(source, nom, canvas, scene) {
+  const n = S.annots.filter(d => d.source === source).length + 1;
+  ouvrirDocAnnot({ id: 'd' + Date.now().toString(36), nom: `${nom} ${n}`, date: new Date().toISOString(), source, w: canvas.width, h: canvas.height, items: [], scene }, canvas);
+}
+function annoterVue3d() {
+  if (!S.loaded) return toast('Ouvrir d\'abord un assemblage.');
+  renderer.render(scene, camera); drawOverlay();
+  const w = renderer.domElement.width, h = renderer.domElement.height, c = el('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d'); g.fillStyle = '#eef2f5'; g.fillRect(0, 0, w, h); g.drawImage(renderer.domElement, 0, 0); g.drawImage(overlay, 0, 0, w, h);
+  nouveauDocAnnot('3d', 'Capture 3D', c, viewState());
+}
+function chargerImage(src) { return new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => rej(new Error('image illisible')); im.src = src; }); }
+async function annoterImage(file) {
+  try {
+    const url = URL.createObjectURL(file), im = await chargerImage(url); URL.revokeObjectURL(url);
+    const k = Math.min(1, 3000 / Math.max(im.naturalWidth, im.naturalHeight)), c = el('canvas'); c.width = Math.round(im.naturalWidth * k); c.height = Math.round(im.naturalHeight * k);
+    const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(im, 0, 0, c.width, c.height);
+    nouveauDocAnnot('image', file.name.replace(/\.[^.]+$/, '') || 'Image', c);
+  } catch (e) { toast('Image non lisible : ' + e.message, 5000); }
+}
+async function rouvrirAnnot(d) {
+  if (!d.fond) return toast('Image de fond absente (stockage du navigateur vidé) : rouvrir le fichier projet enregistré.', 6000);
+  try { const im = await chargerImage(d.fond); ouvrirDocAnnot(d, im); } catch (e) { toast('Fond illisible : ' + e.message, 5000); }
+}
+function renderAnnots() {
+  const box = $('a-list'); if (!box) return; box.replaceChildren();
+  for (const d of S.annots) box.append(el('div', { class: 'scene', onclick: () => rouvrirAnnot(d) },
+    d.vignette ? el('img', { src: d.vignette, alt: '' }) : el('div', { class: 'noimg' }, '📝'),
+    el('div', { class: 'scene-body' }, el('b', {}, d.nom), el('span', { class: 'hint' }, `${d.items.length} annotation(s) · ${new Date(d.date).toLocaleString('fr-FR')}`),
+      el('div', { class: 'scene-actions' },
+        el('button', { class: 'btn', title: 'Rouvrir pour modifier ou exporter (PNG, PDF)', onclick: e => { e.stopPropagation(); rouvrirAnnot(d); } }, 'Ouvrir'),
+        d.scene ? el('button', { class: 'btn', title: 'Revenir à la vue 3D (caméra, coupes, masquages) de cette capture', onclick: e => { e.stopPropagation(); applyViewState(d.scene); } }, 'Vue 3D') : null,
+        el('button', { class: 'btn', title: 'Renommer', onclick: e => { e.stopPropagation(); const n = prompt('Nom de l\'annotation', d.nom); if (n && n.trim()) { d.nom = n.trim().slice(0, 120); refreshAll(); saveLocal(); } } }, '✎'),
+        el('button', { class: 'btn', title: 'Supprimer', onclick: e => { e.stopPropagation(); if (!confirm(`Supprimer « ${d.nom} » et ses ${d.items.length} annotation(s) ?`)) return; S.annots = S.annots.filter(x => x !== d); refreshAll(); saveLocal(); } }, '✕')))));
+  if (!S.annots.length) box.append(el('p', { class: 'hint' }, 'Aucune annotation. Bouton « 📝 Annoter » de la vue 3D ou d\'un plan.'));
+}
 function renderViews() {
+  renderAnnots();
   const box = $('v-list'); box.replaceChildren();
   for (const v of S.views) box.append(el('div', { class: 'scene', onclick: () => applyViewState(v.state) },
     v.thumb ? el('img', { src: v.thumb, alt: '' }) : el('div', { class: 'noimg' }, '👁'),
@@ -1118,15 +1169,35 @@ function syncToggles() {
 // ---------------------------------------------------------------- persistance locale et projet
 const LS = () => `sdc-montage3d:${S.hash}`;
 let saveTimer;
-function projectData() {
+function projectData(avecFonds = true) {
   return { application: 'SDC Montage 3D', version: APP_VERSION, schema: 'sdc-montage3d-projet/2', fichier: S.fileName, empreinte_sha256: S.hash, date: new Date().toISOString(),
     occurrences: S.parts.map(p => ({ id: p.id, nom: p.name, signature: signature(p, S.stats.get(p.id)), repere: S.rowOf.get(p.id).repere })),
-    maxDrill: S.maxDrill, comments: S.comments, views: S.views, netClass: S.netClass, moves: S.moves, cotes: S.cotes, rowNotes: S.rowNotes, catOverride: S.catOverride, bubbleOff: S.bubbleOff, groupes: S.groups, display: viewState() };
+    maxDrill: S.maxDrill, comments: S.comments, views: S.views, annotations: S.annots.map(d => (avecFonds ? d : { ...d, fond: undefined })), netClass: S.netClass, moves: S.moves, cotes: S.cotes, rowNotes: S.rowNotes, catOverride: S.catOverride, bubbleOff: S.bubbleOff, groupes: S.groups, display: viewState() };
 }
-function saveLocal() { if (!S.loaded) return; clearTimeout(saveTimer); saveTimer = setTimeout(() => { try { localStorage.setItem(LS(), JSON.stringify(projectData())); } catch { /* stockage indisponible : le fichier projet reste possible */ } }, 400); }
+function saveLocal() { if (!S.loaded) return; clearTimeout(saveTimer); saveTimer = setTimeout(() => { try { localStorage.setItem(LS(), JSON.stringify(projectData(false))); } catch { /* stockage indisponible : le fichier projet reste possible */ } saveFonds(); }, 400); }
 // L'enregistrement est différé de 400 ms : on le force à la fermeture / au rechargement de la page pour ne perdre aucune coche.
-addEventListener('pagehide', () => { if (S.loaded && saveTimer) { clearTimeout(saveTimer); saveTimer = 0; try { localStorage.setItem(LS(), JSON.stringify(projectData())); } catch { /* rien */ } } });
-function restoreLocal() { try { const raw = localStorage.getItem(LS()); if (raw) { applyProject(JSON.parse(raw), true); toast('Annotations et vues de ce fichier restaurées.'); } } catch { /* rien */ } }
+addEventListener('pagehide', () => { if (S.loaded && saveTimer) { clearTimeout(saveTimer); saveTimer = 0; try { localStorage.setItem(LS(), JSON.stringify(projectData(false))); } catch { /* rien */ } saveFonds(); } });
+// Images de fond des annotations : clé séparée, pour qu'un stockage plein ne fasse jamais perdre le projet lui-même.
+const LSF = () => `sdc-montage3d:annot-fonds:${S.hash}`;
+function saveFonds() {
+  try { const o = {}; for (const d of S.annots) if (d.fond) o[d.id] = d.fond; if (Object.keys(o).length) localStorage.setItem(LSF(), JSON.stringify(o)); else localStorage.removeItem(LSF()); }
+  catch { if (!saveFonds.alerte) { saveFonds.alerte = true; toast('Stockage du navigateur plein : les images des annotations ne sont pas gardées localement. Utiliser « Enregistrer le projet » pour les conserver.', 7000); } }
+}
+function restoreLocal() {
+  try {
+    const raw = localStorage.getItem(LS());
+    if (raw) {
+      applyProject(JSON.parse(raw), true);
+      try { const f = JSON.parse(localStorage.getItem(LSF()) ?? '{}'); for (const d of S.annots) if (!d.fond && typeof f[d.id] === 'string' && DATA_IMG.test(f[d.id])) d.fond = f[d.id]; } catch { /* rien */ }
+      toast('Annotations et vues de ce fichier restaurées.');
+    }
+  } catch { /* rien */ }
+}
+const DATA_IMG = /^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/;
+const docsAnnot = l => (Array.isArray(l) ? l : []).filter(d => d && Number.isFinite(d.w) && Number.isFinite(d.h) && d.w > 0 && d.h > 0 && d.w <= 20000 && d.h <= 20000).map((d, i) => ({
+  id: String(d.id ?? `d${i}`).slice(0, 40), nom: String(d.nom ?? 'Annotations').slice(0, 120), date: typeof d.date === 'string' ? d.date : new Date().toISOString(), source: ['3d', 'plan', 'image'].includes(d.source) ? d.source : 'image',
+  w: d.w, h: d.h, fond: typeof d.fond === 'string' && DATA_IMG.test(d.fond) ? d.fond : undefined, vignette: typeof d.vignette === 'string' && DATA_IMG.test(d.vignette) ? d.vignette : undefined,
+  items: nettoyerAnnots(d.items), scene: d.scene && typeof d.scene === 'object' ? d.scene : undefined }));
 function applyProject(pr, silent = false) {
   let map = id => id;
   if (pr.empreinte_sha256 !== S.hash) {
@@ -1142,6 +1213,7 @@ function applyProject(pr, silent = false) {
   S.moves = (pr.moves ?? []).map(m => ({ ...m, ids: m.ids.map(map).filter(Boolean) })).filter(m => m.ids.length);
   S.comments = (pr.comments ?? []).map(c => ({ ...c, ids: c.ids.map(map).filter(Boolean) }));
   S.views = pr.empreinte_sha256 === S.hash ? (pr.views ?? []) : [];
+  S.annots = pr.empreinte_sha256 === S.hash ? docsAnnot(pr.annotations) : [];
   S.netClass = pr.empreinte_sha256 === S.hash ? (pr.netClass ?? {}) : {};
   S.rowNotes = pr.empreinte_sha256 === S.hash ? (pr.rowNotes ?? {}) : {};
   S.catOverride = Object.fromEntries(Object.entries(pr.catOverride ?? {}).map(([k, v]) => [map(k), v]).filter(([k]) => k));
@@ -1301,6 +1373,8 @@ function wire() {
   };
   $('v-save').onclick = () => { if (!S.loaded) return; saveScene($('v-name').value.trim()); $('v-name').value = ''; };
   $('scene-btn').onclick = () => { if (!S.loaded) return; saveScene(); };
+  $('annot-btn').onclick = annoterVue3d; $('a-new').onclick = annoterVue3d;
+  $('a-img').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) annoterImage(f); };
   $('copy-btn').onclick = () => { if (S.loaded) copyScene(null); };
   for (const b of document.querySelectorAll('#op-type button')) b.onclick = () => { S.opType = b.dataset.op; for (const x of document.querySelectorAll('#op-type button')) x.classList.toggle('on', x === b); $('op-tr').hidden = S.opType !== 'translation'; $('op-rot').hidden = S.opType !== 'rotation'; if (S.opType !== 'rotation') { S.pickAxis = false; syncToggles(); } };
   $('op-pick').onclick = () => { S.pickAxis = !S.pickAxis; if (S.pickAxis) { S.faceMode = false; S.measure.on = false; $('measure').classList.remove('on'); toast('Toucher un cylindre (axe, goupille, alésage) ou une arête droite qui sert de charnière.', 6000); } syncToggles(); };

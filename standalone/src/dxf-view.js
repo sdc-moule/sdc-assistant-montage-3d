@@ -18,7 +18,8 @@ let racine = null, etat = null;
 
 export function dxfOuvert() { return !!racine; }
 
-export function ouvrirDxf(dessin, nom, { toast = () => {}, mp = null } = {}) {
+export function ouvrirDxf(dessin, nom, opts = {}) {
+  const { toast = () => {}, mp = null } = opts;
   fermerDxf();
   const PLAN = !!mp;   // mode « mise en plan » : vues projetées d'une pièce 3D à l'échelle 1:1, cotation par clics et coupes
   const u = dessin.unite || 'mm';
@@ -87,10 +88,18 @@ export function ouvrirDxf(dessin, nom, { toast = () => {}, mp = null } = {}) {
     el('button', { class: 'btn', title: 'Effacer toutes les cotes', onclick: () => { E.pend = []; E.cotes = []; dessiner(); } }, 'Effacer'),
     el('button', { class: 'btn', title: 'Exporter les cotes en CSV', onclick: () => exporter() }, 'Cotes CSV'),
     ...(PLAN ? [el('button', { class: 'btn', title: 'Exporter le plan et ses cotes en DXF (1:1, mm)', onclick: () => exporterPlan('dxf') }, 'Export DXF'), el('button', { class: 'btn', title: 'Exporter le plan et ses cotes en PDF vectoriel (1:1)', onclick: () => exporterPlan('pdf') }, 'Export PDF')] : []),
+    ...(opts.annoter ? [el('button', { class: 'btn', title: 'Annoter une capture de ce plan : flèches, textes, formes (indicatif, le plan n’est pas modifié)', onclick: () => annoterCapture() }, '📝 Annoter')] : []),
     el('button', { class: 'btn primary', title: 'Revenir à la vue 3D', onclick: () => fermerDxf() }, 'Fermer'),
   );
   racine = el('div', { id: 'dxf-view', class: 'dxf-view' }, barre, el('div', { class: 'dxf-zone' }, canvas, menuCalques, panAuto, panCoupe, aide, infos));
   document.body.append(racine);
+
+  function annoterCapture() {
+    dessiner();
+    const c = document.createElement('canvas'); c.width = canvas.width; c.height = canvas.height;
+    const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(canvas, 0, 0);
+    opts.annoter(c);
+  }
 
   function remplirCalques() {
     menuCalques.textContent = '';

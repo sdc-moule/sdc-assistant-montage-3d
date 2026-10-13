@@ -21,7 +21,7 @@ export function versAnsi(txt) {
   for (const ch of s) { const c = ch.codePointAt(0); out.push(c < 128 || (c >= 160 && c <= 255) ? c : SPEC1252[c] ?? 63); }
   return Uint8Array.from(out);
 }
-const sansAccent = t => String(t).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\x20-\x7e]/g, '?');
+export const sansAccent = t => String(t).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\x20-\x7e]/g, '?');
 const fmt = v => (Math.abs(v) < 0.005 ? 0 : v).toFixed(2).replace('.', ',');
 const num = v => { const s = (Math.abs(v) < 5e-7 ? 0 : v).toFixed(4); return s.includes('.') ? s.replace(/0+$/, '').replace(/\.$/, '') : s; };
 
@@ -160,7 +160,7 @@ export function choisirPage(l, h) {
 }
 const hex = c => { const m = /^#?([0-9a-f]{6})$/i.exec(c || ''); return m ? [0, 2, 4].map(i => parseInt(m[1].slice(i, i + 2), 16) / 255) : [0, 0, 0]; };
 const largeurTrait = o => o.epais ? 0.8 : o.layer === 'Contours' ? 0.5 : (o.layer === 'Hachures' || o.layer === 'Cotes' || o.layer === 'Axes') ? 0.18 : 0.25;
-function chainePdf(txt) {   // texte ANSI → chaîne PDF littérale ASCII (octal pour les octets hauts)
+export function chainePdf(txt) {   // texte ANSI → chaîne PDF littérale ASCII (octal pour les octets hauts)
   let s = '';
   for (const c of versAnsi(txt)) s += c === 40 || c === 41 || c === 92 ? '\\' + String.fromCharCode(c) : c < 32 || c > 126 ? '\\' + c.toString(8).padStart(3, '0') : String.fromCharCode(c);
   return s;

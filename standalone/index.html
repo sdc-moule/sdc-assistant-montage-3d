@@ -167,6 +167,10 @@
       <p class="hint">Une scène garde caméra, éclaté, coupes, masquages, transparences, faces retirées et circuits. Le PNG enregistré contient la scène : le recharger par « Charger projet / scène ».</p>
       <div class="grid2"><input id="v-name" placeholder="Nom de la scène"><button class="btn" id="v-save">Mémoriser</button></div>
       <div id="v-list" class="list"></div>
+      <h3>Annotations</h3>
+      <p class="hint">Flèches, textes, formes et tracés posés sur une capture 3D, un plan ou une image. Indicatifs, ils ne remplacent pas la cotation ; le fond n'est jamais modifié. Enregistrés dans le projet (PNG et PDF exportables).</p>
+      <div class="grid2"><button class="btn" id="a-new">📝 Annoter la vue 3D</button><label class="btn">＋ Une image…<input id="a-img" type="file" accept="image/png,image/jpeg,image/webp" hidden></label></div>
+      <div id="a-list" class="list"></div>
     </section>
 
     <section data-panel="commande" hidden>
@@ -205,6 +209,7 @@
       <button class="btn icon toggle" id="multi" title="Sélection multiple (tablette)">Multi</button>
       <button class="btn icon toggle" id="boxsel" title="Sélection par fenêtre : glisser un rectangle (gauche → droite : pièces entièrement dedans ; droite → gauche : pièces touchées). Raccourci : Maj + glisser">▭ Fenêtre</button>
       <button class="btn icon toggle" id="measure" title="Cotation : toucher un cylindre (Ø / R), ou deux éléments (faces, axes, face + axe, points) pour la distance ou l'angle">📏 Cotation</button>
+      <button class="btn icon" id="annot-btn" title="Annoter une capture de la vue : flèches, textes, formes, tracé à main levée corrigé">📝 Annoter</button>
       <button class="btn icon" id="plan-btn" title="Mise en plan 2D : trois vues à l'échelle 1:1 de la pièce sélectionnée (sinon des pièces visibles), coupes et cotation">📐 Mise en plan</button>
       <button class="btn icon toggle on" id="cotes-vis" title="Afficher / masquer toutes les cotes">👁 Cotes</button>
       <button class="btn icon toggle" id="faces-btn" title="Retirer une face d'une pièce pour voir l'intérieur">✂ Face</button>

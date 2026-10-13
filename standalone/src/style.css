@@ -418,3 +418,21 @@ body.compact .dxf-echl { font-size: 0; } body.compact .dxf-ech { font-size: 13px
 .dxf-auto.dxf-coupe { left: auto; right: 8px; }
 .dxf-auto-btn { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 body.compact .dxf-auto { width: min(240px, 60vw); top: 40px; }
+
+/* ---- Annoter : annotations sur capture, plan ou image ---- */
+.annot-view { position: fixed; inset: 0; z-index: 80; display: flex; flex-direction: column; background: #9aa5b1; }
+.annot-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 8px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.annot-bar strong { margin-right: 8px; max-width: 30vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.annot-bar .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 2px; }
+.annot-outil.on { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.annot-zone { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+.annot-canvas { display: block; touch-action: none; }
+.annot-aide { position: absolute; left: 8px; bottom: 8px; padding: 4px 8px; background: rgba(251,252,253,.92); border: 1px solid var(--line); border-radius: 6px; font-size: 13px; pointer-events: none; max-width: calc(100% - 16px); }
+.annot-pal { display: inline-flex; align-items: center; gap: 4px; }
+.annot-sw { width: 28px; height: 28px; min-width: 28px; padding: 0; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px #7a8896; cursor: pointer; }
+.annot-sw.on { box-shadow: 0 0 0 3px var(--accent); }
+.annot-coul { width: 34px; height: 34px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: none; cursor: pointer; }
+.annot-sel { min-height: 38px; }
+.annot-corr { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; cursor: pointer; }
+.annot-texte { position: absolute; z-index: 2; margin: 0; padding: 0 2px; border: 1px dashed #1f5f8b; background: rgba(255,255,255,.75); font-family: Helvetica, Arial, sans-serif; line-height: 1.2; resize: none; overflow: hidden; outline: none; white-space: pre; }
+body.compact .annot-bar { gap: 4px; padding: 4px; } body.compact .annot-bar strong { display: none; }
