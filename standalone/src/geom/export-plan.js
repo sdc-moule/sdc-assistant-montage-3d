@@ -90,11 +90,12 @@ export function lignesCartouche(nom, date) {
     `Valeurs INDICATIVES issues du maillage d'affichage (~±0,05 mm), non validées : à vérifier avant toute fabrication - ${date}`];
 }
 // Réunit dessin + cotes (+ cartouche sous le dessin pour le DXF) en un plan prêt à écrire.
-export function composerPlan(dessin, cotes = [], { nom = 'piece', date = '', cartouche = false } = {}) {
+export function composerPlan(dessin, cotes = [], { nom = 'piece', date = '', cartouche = false, annotations = [] } = {}) {
   const base = emprisePlan(dessin.items), taille = Math.max(base[2] - base[0], base[3] - base[1]);
   const hCote = Math.min(7, Math.max(3, taille / 200));
-  const items = [...dessin.items, ...itemsCotes(cotes, hCote)], calques = dessin.calques.map(c => ({ ...c }));
+  const items = [...dessin.items, ...itemsCotes(cotes, hCote), ...annotations], calques = dessin.calques.map(c => ({ ...c }));
   if (items.some(o => o.layer === 'Cotes') && !calques.some(c => c.nom === 'Cotes')) calques.push({ nom: 'Cotes', rgb: '#12324b', couleur: 7, ltype: 'CONTINUOUS', gele: false, nb: 0 });
+  if (annotations.length && !calques.some(c => c.nom === 'Annotations')) calques.push({ nom: 'Annotations', rgb: '#e53935', couleur: 1, ltype: 'CONTINUOUS', gele: false, nb: annotations.length });
   const e = emprisePlan(items);
   if (cartouche) {
     if (!calques.some(c => c.nom === 'Cartouche')) calques.push({ nom: 'Cartouche', rgb: '#4a5a6a', couleur: 8, ltype: 'CONTINUOUS', gele: false, nb: 0 });
@@ -105,7 +106,15 @@ export function composerPlan(dessin, cotes = [], { nom = 'piece', date = '', car
 }
 
 // ——— DXF R12 ———
-const ACI = { Contours: 7, 'Arêtes cachées': 8, Hachures: 8, Axes: 1, 'Plan de coupe': 1, Titres: 5, Cotes: 3, Cartouche: 8 };
+// Couleur AutoCAD (ACI) la plus proche d'une couleur #rrggbb (les annotations gardent leur couleur dans le DXF).
+const ACI_RVB = [[1, 255, 0, 0], [2, 255, 255, 0], [3, 0, 255, 0], [4, 0, 255, 255], [5, 0, 0, 255], [6, 255, 0, 255], [7, 0, 0, 0], [8, 128, 128, 128], [30, 255, 127, 0], [40, 255, 191, 0], [94, 0, 127, 63], [150, 0, 127, 255], [200, 127, 0, 255]];
+export function aciProche(rgb) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(rgb || ''); if (!m) return 7;
+  const v = [0, 2, 4].map(i => parseInt(m[1].slice(i, i + 2), 16)); let best = 7, bd = Infinity;
+  for (const [n, r, g, b] of ACI_RVB) { const d = (v[0] - r) ** 2 + (v[1] - g) ** 2 + (v[2] - b) ** 2; if (d < bd) { bd = d; best = n; } }
+  return best;
+}
+const ACI = { Annotations: 1, Contours: 7, 'Arêtes cachées': 8, Hachures: 8, Axes: 1, 'Plan de coupe': 1, Titres: 5, Cotes: 3, Cartouche: 8 };
 const nomCalque = n => sansAccent(n).toUpperCase().replace(/[^A-Z0-9_$-]/g, '_') || '0';
 const chaine = o => (o.layer === 'Axes' || o.layer === 'Plan de coupe') ? 'CENTER' : 'DASHED';
 export function ecrireDxf(plan, { date = '' } = {}) {
@@ -129,7 +138,7 @@ export function ecrireDxf(plan, { date = '' } = {}) {
   g(0, 'TABLE'); g(2, 'STYLE'); g(70, 1); g(0, 'STYLE'); g(2, 'STANDARD'); g(70, 0); g(40, 0); g(41, 1); g(50, 0); g(71, 0); g(42, 2.5); g(3, 'txt'); g(4, ''); g(0, 'ENDTAB');
   g(0, 'ENDSEC');
   g(0, 'SECTION'); g(2, 'ENTITIES');
-  const tete = (type, o) => { g(0, type); g(8, nomCalque(o.layer)); g(6, o.pointille ? chaine(o) : 'CONTINUOUS'); };
+  const tete = (type, o) => { g(0, type); g(8, nomCalque(o.layer)); g(6, o.pointille ? chaine(o) : 'CONTINUOUS'); if (o.rgb) g(62, aciProche(o.rgb)); };
   const norm360 = a => { a = (a * 180) / Math.PI % 360; return a < 0 ? a + 360 : a; };
   for (const o of plan.items) {
     if (o.kind === 'text') { if (!String(o.texte).trim()) continue; tete('TEXT', o); g(10, num(o.pts[0][0])); g(20, num(o.pts[0][1])); g(30, 0); g(40, num(o.h)); g(1, o.texte); if (o.rot) g(50, num(norm360(o.rot))); g(7, 'STANDARD'); continue; }
@@ -159,7 +168,7 @@ export function choisirPage(l, h) {
   return { nom: 'sur mesure', pw: Math.ceil(l + 2 * MARGE), ph: Math.ceil(h + 2 * MARGE + BANDE), normalise: false };
 }
 const hex = c => { const m = /^#?([0-9a-f]{6})$/i.exec(c || ''); return m ? [0, 2, 4].map(i => parseInt(m[1].slice(i, i + 2), 16) / 255) : [0, 0, 0]; };
-const largeurTrait = o => o.epais ? 0.8 : o.layer === 'Contours' ? 0.5 : (o.layer === 'Hachures' || o.layer === 'Cotes' || o.layer === 'Axes') ? 0.18 : 0.25;
+const largeurTrait = o => o.lw ? Math.max(0.1, o.lw) : o.epais ? 0.8 : o.layer === 'Contours' ? 0.5 : (o.layer === 'Hachures' || o.layer === 'Cotes' || o.layer === 'Axes') ? 0.18 : 0.25;
 export function chainePdf(txt) {   // texte ANSI → chaîne PDF littérale ASCII (octal pour les octets hauts)
   let s = '';
   for (const c of versAnsi(txt)) s += c === 40 || c === 41 || c === 92 ? '\\' + String.fromCharCode(c) : c < 32 || c > 126 ? '\\' + c.toString(8).padStart(3, '0') : String.fromCharCode(c);
@@ -175,7 +184,7 @@ export function ecrirePdf(plan, { nom = 'piece', date = '' } = {}) {
   const texte = (t, x, y, hh, rot, c) => { const u = [Math.cos(rot || 0), Math.sin(rot || 0)]; S.push(`${rgb(c)} rg BT /F1 ${n(hh)} Tf ${n(u[0])} ${n(u[1])} ${n(-u[1])} ${n(u[0])} ${n(x)} ${n(y)} Tm (${chainePdf(t)}) Tj ET`); };
   lignesCartouche(nom, date).forEach((t, i) => texte(t, 8, 5 + BANDE - 5 - i * 5, i ? 2.6 : 3.4, 0, [0.1, 0.15, 0.2]));
   for (const o of plan.items) {
-    const c = couleur.get(o.layer) ?? [0, 0, 0], P = o.pts.map(p => [p[0] + tx, p[1] + ty]);
+    const c = o.rgb ? hex(o.rgb) : couleur.get(o.layer) ?? [0, 0, 0], P = o.pts.map(p => [p[0] + tx, p[1] + ty]);
     if (o.kind === 'text') { if (String(o.texte).trim()) texte(o.texte, P[0][0], P[0][1], o.h, o.rot, c); continue; }
     if (P.length < 2) continue;
     const trace = P.map((p, i) => `${n(p[0])} ${n(p[1])} ${i ? 'l' : 'm'}`).join(' ');

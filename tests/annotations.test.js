@@ -97,3 +97,48 @@ test('ANN-05 : export PDF d’une capture annotée (JPEG + annotations vectoriel
   if (!t.error) assert.ok(t.stdout.includes('Ø 12') || t.stdout.includes('12 ±0,05'), t.stdout);
   execFileSync('python3', ['-c', 'import sys;d=open(sys.argv[1],"rb").read();assert d[:5]==b"%PDF-"', f]);
 });
+
+// ——— Annotations en mm sur la mise en plan : repère, DXF et PDF ———
+import { exporterDxf, exporterPdf, composerPlan, ecrireDxf, aciProche } from '../standalone/src/geom/export-plan.js';
+const dessin0 = () => ({
+  items: [{ kind: 'poly', layer: 'Contours', pts: [[0, 0], [200, 0], [200, 100], [0, 100], [0, 0]], snap: [], pointille: false }],
+  calques: [{ nom: 'Contours', rgb: '#15202b', couleur: 7, ltype: 'CONTINUOUS', gele: false, nb: 1 }], cadre: { x0: 0, y0: 0, x1: 200, y1: 100 }, unite: 'mm',
+});
+test('ANN-06 : changement de repère capture ↔ plan, aller-retour exact, tailles proportionnelles', () => {
+  const f = { kx: 4, ky: -4, tx: 100, ty: 300 };                       // 4 px par mm, axe Y inversé
+  const px = [A.creer('texte', [[140, 260]], { texte: 'X', taille: 24, epais: 8 }), A.creer('fleche', [[100, 300], [180, 220]], { epais: 8 }), A.creer('rect', [[100, 300], [140, 260]], { epais: 4 })];
+  const mm = A.transformer(px, A.inverse(f));
+  assert.deepEqual(mm[1].pts, [[0, 0], [20, 20]]);                    // 80 px à droite et 80 px vers le haut = 20 mm
+  assert.equal(mm[0].taille, 6); assert.equal(mm[1].epais, 2);
+  const retour = A.transformer(mm, f);
+  for (let i = 0; i < px.length; i++) { assert.equal(retour[i].epais, px[i].epais); retour[i].pts.forEach((p, j) => { assert.ok(Math.abs(p[0] - px[i].pts[j][0]) < 1e-9 && Math.abs(p[1] - px[i].pts[j][1]) < 1e-9); }); }
+  assert.deepEqual(px[1].pts, [[100, 300], [180, 220]]);               // l'entrée n'est pas modifiée
+});
+test('ANN-06 : DXF avec calque ANNOTATIONS, couleurs propres, texte multiligne, flèche pleine', () => {
+  const an = [A.creer('fleche', [[10, 10], [60, 40]], { couleur: '#1e88e5', epais: 0.5 }), A.creer('cercle', [[100, 50], [120, 50]], { couleur: '#43a047', epais: 0.5 }),
+    A.creer('rect', [[20, 60], [80, 90]], { couleur: '#fb8c00', epais: 0.5 }), A.creer('poly', [[0, 0], [10, 20], [30, 5]], { couleur: '#8e24aa', epais: 0.5 }),
+    A.creer('texte', [[130, 80]], { texte: 'Ø 8 H7\nà vérifier', taille: 4, couleur: '#e53935' })];
+  const it = A.itemsAnnotations(an);
+  assert.ok(it.every(o => o.layer === 'Annotations' && o.rgb));
+  assert.equal(it.filter(o => o.kind === 'text').length, 2);
+  assert.ok(it.find(o => o.kind === 'text' && o.texte === 'à vérifier').pts[0][1] < 80);   // 2ᵉ ligne SOUS la 1ʳᵉ (axe Y vers le haut)
+  assert.equal(it.filter(o => o.plein).length, 1);
+  assert.equal(aciProche('#1e88e5'), 150); assert.equal(aciProche('#e53935'), 1); assert.equal(aciProche('zzz'), 7);
+  const plan = composerPlan(dessin0(), [], { cartouche: true, annotations: it });
+  assert.ok(plan.calques.some(c => c.nom === 'Annotations'));
+  const dxf = Buffer.from(ecrireDxf(plan, {})).toString('latin1');
+  assert.ok(dxf.includes('ANNOTATIONS') && /\n 62\r\n150\r\n|\r\n62\r\n150\r\n/.test(dxf), 'couleur ACI par entité');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'annot-dxf-')), f = path.join(dir, 'a.dxf');
+  fs.writeFileSync(f, ecrireDxf(plan, {}));
+  const r = spawnSync('python3', ['-c', 'import sys,ezdxf\nfrom ezdxf import recover\nd=ezdxf.readfile(sys.argv[1])\naud=d.audit()\nprint(len(aud.errors))\nms=d.modelspace()\nprint(len([e for e in ms if e.dxf.layer=="ANNOTATIONS"]))', f], { encoding: 'utf8' });
+  if (r.status === 0) { const [err, nb] = r.stdout.trim().split('\n').map(Number); assert.equal(err, 0); assert.equal(nb, 7); }
+});
+test('ANN-06 : PDF 1:1 avec annotations colorées (qpdf)', () => {
+  const an = [A.creer('cercle', [[100, 50], [120, 50]], { couleur: '#43a047', epais: 0.5 }), A.creer('texte', [[130, 80]], { texte: 'Contrôle 12', taille: 4, couleur: '#e53935' })];
+  const r = exporterPdf(dessin0(), [], { nom: 'essai', date: '2026-10-13', annotations: A.itemsAnnotations(an) });
+  const txt = Buffer.from(r.octets).toString('latin1');
+  assert.ok(txt.includes('0.2627 0.6275 0.2784 RG') || txt.includes('0.2627 0.6275 0.2784 rg'), 'vert de l’annotation');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'annot-pdf-')), f = path.join(dir, 'p.pdf'); fs.writeFileSync(f, r.octets);
+  const q = spawnSync('qpdf', ['--check', f], { encoding: 'utf8' }); if (!q.error) assert.equal(q.status, 0, q.stdout);
+  const t = spawnSync('pdftotext', [f, '-'], { encoding: 'utf8' }); if (!t.error) assert.ok(t.stdout.includes('Contrôle 12'));
+});

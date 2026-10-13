@@ -178,6 +178,33 @@ export function trouverPoignee(a, p, tol) {
   return best;
 }
 
+// ——— Changement de repère (capture ↔ plan en mm) ———
+// f = { kx, ky, tx, ty } : p' = [kx·x + tx, ky·y + ty] ; |kx| = |ky| (similitude, éventuellement avec miroir de l'axe Y).
+// Les épaisseurs et tailles de texte suivent l'échelle ; les annotations d'origine ne sont pas modifiées.
+export function transformer(liste, f) {
+  const k = Math.abs(f.kx);
+  return liste.map(a => {
+    const o = { ...a, pts: a.pts.map(p => [f.kx * p[0] + f.tx, f.ky * p[1] + f.ty]), epais: a.epais * k };
+    if (a.type === 'texte') o.taille = a.taille * k;
+    return o;
+  });
+}
+export const inverse = f => ({ kx: 1 / f.kx, ky: 1 / f.ky, tx: -f.tx / f.kx, ty: -f.ty / f.ky });
+
+// Annotations en mm (axe Y vers le haut) → entités du plan exporté (calque « Annotations », couleur propre à chaque entité).
+export function itemsAnnotations(liste) {
+  const items = [], base = { layer: 'Annotations', snap: [], pointille: false };
+  for (const a of liste) for (const o of tracer(a, { sens: -1 })) {
+    if (o.t === 'poly') items.push({ ...base, kind: o.pts.length === 2 && !o.ferme ? 'line' : 'poly', pts: o.ferme ? [...o.pts, o.pts[0]] : o.pts, rgb: o.couleur, lw: o.epais });
+    else if (o.t === 'cercle') {
+      const pts = Array.from({ length: 73 }, (_, i) => [o.c[0] + o.r * Math.cos(i * Math.PI / 36), o.c[1] + o.r * Math.sin(i * Math.PI / 36)]);
+      items.push({ ...base, kind: 'circle', pts, c: [o.c[0], o.c[1]], r: o.r, rgb: o.couleur, lw: o.epais });
+    } else if (o.t === 'tete') items.push({ ...base, kind: 'poly', plein: true, pts: o.pts, rgb: o.couleur });
+    else if (o.t === 'texte') o.lignes.forEach((t, i) => { if (t.trim()) items.push({ ...base, kind: 'text', texte: t, h: o.taille, rot: 0, pts: [[o.p[0], o.p[1] + i * o.pas]], rgb: o.couleur }); });
+  }
+  return items;
+}
+
 // ——— Primitives de dessin communes à l'écran, au PNG et au PDF ———
 // { t:'poly', pts, ferme, epais, couleur } · { t:'cercle', c, r, epais, couleur } · { t:'tete', pts:[3 pts], couleur } (triangle plein) ·
 // { t:'texte', p, lignes, taille, couleur, pas } ; `sens` = +1 si l'axe Y descend (image), −1 s'il monte (plan en mm).
@@ -190,7 +217,7 @@ export function tracer(a, { sens = 1 } = {}) {
     case 'cercle': return [{ t: 'cercle', c: a.pts[0], r: d2(a.pts[0], a.pts[1]), ...base }];
     case 'fleche': {
       const [A, B] = a.pts, L = d2(A, B); if (L < 1e-9) return [];
-      const u = [(B[0] - A[0]) / L, (B[1] - A[1]) / L], hl = Math.min(5 * a.epais + 2, 0.6 * L), lg = 0.38 * hl, base2 = [B[0] - u[0] * hl, B[1] - u[1] * hl];
+      const u = [(B[0] - A[0]) / L, (B[1] - A[1]) / L], hl = Math.min(5.5 * a.epais, 0.6 * L), lg = 0.38 * hl, base2 = [B[0] - u[0] * hl, B[1] - u[1] * hl];
       return [{ t: 'poly', pts: [A, [B[0] - u[0] * hl * 0.8, B[1] - u[1] * hl * 0.8]], ferme: false, ...base },
         { t: 'tete', pts: [B, [base2[0] - u[1] * lg, base2[1] + u[0] * lg], [base2[0] + u[1] * lg, base2[1] - u[0] * lg]], couleur: a.couleur }];
     }

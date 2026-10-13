@@ -39,9 +39,9 @@ export function dessinerAnnotations(g, liste, { sens = 1 } = {}) {
 export function ouvrirAnnot(opts) {
   fermerAnnot();
   const { fond, w, h, nom = 'Annotations', fichier = '', telecharger = () => {}, toast = () => {} } = opts;
-  const k = Math.max(1, w / 1200);                                      // échelle des épaisseurs et des textes selon la définition du fond
+  const k = Math.max(1, w / 1200), kE = opts.kEpais ?? k, kT = opts.kTexte ?? k;   // échelle des épaisseurs et des textes selon la définition du fond (ou imposée : plan en mm)
   const E = {
-    liste: A.nettoyer(opts.items), sel: -1, outil: 'sel', couleur: A.PALETTE[0], epais: EPAISSEURS(k)[1], taille: TAILLES[1][1] * k, corriger: true,
+    liste: A.nettoyer(opts.items), sel: -1, outil: 'sel', couleur: A.PALETTE[0], epais: EPAISSEURS(kE)[1], taille: TAILLES[1][1] * kT, corriger: true,
     vue: { s: 1, ox: 0, oy: 0 }, W: 0, H: 0, hist: [], futur: [], ptr: new Map(), geste: null, espace: false, modifie: false, editeur: null,
   };
   function EPAISSEURS(m) { return A.EPAISSEURS.map(v => v * m); }
@@ -50,10 +50,10 @@ export function ouvrirAnnot(opts) {
   const aide = el('div', { class: 'annot-aide' });
   const zone = el('div', { class: 'annot-zone' }, canvas, aide);
   const bOut = {}, bSw = [];
-  const selEp = el('select', { class: 'btn annot-sel', title: 'Épaisseur du trait', onchange: () => { E.epais = EPAISSEURS(k)[+selEp.value]; changer({ epais: E.epais }); } },
+  const selEp = el('select', { class: 'btn annot-sel', title: 'Épaisseur du trait', onchange: () => { E.epais = EPAISSEURS(kE)[+selEp.value]; changer({ epais: E.epais }); } },
     ...NOMS_EPAIS.map((n, i) => el('option', { value: String(i) }, n)));
   selEp.value = '1';
-  const selTx = el('select', { class: 'btn annot-sel', title: 'Taille du texte', onchange: () => { E.taille = TAILLES[+selTx.value][1] * k; changer({ taille: E.taille }, true); } },
+  const selTx = el('select', { class: 'btn annot-sel', title: 'Taille du texte', onchange: () => { E.taille = TAILLES[+selTx.value][1] * kT; changer({ taille: E.taille }, true); } },
     ...TAILLES.map(([n], i) => el('option', { value: String(i) }, `Texte ${n}`)));
   selTx.value = '1';
   const inCoul = el('input', { type: 'color', class: 'annot-coul', title: 'Autre couleur', value: E.couleur });
@@ -135,8 +135,8 @@ export function ouvrirAnnot(opts) {
   function lierSelection() {   // la sélection reprend la couleur / l'épaisseur affichées dans la barre
     const a = E.liste[E.sel]; if (!a) return;
     E.couleur = a.couleur; inCoul.value = a.couleur; majSw();
-    if (a.type === 'texte') { const i = TAILLES.findIndex(t => Math.abs(t[1] * k - a.taille) < 1); selTx.value = String(Math.max(0, i)); }
-    else { const i = EPAISSEURS(k).findIndex(v => Math.abs(v - a.epais) < 0.01); if (i >= 0) selEp.value = String(i); }
+    if (a.type === 'texte') { const i = TAILLES.findIndex(t => Math.abs(t[1] * kT - a.taille) < 0.01 * kT); selTx.value = String(Math.max(0, i)); }
+    else { const i = EPAISSEURS(kE).findIndex(v => Math.abs(v - a.epais) < 0.01 * kE); if (i >= 0) selEp.value = String(i); }
   }
 
   // ——— Texte au clavier ———

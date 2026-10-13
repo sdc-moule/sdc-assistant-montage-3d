@@ -8,7 +8,7 @@ import { lireDxf } from './geom/dxf.js';
 import { lirePdf } from './geom/pdf.js';
 import { ouvrirDxf } from './dxf-view.js';
 import { ouvrirAnnot, annotOuvert } from './annot-view.js';
-import { nettoyer as nettoyerAnnots } from './geom/annotations.js';
+import { nettoyer as nettoyerAnnots, transformer, inverse } from './geom/annotations.js';
 import { creerMiseEnPlan } from './geom/mise-en-plan.js';
 import { partsFromOcct } from './geom/from-occt.js';
 import { meshStats, buildBom, toCsv, signature } from './geom/bom.js';
@@ -84,7 +84,7 @@ const S = {
   ex: { amount: 0, dir: 'z', scope: 'all', ids: null }, exVec: new Map(), moves: [], open: 0, opType: 'translation', pickAxis: false, hinge: null, boxMode: false,
   cuts: { x: { on: false, pos: 0, flip: false }, y: { on: false, pos: 0, flip: false }, z: { on: false, pos: 0, flip: false } }, caps: true, planeVis: false, hiddenFaces: {}, faceMode: false, drillLabels: false, fill: { on: true, min: 3, max: 20 },
   drill: null, netClass: {}, skelOnly: false, skelShow: false, selNet: null, selFeature: null, filters: { circuit: true, alignement: false, 'isolé': false, 'alésage': false, dmin: 0, dmax: 999 }, maxDrill: 32, cyl: null,
-  comments: [], views: [], annots: [], rowNotes: {}, bubbleOff: {}, groups: [], typo: new Map(),
+  comments: [], views: [], annots: [], planAnnots: {}, rowNotes: {}, bubbleOff: {}, groups: [], typo: new Map(),
   bounds: new THREE.Box3(), measure: { on: false, pts: [] }, cote: { pending: null }, cotes: [], cotesVisible: true, skelItems: [], skelGroups: new Map(),
   undo: [], redo: [],
 };
@@ -208,7 +208,7 @@ function install(res, name, hash) {
   const { parts } = partsFromOcct(res);
   const kept = parts.filter(p => p.index.length >= 3);
   if (!kept.length) throw new Error('aucun solide trouvé dans le fichier.');
-  Object.assign(S, { loaded: true, fileName: name, hash, parts: kept, byId: new Map(kept.map(p => [p.id, p])), items: {}, sel: new Set(), comments: [], views: [], annots: [], rowNotes: {}, bubbleOff: {}, groups: [], typo: new Map(), netClass: {}, catOverride: {}, catOff: new Set(), hiddenFaces: {}, moves: [], open: 0, hinge: null, cotes: [], undo: [], redo: [], selNet: null, selFeature: null });
+  Object.assign(S, { loaded: true, fileName: name, hash, parts: kept, byId: new Map(kept.map(p => [p.id, p])), items: {}, sel: new Set(), comments: [], views: [], annots: [], planAnnots: {}, rowNotes: {}, bubbleOff: {}, groups: [], typo: new Map(), netClass: {}, catOverride: {}, catOff: new Set(), hiddenFaces: {}, moves: [], open: 0, hinge: null, cotes: [], undo: [], redo: [], selNet: null, selFeature: null });
   S.ex = { amount: 0, dir: 'z', scope: 'all', ids: null };
   S.stats = new Map(kept.map(p => [p.id, meshStats(p.positions, p.index)]));
   S.bom = buildBom(kept, S.stats);
@@ -623,7 +623,8 @@ async function miseEnPlan() {
   try {
     const mp = creerMiseEnPlan(parts), row = parts.length === 1 ? S.rowOf.get(parts[0].id) : null, n = row ? nomRow(row) : parts.length === 1 ? parts[0].name : `${parts.length} pièces`;
     busy(false);
-    ouvrirDxf(mp.dessin(), `${n}`, { toast, mp, annoter: c => nouveauDocAnnot('plan', 'Plan ' + n, c) });
+    ouvrirDxf(mp.dessin(), `${n}`, { toast, mp, annoter: (c, map, items, set) => (map ? annoterPlan(n, c, map, items, set) : nouveauDocAnnot('plan', 'Plan ' + n, c)),
+      annots: S.planAnnots[n], onAnnots: items => { if (items.length) S.planAnnots[n] = items; else delete S.planAnnots[n]; saveLocal(); } });
     toast(mp.axe ? `Pièce de révolution (axe ${mp.axe.axe}) : coupe A-A proposée suivant l'axe.` : 'Trois vues à l\'échelle 1:1. Outil « Coupe » : plan XZ ou YZ par un point cliqué.', 5000);
   } catch (e) { busy(false); console.warn('mise en plan', e); toast('Mise en plan impossible : ' + e.message, 6000); }
 }
@@ -1112,6 +1113,14 @@ function nouveauDocAnnot(source, nom, canvas, scene) {
   const n = S.annots.filter(d => d.source === source).length + 1;
   ouvrirDocAnnot({ id: 'd' + Date.now().toString(36), nom: `${nom} ${n}`, date: new Date().toISOString(), source, w: canvas.width, h: canvas.height, items: [], scene }, canvas);
 }
+// Annotations d'une mise en plan : gardées en mm (repère du plan), exportables en DXF / PDF ; la capture ne sert que de fond de travail.
+function annoterPlan(nom, c, map, items, set) {
+  if (annotOuvert()) return;
+  const m = Math.abs(map.kx);
+  ouvrirAnnot({ fond: c, w: c.width, h: c.height, nom: `Plan ${nom}`, fichier: S.fileName || nom, items: transformer(items, map), toast, telecharger: (n, b) => download(n, b),
+    kEpais: Math.max(0.35, 0.0875 * m), kTexte: Math.max(0.6, 0.1458 * m),
+    onEnregistrer: its => { set(transformer(its, inverse(map))); toast('Annotations du plan enregistrées (affichées sur le plan, exportées en DXF / PDF sur le calque ANNOTATIONS).', 5000); } });
+}
 function annoterVue3d() {
   if (!S.loaded) return toast('Ouvrir d\'abord un assemblage.');
   renderer.render(scene, camera); drawOverlay();
@@ -1172,7 +1181,7 @@ let saveTimer;
 function projectData(avecFonds = true) {
   return { application: 'SDC Montage 3D', version: APP_VERSION, schema: 'sdc-montage3d-projet/2', fichier: S.fileName, empreinte_sha256: S.hash, date: new Date().toISOString(),
     occurrences: S.parts.map(p => ({ id: p.id, nom: p.name, signature: signature(p, S.stats.get(p.id)), repere: S.rowOf.get(p.id).repere })),
-    maxDrill: S.maxDrill, comments: S.comments, views: S.views, annotations: S.annots.map(d => (avecFonds ? d : { ...d, fond: undefined })), netClass: S.netClass, moves: S.moves, cotes: S.cotes, rowNotes: S.rowNotes, catOverride: S.catOverride, bubbleOff: S.bubbleOff, groupes: S.groups, display: viewState() };
+    maxDrill: S.maxDrill, comments: S.comments, views: S.views, annotations: S.annots.map(d => (avecFonds ? d : { ...d, fond: undefined })), annotationsPlan: S.planAnnots, netClass: S.netClass, moves: S.moves, cotes: S.cotes, rowNotes: S.rowNotes, catOverride: S.catOverride, bubbleOff: S.bubbleOff, groupes: S.groups, display: viewState() };
 }
 function saveLocal() { if (!S.loaded) return; clearTimeout(saveTimer); saveTimer = setTimeout(() => { try { localStorage.setItem(LS(), JSON.stringify(projectData(false))); } catch { /* stockage indisponible : le fichier projet reste possible */ } saveFonds(); }, 400); }
 // L'enregistrement est différé de 400 ms : on le force à la fermeture / au rechargement de la page pour ne perdre aucune coche.
@@ -1214,6 +1223,7 @@ function applyProject(pr, silent = false) {
   S.comments = (pr.comments ?? []).map(c => ({ ...c, ids: c.ids.map(map).filter(Boolean) }));
   S.views = pr.empreinte_sha256 === S.hash ? (pr.views ?? []) : [];
   S.annots = pr.empreinte_sha256 === S.hash ? docsAnnot(pr.annotations) : [];
+  S.planAnnots = pr.empreinte_sha256 === S.hash && pr.annotationsPlan && typeof pr.annotationsPlan === 'object' ? Object.fromEntries(Object.entries(pr.annotationsPlan).map(([k2, v]) => [k2, nettoyerAnnots(v)]).filter(([, v]) => v.length)) : {};
   S.netClass = pr.empreinte_sha256 === S.hash ? (pr.netClass ?? {}) : {};
   S.rowNotes = pr.empreinte_sha256 === S.hash ? (pr.rowNotes ?? {}) : {};
   S.catOverride = Object.fromEntries(Object.entries(pr.catOverride ?? {}).map(([k, v]) => [map(k), v]).filter(([k]) => k));

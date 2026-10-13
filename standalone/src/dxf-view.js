@@ -3,6 +3,8 @@
 import { accroche, entiteProche, distance, angleEntre } from './geom/dxf.js';
 import { proposerCotes } from './geom/cotation-auto.js';
 import { exporterDxf, exporterPdf } from './geom/export-plan.js';
+import { transformer, itemsAnnotations, nettoyer as nettoyerAnnots } from './geom/annotations.js';
+import { dessinerAnnotations } from './annot-view.js';
 
 const el = (tag, attrs = {}, ...kids) => {
   const e = document.createElement(tag);
@@ -24,7 +26,7 @@ export function ouvrirDxf(dessin, nom, opts = {}) {
   const PLAN = !!mp;   // mode « mise en plan » : vues projetées d'une pièce 3D à l'échelle 1:1, cotation par clics et coupes
   const u = dessin.unite || 'mm';
   const E = etat = {
-    d: dessin, nom, u, outil: 'dist', pend: [], autoOpt: { centres: true, coins: true, inter: true, tout: false }, autoCtx: null, ech: 1, cotesVis: true, survol: null, etiq: [], glisse: null, cotes: [], masque: new Set(), snap: null,
+    d: dessin, nom, u, outil: 'dist', pend: [], autoOpt: { centres: true, coins: true, inter: true, tout: false }, autoCtx: null, ech: 1, cotesVis: true, survol: null, etiq: [], glisse: null, cotes: [], annots: nettoyerAnnots(opts.annots), annotsVis: true, masque: new Set(), snap: null,
     vue: { s: 1, ox: 0, oy: 0 }, w: 0, h: 0, pointeurs: new Map(), toast, mp, plan: { coupe: 'XZ', inverse: false }, dec: { valeurs: [], bords: [] }, apercu: null,
   };
   if (PLAN) E.outil = 'ph';
@@ -75,7 +77,7 @@ export function ouvrirDxf(dessin, nom, opts = {}) {
     ['auto', 'Cotation auto', "Propose des cotes ordonnées depuis une référence : cliquer la référence, puis deux coins de la zone"],
     ['cal', 'Calibrer', "Cliquer deux points dont vous connaissez la vraie longueur : l'échelle en est déduite"],
   ];
-  const bOut = {}; let bCotes = null;
+  const bOut = {}; let bCotes = null, bAnnots = null;
   const barre = el('div', { class: 'dxf-bar' },
     el('strong', {}, (PLAN ? 'Mise en plan · ' : 'Plan 2D · ') + nom),
     ...outils.map(([k, t, h]) => (bOut[k] = el('button', { class: 'btn dxf-outil', title: h, onclick: () => choisir(k) }, t))),
@@ -88,6 +90,7 @@ export function ouvrirDxf(dessin, nom, opts = {}) {
     el('button', { class: 'btn', title: 'Effacer toutes les cotes', onclick: () => { E.pend = []; E.cotes = []; dessiner(); } }, 'Effacer'),
     el('button', { class: 'btn', title: 'Exporter les cotes en CSV', onclick: () => exporter() }, 'Cotes CSV'),
     ...(PLAN ? [el('button', { class: 'btn', title: 'Exporter le plan et ses cotes en DXF (1:1, mm)', onclick: () => exporterPlan('dxf') }, 'Export DXF'), el('button', { class: 'btn', title: 'Exporter le plan et ses cotes en PDF vectoriel (1:1)', onclick: () => exporterPlan('pdf') }, 'Export PDF')] : []),
+    ...(PLAN ? [(bAnnots = el('button', { class: 'btn', title: 'Masquer ou afficher les annotations (elles sont exportées en DXF / PDF sur le calque ANNOTATIONS quand elles sont affichées)', onclick: () => { E.annotsVis = !E.annotsVis; bAnnots.textContent = E.annotsVis ? 'Masquer annotations' : 'Afficher annotations'; planifier(); } }, 'Masquer annotations'))] : []),
     ...(opts.annoter ? [el('button', { class: 'btn', title: 'Annoter une capture de ce plan : flèches, textes, formes (indicatif, le plan n’est pas modifié)', onclick: () => annoterCapture() }, '📝 Annoter')] : []),
     el('button', { class: 'btn primary', title: 'Revenir à la vue 3D', onclick: () => fermerDxf() }, 'Fermer'),
   );
@@ -98,7 +101,9 @@ export function ouvrirDxf(dessin, nom, opts = {}) {
     dessiner();
     const c = document.createElement('canvas'); c.width = canvas.width; c.height = canvas.height;
     const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(canvas, 0, 0);
-    opts.annoter(c);
+    // En mise en plan, les annotations sont gardées en mm (repère du plan) : on transmet le repère de la capture.
+    const k = c.width / E.w, map = PLAN ? { kx: k * E.vue.s, ky: -k * E.vue.s, tx: k * E.vue.ox, ty: k * E.vue.oy } : null;
+    opts.annoter(c, map, E.annots, items => { E.annots = items; opts.onAnnots?.(items); planifier(); });
   }
 
   function remplirCalques() {
@@ -276,6 +281,7 @@ export function ouvrirDxf(dessin, nom, opts = {}) {
       ctx.stroke();
     }
     if (E.cotesVis) { for (const c of E.cotes) dessinerCote(c); dessinerOrdonnees(); }
+    if (E.annotsVis && E.annots.length) { ctx.save(); ctx.setLineDash([]); dessinerAnnotations(ctx, transformer(E.annots, { kx: E.vue.s, ky: -E.vue.s, tx: E.vue.ox, ty: E.vue.oy })); ctx.restore(); }
     if (PLAN && E.apercu) { const t = coteEnCours(E.apercu); if (t) dessinerCotePlan(t, true); }
     if (E.outil === 'auto' && E.pend.length === 2 && E.snap) {   // zone en cours de tracé
       const A = px(E.pend[1].x, E.pend[1].y), B = px(E.snap.x, E.snap.y); ctx.setLineDash([5, 4]); ctx.strokeStyle = COL_PROP; ctx.lineWidth = 1.2; ctx.strokeRect(Math.min(A[0], B[0]), Math.min(A[1], B[1]), Math.abs(B[0] - A[0]), Math.abs(B[1] - A[1])); ctx.setLineDash([]);
@@ -616,15 +622,16 @@ export function ouvrirDxf(dessin, nom, opts = {}) {
   function exporterPlan(fmt) {
     if (!PLAN) return;
     const date = new Date().toISOString().slice(0, 10), base = nom.replace(/\.(dxf|pdf|step|stp)$/i, '') || 'piece', cotes = E.cotes.filter(c => c.t && c.t[0] === 'p');
+    const annotations = E.annotsVis ? itemsAnnotations(E.annots) : [];
     let octets, mime, info;
     try {
-      if (fmt === 'dxf') { octets = exporterDxf(E.mp.dessin(), cotes, { nom: base, date }); mime = 'application/dxf'; info = 'DXF R12 (ANSI 1252), mm, 1:1'; }
-      else { const r = exporterPdf(E.mp.dessin(), cotes, { nom: base, date }); octets = r.octets; mime = 'application/pdf'; info = `PDF vectoriel 1:1, page ${r.format}${r.normalise ? '' : ' (plan plus grand que l’A0)'} ${r.largeur} × ${r.hauteur} mm`; }
+      if (fmt === 'dxf') { octets = exporterDxf(E.mp.dessin(), cotes, { nom: base, date, annotations }); mime = 'application/dxf'; info = 'DXF R12 (ANSI 1252), mm, 1:1'; }
+      else { const r = exporterPdf(E.mp.dessin(), cotes, { nom: base, date, annotations }); octets = r.octets; mime = 'application/pdf'; info = `PDF vectoriel 1:1, page ${r.format}${r.normalise ? '' : ' (plan plus grand que l’A0)'} ${r.largeur} × ${r.hauteur} mm`; }
     } catch (e) { return E.toast('Export impossible : ' + e.message); }
     const a = el('a', { href: URL.createObjectURL(new Blob([octets], { type: mime })), download: `${base}_mise_en_plan.${fmt}` });
     document.body.append(a); a.click(); a.remove();
-    E.dernierExport = { fmt, octets: octets.length, cotes: cotes.length };
-    E.toast(`${info} — ${cotes.length} cote${cotes.length > 1 ? 's' : ''}. Valeurs indicatives (maillage d’affichage), à vérifier avant fabrication.`, 6000);
+    E.dernierExport = { fmt, octets: octets.length, cotes: cotes.length, annotations: E.annotsVis ? E.annots.length : 0 };
+    E.toast(`${info} — ${cotes.length} cote${cotes.length > 1 ? 's' : ''}${E.annotsVis && E.annots.length ? `, ${E.annots.length} annotation${E.annots.length > 1 ? 's' : ''} (calque ANNOTATIONS)` : ''}. Valeurs indicatives (maillage d’affichage), à vérifier avant fabrication.`, 6000);
   }
   E.exporterPlan = exporterPlan;
 
