@@ -970,7 +970,7 @@
         "tests/test_dwg.py : 9 essais, dont conversion réelle avec LibreDWG 0.14.8612 (DXF de l'application R12 et PDF vectoriel → DWG AC1015/AC1018/AC1024, DWG relu = DXF, source inchangée) ; essais sautés et signalés si LibreDWG est absent",
         "tools/dxf_vers_dwg.py : le contrôle a détecté en cours de développement la perte des POLYLINE 2D et des couleurs de calque (corrigées)"
       ],
-      "note": "Non vérifié : ouverture du DWG dans AutoCAD / SpaceClaim (aucune CAO disponible pour l'essai). LibreDWG décrit l'écriture DWG comme expérimentale ; DXF source ≥ R2007 déconseillé (chaînes tronquées) : le convertisseur passe toujours par un DXF R2000. Hors périmètre sauf nouvelle décision : export DWG directement depuis le navigateur, DWG en lecture dans l'application, cotes DIMENSION, épaisseurs de trait."
+      "note": "Non vérifié : ouverture du DWG dans AutoCAD / SpaceClaim (aucune CAO disponible pour l'essai). Paquet Windows (tools/windows : dwgwrite.exe et dwgread.exe compilés par compilation croisée mingw-w64, lanceur PDF_ou_DXF_vers_DWG.bat à glisser-déposer) : exécutables essayés sous Wine seulement (même DWG qu'en natif, relu = DXF), lanceur .bat et chemins accentués Windows non essayés sur un Windows réel ; les .exe ne sont pas versionnés. LibreDWG décrit l'écriture DWG comme expérimentale ; DXF source ≥ R2007 déconseillé (chaînes tronquées) : le convertisseur passe toujours par un DXF R2000. Hors périmètre sauf nouvelle décision : export DWG directement depuis le navigateur, DWG en lecture dans l'application, cotes DIMENSION, épaisseurs de trait."
     },
     {
       "id": "MEP-01",

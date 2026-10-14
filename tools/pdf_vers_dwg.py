@@ -9,7 +9,7 @@ mm PAPIER, images et remplissages non repris, PDF scanné non convertible), puis
 relu (voir tools/dxf_vers_dwg.py). `--garder-dxf` conserve le DXF intermédiaire à côté du DWG.
 Le PDF source n'est jamais modifié. DWG à OUVRIR et VÉRIFIER dans la CAO ; cotes = cotes papier à diviser par l'échelle de la vue.
 """
-import argparse, os, sys, tempfile
+import argparse, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pdf_vers_dxf, dxf_vers_dwg
 
@@ -17,7 +17,7 @@ import pdf_vers_dxf, dxf_vers_dwg
 def convertir(pdf, sortie=None, page=1, echelle=1.0, version='r2000', dwgwrite=None, garder_dxf=False):
     """PDF → DWG. Retourne (chemin_dwg, compte_rendu, ecarts)."""
     sortie = sortie or os.path.splitext(pdf)[0] + '.dwg'
-    with tempfile.TemporaryDirectory(prefix='sdc-pdf-dwg-') as tmp:
+    with dxf_vers_dwg.dossier_temp('sdc-pdf-dwg-') as tmp:
         dxf = os.path.join(tmp, 'plan.dxf')
         cr_pdf = pdf_vers_dxf.convertir(pdf, dxf, page, echelle, version='R2000', setup=False)
         dwg, cr_dwg, ecarts = dxf_vers_dwg.convertir(dxf, sortie, version, dwgwrite)

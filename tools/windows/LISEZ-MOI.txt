@@ -1,0 +1,23 @@
+CONVERTISSEUR PDF / DXF -> DWG  (SDC Montage 3D, outil hors application)
+=========================================================================
+
+Mode d'emploi
+1. Python 3 doit être installé (https://www.python.org/downloads/, cocher "Add python.exe to PATH").
+2. Glisser un ou plusieurs fichiers .pdf (plan VECTORIEL, pas un scan) ou .dxf sur "PDF_ou_DXF_vers_DWG.bat".
+   Au premier lancement, ezdxf et pymupdf s'installent seuls (Internet nécessaire une fois).
+3. Le .dwg (AutoCAD R2000) est créé à côté du fichier d'origine, qui n'est jamais modifié.
+4. Lire le message final :
+   - "Contrôle : DWG relu = DXF" : le DWG contient bien les mêmes entités, calques, textes, couleurs.
+   - "ÉCART au contrôle" : ne pas utiliser ce DWG, le signaler.
+5. OUVRIR le .dwg dans la CAO (AutoCAD, SpaceClaim...) et le VÉRIFIER avant tout usage.
+   Les valeurs d'un plan converti depuis un PDF sont en mm papier (cotes à diviser par l'échelle de la vue).
+
+En ligne de commande (pour les habitués) :
+   py -3 tools\pdf_vers_dwg.py plan.pdf plan.dwg
+   py -3 tools\dxf_vers_dwg.py plan.dxf plan.dwg --version r2004
+
+Contenu
+   tools\*.py        convertisseurs (code SDC)
+   tools\bin\        dwgwrite.exe et dwgread.exe : LibreDWG (https://github.com/LibreDWG/libredwg),
+                     logiciel libre GNU GPL v3 (texte : COPYING.txt), compilé tel quel depuis le code source
+                     du commit f860b0fb76d5f8effb5a70769a3389cb1e0308c8. LibreDWG décrit l'écriture DWG comme expérimentale.

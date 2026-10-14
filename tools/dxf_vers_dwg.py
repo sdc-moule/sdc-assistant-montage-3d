@@ -13,7 +13,7 @@ tools/bin/, puis le PATH.
 - Le fichier DXF source n'est jamais modifié. DWG = produit par LibreDWG (écriture « expérimentale » selon ses auteurs) :
   à OUVRIR et VÉRIFIER dans la CAO avant tout usage, jamais validé seul pour la fabrication.
 """
-import argparse, collections, json, os, shutil, subprocess, sys, tempfile
+import argparse, collections, contextlib, json, os, shutil, subprocess, sys, tempfile
 import ezdxf
 
 TYPES_COMPTES = ('LINE', 'LWPOLYLINE', 'POLYLINE', 'CIRCLE', 'ARC', 'TEXT', 'MTEXT', 'SOLID', 'POINT', 'ELLIPSE', 'SPLINE')
@@ -189,6 +189,18 @@ def comparer(a, b):
     return ecarts
 
 
+@contextlib.contextmanager
+def dossier_temp(prefix):
+    """Dossier temporaire dont le chemin est en ASCII : dwgwrite / dwgread sous Windows n'ouvrent pas les chemins accentués
+    (ex. C:\\Users\\Chrïstophe\\AppData\\Local\\Temp) ; repli sur <lecteur système>\\Temp."""
+    base = tempfile.gettempdir()
+    if not base.isascii():
+        base = os.path.join(os.environ.get('SystemDrive', 'C:') + os.sep, 'Temp')
+        os.makedirs(base, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=prefix, dir=base) as t:
+        yield t
+
+
 def convertir(dxf, sortie=None, version='r2000', dwgwrite=None, dwgread=None, controle=True):
     """DXF → DWG. Retourne (chemin_dwg, compte_rendu, ecarts). Lève RuntimeError si la conversion échoue."""
     ecrit = trouver_outil('dwgwrite', dwgwrite)
@@ -198,7 +210,8 @@ def convertir(dxf, sortie=None, version='r2000', dwgwrite=None, dwgread=None, co
     ver = VERSIONS.get(version.lower())
     if not ver:
         raise RuntimeError('Version inconnue : ' + version + ' (r2000, r2004 ou r2010)')
-    with tempfile.TemporaryDirectory(prefix='sdc-dwg-') as tmp:
+    ecarts = []
+    with dossier_temp('sdc-dwg-') as tmp:
         doc = ezdxf.readfile(dxf)
         doc.dxfversion = 'AC1015'              # DXF intermédiaire R2000 : dwgwrite lit mal les chaînes d'un DXF >= R2007
         polylignes_legeres(doc)
@@ -210,14 +223,10 @@ def convertir(dxf, sortie=None, version='r2000', dwgwrite=None, dwgread=None, co
         if not os.path.isfile(sortie_tmp) or os.path.getsize(sortie_tmp) < 1000:
             raise RuntimeError('dwgwrite a échoué : ' + ((r.stderr or '') + (r.stdout or ''))[-400:])
         avert = [l for l in ((r.stderr or '') + (r.stdout or '')).splitlines() if l.startswith('ERROR')]
+        if controle:                           # relu depuis le chemin temporaire (ASCII), avant la copie finale
+            lecteur = trouver_outil('dwgread', dwgread or os.path.dirname(ecrit))
+            ecarts = comparer(empreinte_dxf(dxf), empreinte_dwg(sortie_tmp, lecteur)) if lecteur else ['contrôle impossible : dwgread introuvable']
         shutil.copyfile(sortie_tmp, sortie)
-    ecarts = []
-    lecteur = trouver_outil('dwgread', os.path.dirname(ecrit))
-    if controle:
-        if lecteur:
-            ecarts = comparer(empreinte_dxf(dxf), empreinte_dwg(sortie, lecteur))
-        else:
-            ecarts = ['contrôle impossible : dwgread introuvable']
     with open(sortie, 'rb') as f:
         magique = f.read(6).decode('ascii', 'replace')
     cr = f'{sortie} : DWG {magique} ({os.path.getsize(sortie)} octets)'

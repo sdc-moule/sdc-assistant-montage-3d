@@ -66,6 +66,16 @@ class ControleTests(unittest.TestCase):
         self.assertEqual(sorted(map(list, avant)), sorted(apres))
         self.assertTrue(all(e.dxf.layer in ('CONTOURS', 'CACHES', 'CARTOUCHE') for e in doc.modelspace().query('LWPOLYLINE')))
 
+    def test_dossier_temporaire_en_ascii_meme_si_le_temp_systeme_est_accentue(self):
+        with tempfile.TemporaryDirectory() as racine:
+            with mock.patch.object(tempfile, 'gettempdir', return_value='C:\\Users\\Chrïstophe\\Temp'), \
+                 mock.patch.dict(os.environ, {'SystemDrive': racine}):
+                with dxf_vers_dwg.dossier_temp('essai-') as t:
+                    self.assertTrue(t.isascii(), t)
+                    self.assertTrue(os.path.isdir(t))
+                    self.assertTrue(t.startswith(racine))
+                self.assertFalse(os.path.exists(t), 'dossier temporaire supprimé')
+
     def test_outil_absent_message_en_francais(self):
         with mock.patch.dict(os.environ, {'SDC_LIBREDWG': '/inexistant', 'SDC_DWGWRITE': '/inexistant/dwgwrite', 'PATH': ''}):
             with mock.patch.object(dxf_vers_dwg, 'trouver_outil', return_value=None):
