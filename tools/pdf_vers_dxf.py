@@ -35,23 +35,37 @@ def classe(col, largeur, pointille):
 def aci(col):
     return ezdxf.colors.rgb2int(tuple(int(round(c * 255)) for c in (col or (0, 0, 0))))
 
-def main():
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('pdf'); ap.add_argument('dxf', nargs='?')
-    ap.add_argument('--page', type=int, default=1); ap.add_argument('--echelle', type=float, default=1.0)
-    a = ap.parse_args()
-    sortie = a.dxf or a.pdf.rsplit('.', 1)[0] + '.dxf'
-    page = pymupdf.open(a.pdf)[a.page - 1]
-    H, k = page.rect.height, PT * a.echelle
+def aci_proche(col):
+    """Index de couleur AutoCAD (ACI) le plus proche d'une couleur RVB 0..1 (le noir → 7)."""
+    r, g, b = (int(round(c * 255)) for c in (col or (0, 0, 0)))
+    if (r, g, b) == (0, 0, 0):
+        return 7
+    meilleur, dmin = 7, 1e18
+    for i in range(1, 256):
+        v = ezdxf.colors.DXF_DEFAULT_COLORS[i]
+        d = ((v >> 16 & 255) - r) ** 2 + ((v >> 8 & 255) - g) ** 2 + ((v & 255) - b) ** 2
+        if d < dmin:
+            meilleur, dmin = i, d
+    return meilleur
+
+def convertir(pdf, sortie, page_no=1, echelle=1.0, version='R2010', setup=True):
+    """PDF vectoriel → DXF (même résultat que la ligne de commande). Retourne le compte rendu (texte).
+    `version`/`setup` : le DXF intermédiaire du convertisseur DWG est écrit en R2000 sans styles de cotation
+    (voir pdf_vers_dwg.py) ; par défaut, comportement inchangé (R2010, setup=True)."""
+    page = pymupdf.open(pdf)[page_no - 1]
+    H, k = page.rect.height, PT * echelle
     W = page.rect.width * k
     X = lambda p: (p.x * k, (H - p.y) * k)
     H *= 1  # hauteur en points ; les coordonnées DXF sont en mm (× k)
 
-    doc = ezdxf.new('R2010', setup=True); doc.units = 4; msp = doc.modelspace()
+    doc = ezdxf.new(version, setup=setup); doc.units = 4; msp = doc.modelspace()
+    if not setup and 'DASHED' not in doc.linetypes:
+        doc.linetypes.add('DASHED', pattern='A,.5,-.25', description='Tirets')
     calques = {}
     def calque(nom, col, pointille):
         if nom not in calques:
-            doc.layers.add(nom, true_color=aci(col), linetype='DASHED' if pointille else 'Continuous'); calques[nom] = 0
+            idx = aci_proche(col) if version in ('R12', 'R2000') else 7      # pas de couleur vraie avant R2004 : ACI proche
+            doc.layers.add(nom, color=idx, true_color=aci(col), linetype='DASHED' if pointille else 'Continuous'); calques[nom] = 0
         calques[nom] += 1
         return nom
 
@@ -96,7 +110,16 @@ def main():
                 msp.add_text(t, height=sp['size'] * k * 0.72, rotation=rot, dxfattribs={'layer': 'TEXTE', 'insert': o}); n_txt += 1
 
     doc.saveas(sortie)
-    print(f'{sortie} : {n_poly} polylignes, {n_txt} textes, {len(calques)} calques, {n_fill} remplissages/images ignorés — unité mm papier')
+    return f'{sortie} : {n_poly} polylignes, {n_txt} textes, {len(calques)} calques, {n_fill} remplissages/images ignorés — unité mm papier'
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument('pdf'); ap.add_argument('dxf', nargs='?')
+    ap.add_argument('--page', type=int, default=1); ap.add_argument('--echelle', type=float, default=1.0)
+    a = ap.parse_args()
+    sortie = a.dxf or a.pdf.rsplit('.', 1)[0] + '.dxf'
+    print(convertir(a.pdf, sortie, a.page, a.echelle))
+
 
 if __name__ == '__main__':
     sys.exit(main())

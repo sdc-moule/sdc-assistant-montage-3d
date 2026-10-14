@@ -1,6 +1,6 @@
 # Cahiers des charges — règles de rangement
 
-**Version en vigueur : voir [`ACTUEL.json`](ACTUEL.json)** (aujourd'hui 1.19).
+**Version en vigueur : voir [`ACTUEL.json`](ACTUEL.json)** (aujourd'hui 1.20).
 
 ```
 specs/
@@ -24,7 +24,8 @@ specs/
   v1.16/             ← ARCHIVE figée (cotation automatique proposée sur plan 2D)
   v1.17/             ← ARCHIVE figée (mise en plan 2D : trois vues, coupes, cotation)
   v1.18/             ← ARCHIVE figée (vues auxiliaires, coupes décalées, export DXF/PDF)
-  v1.19/             ← version en vigueur : .json (fait foi pour les ids/statuts) + .md (lecture) — annotations (capture, plan, image), écriture manuscrite proposée
+  v1.19/             ← ARCHIVE figée (annotations sur capture, plan, image ; écriture manuscrite proposée)
+  v1.20/             ← version en vigueur : .json (fait foi pour les ids/statuts) + .md (lecture) — convertisseurs DWG (DXF-10)
 ```
 
 ## Règles (humains, Codex, Claude Code)

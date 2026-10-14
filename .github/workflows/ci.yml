@@ -33,6 +33,35 @@ jobs:
       - run: python -m unittest discover -s tests -p 'test_*.py'
         env:
           PYTHONPATH: backend
+  convertisseur-dwg:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - id: libredwg
+        uses: actions/cache@v4
+        with:
+          path: ~/libredwg-bin
+          key: libredwg-f860b0fb-ubuntu
+      - name: Compiler LibreDWG (dwgwrite, dwgread) — conversion DXF → DWG, voir tools/dxf_vers_dwg.py
+        if: steps.libredwg.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update && sudo apt-get install -y autoconf automake libtool
+          git init -q ~/libredwg-src && cd ~/libredwg-src
+          git fetch -q --depth 1 https://github.com/LibreDWG/libredwg.git f860b0fb76d5f8effb5a70769a3389cb1e0308c8
+          git checkout -q FETCH_HEAD
+          sh autogen.sh && mkdir _b && cd _b
+          ../configure --disable-shared --disable-bindings
+          make -j4 -C src && make -j4 -C programs dwgwrite dwgread
+          mkdir -p ~/libredwg-bin/bin && cp programs/dwgwrite programs/dwgread ~/libredwg-bin/bin/
+      - run: pip install ezdxf==1.4.4 pymupdf
+      - name: Essais des convertisseurs DWG (aucun essai sauté)
+        run: |
+          export SDC_LIBREDWG="$HOME/libredwg-bin"
+          python -m unittest tests.test_dwg -v 2>&1 | tee dwg.log
+          ! grep -q "skipped" dwg.log
   windows-package:
     runs-on: windows-latest
     steps:
