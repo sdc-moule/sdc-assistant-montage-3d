@@ -1,6 +1,12 @@
 # Historique du cahier des charges
 
-## Hors cahier des charges 1.3 — 18 octobre 2026 (Claude Code, demande en session, à confirmer par Christophe)
+## Décision de Christophe — 18 octobre 2026 (déclarée en session Claude Code)
+- **Accord écrit de Christophe pour toutes les modifications** demandées en session, y compris l'ajout de nouveaux
+  périmètres (règle « Ne supprimer aucun fichier… / ne rien ajouter sans décision écrite » d'`AGENTS.md`).
+- Consigné par Claude Code à la demande de Christophe ; le contenu exact de chaque modification reste décrit dans
+  les entrées de ce fichier et dans l'historique git.
+
+## Hors cahier des charges 1.3 — 18 octobre 2026 (Claude Code, demande de Christophe en session ; accord ci-dessus)
 - Nouveau périmètre indépendant **`camera/`** : service local d'acquisition caméra USB (UVC), étalonnage px→mm et
   cotation indicative (distance, cercle, angle), API HTTP sur 127.0.0.1 pour l'intégrer dans d'autres applications.
   Prototype 0.1 sans interface ; non testé sur caméra réelle. Aucune exigence rédigée : à formaliser dans une v1.x si retenu.
