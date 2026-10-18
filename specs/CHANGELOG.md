@@ -1,5 +1,12 @@
 # Historique du cahier des charges
 
+## Hors cahier des charges 1.3 — 18 octobre 2026 (Claude Code, demande en session, à confirmer par Christophe)
+- Nouveau périmètre indépendant **`camera/`** : service local d'acquisition caméra USB (UVC), étalonnage px→mm et
+  cotation indicative (distance, cercle, angle), API HTTP sur 127.0.0.1 pour l'intégrer dans d'autres applications.
+  Prototype 0.1 sans interface ; non testé sur caméra réelle. Aucune exigence rédigée : à formaliser dans une v1.x si retenu.
+- Réécriture indépendante : rien de DinoCapture (AnMo Electronics) n'est repris ; son code n'a pas été analysé (licence).
+- `standalone/`, `frontend/`, `backend/`, `packaging/` inchangés.
+
 ## 1.3 — mise à jour du 10 octobre 2026, soir (Claude Code, demande de Christophe)
 - « Mesurer » remplacé par **Cotation** (NAV-06) : Ø / R, distances et angles entre faces, axes, face + axe, points ; cotes persistantes, masquables.
 - Coupes (COU-02) : hachurage atténué, contours des pièces coupées mis en évidence.
