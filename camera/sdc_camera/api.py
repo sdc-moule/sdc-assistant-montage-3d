@@ -12,13 +12,14 @@ from urllib.parse import urlparse
 
 import cv2
 
-from . import __version__, calibration as calib, measures, stockage
+from . import __version__, calibration as calib, eclairage as ecl, measures, stockage
 from .source import lister_cameras
 
 
 class Etat:
-    def __init__(self, source, magasin, dossier_captures, origines=(), jeton=None):
+    def __init__(self, source, magasin, dossier_captures, origines=(), jeton=None, eclairage=None):
         self.source, self.magasin, self.dossier_captures = source, magasin, dossier_captures
+        self.eclairage = eclairage
         self.origines, self.jeton = set(origines), jeton
 
 
@@ -103,6 +104,11 @@ def creer_serveur(etat, port=8765):
             except ValueError as e:
                 raise Erreur(409, str(e))
 
+        def _eclairage(self):
+            if etat.eclairage is None:
+                raise Erreur(501, "Éclairage non activé (option --eclairage, module dinoliteuvccontrol requis).")
+            return etat.eclairage
+
         def _mesurer(self, d, image):
             cal, px = self._echelle(image)
             try:
@@ -164,6 +170,10 @@ def creer_serveur(etat, port=8765):
                 return self.wfile.write(jpg.tobytes())
             if chemin == "/api/flux.mjpg":
                 return self._flux()
+            if chemin == "/api/eclairage":
+                return self._json(200, {"disponible": etat.eclairage is not None, "actions": list(ecl.ACTIONS)})
+            if chemin == "/api/controles":
+                return self._json(200, {"controles": self._eclairage().controles()})
             raise Erreur(404, "Route inconnue.")
 
         def _flux(self):
@@ -201,6 +211,19 @@ def creer_serveur(etat, port=8765):
                 return self._json(200, {"actif": etat.magasin.actif})
             if chemin == "/api/mesure":
                 return self._json(200, self._mesurer(d, self._image()))
+            if chemin == "/api/eclairage":
+                try:
+                    return self._json(200, {"resultat": self._eclairage().executer(d.get("action"))})
+                except ValueError as e:
+                    raise Erreur(400, str(e))
+            if chemin == "/api/controle":
+                nom = d.get("nom")
+                if not nom:
+                    raise Erreur(400, "« nom » du contrôle requis.")
+                cam = self._eclairage()
+                if "valeur" in d:
+                    cam.regler(nom, d["valeur"])
+                return self._json(200, {"nom": nom, "valeur": cam.lire(nom)})
             if chemin == "/api/capture":
                 img = self._image()
                 liste = d.get("mesures") or []

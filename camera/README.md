@@ -11,7 +11,7 @@ image ni texte de DinoCapture (AnMo Electronics) n'est repris ni analysé** (lic
 ## Essai sans caméra
 ```bash
 pip install -r requirements.txt -r requirements-dev.txt
-python -m pytest tests            # 16 tests : calculs chiffrés + API de bout en bout
+python -m pytest tests            # 18 tests : calculs chiffrés + API de bout en bout
 python -m sdc_camera --demo       # image synthétique à 100 px/mm (disque Ø 4 mm, barre 5 mm)
 ```
 
@@ -31,6 +31,8 @@ négociée est donnée par `GET /api/etat` (le pilote peut refuser celle demand�
 | `GET /api/calibrations` · `POST /api/calibrations` | liste · créer `{nom, p1:[x,y], p2:[x,y], distance_mm, activer}` |
 | `POST /api/calibrations/active` | `{nom}` : choisir l'étalonnage (un par position de molette) |
 | `POST /api/mesure` | `{type: distance\|cercle\|angle, points:[[x,y],…]}` en px d'image → valeur, unité, incertitude |
+| `GET/POST /api/eclairage` | avec `--eclairage` : `{action}` parmi `led_on`, `led_off`, `flc_on`, `led_dim`, `led_brighten`, `toggle_led_1..4`, `toggle_auto_exposure`, `increase_exposure_time`, `decrease_exposure_time` |
+| `GET /api/controles` · `POST /api/controle` | avec `--eclairage` : contrôles UVC standard, `{nom, valeur?}` (ex. Brightness) |
 | `POST /api/capture` | `{projet, reference, empreinte, mesures:[…]}` → PNG, `_cotes.png`, fiche `.json` (SHA-256) |
 
 Une capture est écrite dans `<donnees>/captures/<projet>/<reference>_<empreinte>_<AAAAMMJJ-HHMMSS>.png`, sans
@@ -57,7 +59,11 @@ uniquement ; jeton optionnel ; noms de fichiers assainis (pas de `..`) ; étalon
   = ±1 px de pointé. Vérifier chaque échelle sur une mire ou une cote connue.
 - Le grossissement du Dino-Lite se règle à la main : un étalonnage par position de molette (à nommer), à refaire
   si on touche la molette. Un étalonnage refuse une image de proportions différentes.
-- LED, MicroTouch et mise au point automatique ne sont **pas** pilotées (commandes constructeur non documentées).
+- LED, FLC et exposition : **facultatif**, via le module tiers `dinoliteuvccontrol` (option `--eclairage`, désactivée
+  par défaut). Les noms de méthodes viennent de son exemple d'usage ; sa source, sa licence et sa compatibilité
+  Windows n'ont **pas** pu être vérifiées. Il passe par l'USB bas niveau : **ne pas remplacer le pilote de la caméra**
+  (type Zadig/libusbK) pour le faire marcher, la caméra disparaîtrait des autres applications. Essayer d'abord
+  sur une caméra de test. Non testé sur matériel (tests avec un module simulé). MicroTouch et mise au point non pilotés.
 - **Non testé sur une vraie caméra** : seules la source de démonstration et la chaîne de calcul sont testées.
 - Pas encore d'interface (aperçu + pointage à la souris) : l'API est prête, l'IHM reste à écrire.
 

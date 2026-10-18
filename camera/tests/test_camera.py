@@ -165,3 +165,64 @@ def test_jeton(tmp_path):
         srv.shutdown()
         srv.server_close()
         src.fermer()
+
+
+# ---------- éclairage (module tiers simulé) ----------
+class _FauxDevice:
+    def __init__(self):
+        self.appels, self.reglages = [], {"Brightness": "10"}
+
+    def __getattr__(self, nom):
+        if nom.startswith(("led_", "flc_", "toggle_", "increase_", "decrease_")):
+            return lambda: self.appels.append(nom)
+        raise AttributeError(nom)
+
+    def list_standard_controls(self):
+        return list(self.reglages)
+
+    def get_standard_control_value(self, nom):
+        return int(self.reglages[nom])
+
+    def set_standard_control_value(self, nom, valeur):
+        assert isinstance(valeur, str)
+        self.reglages[nom] = valeur
+
+
+@pytest.fixture()
+def serveur_eclairage(tmp_path, monkeypatch):
+    import sys, types
+    dev = _FauxDevice()
+    faux = types.ModuleType("dinoliteuvccontrol")
+    faux.DinoLiteUVCControl = lambda args: types.SimpleNamespace(ourDevices=[dev])
+    monkeypatch.setitem(sys.modules, "dinoliteuvccontrol", faux)
+    from sdc_camera.eclairage import EclairageDinoLite
+    src = SourceDemo().ouvrir()
+    srv = creer_serveur(Etat(src, calib.MagasinCalibrations(str(tmp_path / "c.json")), str(tmp_path),
+                             eclairage=EclairageDinoLite(0)), 0)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    yield srv.server_address[1], dev
+    srv.shutdown()
+    srv.server_close()
+    src.fermer()
+
+
+def test_eclairage_actions_et_controles(serveur_eclairage):
+    port, dev = serveur_eclairage
+    assert json.loads(appel(port, "GET", "/api/eclairage")[2])["disponible"] is True
+    assert appel(port, "POST", "/api/eclairage", {"action": "flc_on"})[0] == 200
+    assert appel(port, "POST", "/api/eclairage", {"action": "toggle_led_2"})[0] == 200
+    assert dev.appels == ["flc_on", "toggle_led_2"]
+    assert appel(port, "POST", "/api/eclairage", {"action": "formater_disque"})[0] == 400   # liste blanche
+    s, _, b = appel(port, "POST", "/api/controle", {"nom": "Brightness", "valeur": 27})
+    assert s == 200 and json.loads(b)["valeur"] == 27 and dev.reglages["Brightness"] == "27"
+
+
+def test_eclairage_non_active_et_module_absent(serveur, monkeypatch):
+    port, _ = serveur
+    assert json.loads(appel(port, "GET", "/api/eclairage")[2])["disponible"] is False
+    assert appel(port, "POST", "/api/eclairage", {"action": "led_on"})[0] == 501
+    import sys
+    from sdc_camera.eclairage import EclairageDinoLite, Indisponible
+    monkeypatch.setitem(sys.modules, "dinoliteuvccontrol", None)  # import impossible
+    with pytest.raises(Indisponible):
+        EclairageDinoLite(0)
